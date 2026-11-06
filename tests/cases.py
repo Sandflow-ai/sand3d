@@ -466,6 +466,18 @@ def metre_bracket():
     return s3d.units()
 
 
+@case("facets")
+def low_poly_turnings():
+    """Round verbs at a fixed count a turn: an octagonal post, a lathe-turned knob, a fillet in 2."""
+    s3d.facets(8)
+    post = s3d.cylinder("post", 20, 60)
+    knob = s3d.at(s3d.revolve("knob", [(0, 0), (12, 0), (15, 8), (6, 16), (0, 16)]), z=60)
+    plate = s3d.extrude("plate", s3d.rect(50, 50, r=6), 5)
+    s3d.fillet(plate, 2, edges="top")
+    ring = s3d.at(s3d.torus("ring", 40, 4), z=30)
+    return [s3d.facets(), [len(ob.data.polygons) for ob in (post, knob, plate, ring)]]
+
+
 @case("fingerprint")
 def library_fingerprint():
     return s3d.fingerprint()

@@ -114,6 +114,7 @@ Handle(root, **anchors)  # Root and anchors
 export(root, path)  # root and what hangs on it by its joints, in metres: .glb at the current pose, joints in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's tree as OpenUSD text, with the materials; .obj and .stl its meshes at the current pose
 empty_scene()  # Fresh scene
 units(name=None)  # Length unit: "mm" (default), "cm", "m"
+facets(n=None)  # Segments of a full circle, before the first verb: a whole number from 3 (8: low poly), or "auto" (default, by size)
 fingerprint()  # Digest of the source
 ```
 

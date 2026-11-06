@@ -117,6 +117,7 @@ LENGTHS = {
     "empty_scene": {},
     "fingerprint": {},
     "units": {"name": "-"},
+    "facets": {"n": "-"},
 }
 
 #: Calls of the library under way: the shim converts only at depth 0, the program's side.

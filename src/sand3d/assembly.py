@@ -160,14 +160,16 @@ def empty_scene():
     """Fresh scene.
 
     A fresh, empty scene: what a program starts from. Once anything was built, the
-    unit goes back to millimetres, so a program that sets none never inherits the
-    last one's; a unit set just before, with nothing built since, holds."""
+    unit goes back to millimetres and the facets to "auto", so a program that sets
+    none never inherits the last one's; what was set just before, with nothing built
+    since, holds."""
     built = _core.settled or len(bpy.data.objects) > 0
     _guard.reset()
     bpy.ops.wm.read_factory_settings(use_empty=True)
     _guard.reset()
     if built:
         _core.UNIT, _core.MM = "mm", _core.UNITS["mm"]
+        _core.FACETS = None
     _core.settled = False
     _core.dressed = False
 
@@ -187,3 +189,29 @@ def units(name=None):
                          f"{_core.UNIT!r} (s3d.empty_scene() starts over)")
     _core.UNIT, _core.MM = name, _core.UNITS[name]
     return name
+
+
+def facets(n=None):
+    """Segments of a full circle: a whole number from 3, or "auto" (default).
+
+    Set how many straight pieces a full circle gets — in every circle, arc, revolve,
+    helix, fillet, wire corner and superellipse — before the program's first verb:
+    `facets(8)` builds an octagonal cylinder and a quarter-round fillet in 2, for
+    low-poly or faceted assets. "auto", the default, sets the count by the size, to a
+    chord tolerance of 0.05 mm (24 to 64 a turn). Lengthwise sampling (a loft's steps,
+    a body's sections) is not a circle and stays, and so do the teeth of `gear` and the
+    turns of `knurl` and `thread`, which sample their own. Without `n`, the setting in force:
+    what a program records beside `units()`."""
+    if n is None:
+        return "auto" if _core.FACETS is None else _core.FACETS
+    if n == "auto":
+        value = None
+    elif isinstance(n, int) and not isinstance(n, bool) and n >= 3:
+        value = n
+    else:
+        raise ValueError(f"facets: {n!r} is neither a whole number from 3 nor \"auto\"")
+    if value != _core.FACETS and _core.settled:
+        raise ValueError(f"facets: set {n!r} before the first verb — this scene is already built with "
+                         f"{facets()!r} (s3d.empty_scene() starts over)")
+    _core.FACETS = value
+    return n

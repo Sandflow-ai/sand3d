@@ -4,7 +4,7 @@
 
 One flat surface: every verb is `s3d.<verb>`. Millimetres, unless the program
 sets another unit with `s3d.units`; `export` scales to metres. A program records
-`s3d.__version__`, `s3d.fingerprint()` and `s3d.units()` with what it built.
+`s3d.__version__`, `s3d.fingerprint()`, `s3d.units()` and `s3d.facets()` with what it built.
 """
 import functools
 import hashlib
@@ -13,7 +13,7 @@ import sys
 
 from . import _core, _guard
 
-from .assembly import Handle, assembly, attach, empty_scene, export, group, units
+from .assembly import Handle, assembly, attach, empty_scene, export, facets, group, units
 from .edit import (chamfer, copy, cut, delete, dent, fillet, hole, intersect, join, merge, pocket, scale, seat, shell,
                    soften, split)
 from .parts import gear, knurl, thread
@@ -46,7 +46,7 @@ __all__ = [
     # articulation
     "joint", "pose", "seat",
     # assembly
-    "group", "assembly", "attach", "Handle", "export", "empty_scene", "units", "fingerprint",
+    "group", "assembly", "attach", "Handle", "export", "empty_scene", "units", "facets", "fingerprint",
 ]
 
 
@@ -101,7 +101,7 @@ def _placed(result, on):
 
 
 for _name in __all__:
-    if _name not in ("units", "empty_scene", "fingerprint") and not isinstance(globals()[_name], type):
+    if _name not in ("units", "facets", "empty_scene", "fingerprint") and not isinstance(globals()[_name], type):
         globals()[_name] = _verb(globals()[_name])
 del _name
 

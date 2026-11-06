@@ -388,7 +388,8 @@ def superellipse(w, d, n=2, taper=0):
 
     A section between an ellipse and a rectangle: `n` 2 an ellipse, 4 a box with
     round corners, 1.5 a diamond; `taper` narrows its +Y side by that fraction."""
-    sides = max(SUPERELLIPSE_SIDES, _core.segments(max(w, d) / 2))
+    sides = (_core.segments(max(w, d) / 2) if _core.FACETS is not None
+             else max(SUPERELLIPSE_SIDES, _core.segments(max(w, d) / 2)))
     dense = []
     for k in range(256):
         t = 2 * math.pi * k / 256

@@ -280,15 +280,20 @@ def bridge(bm, a, b):
 #: Chord tolerance of every circle and arc, in millimetres, and the bounds on the
 #: number of segments a full turn gets: a circle up to 10 mm gets 24, of 30 mm 39,
 #: and anything from 84 mm the cap. A function of the radius in millimetres only, so a
-#: verb's mesh depends on nothing but its arguments and the unit.
+#: verb's mesh depends on nothing but its arguments, the unit and the facets.
 CHORD = 0.05
 TURN_MIN, TURN_MAX = 24, 64
+#: Segments of a full turn the program set with `facets`, the same for every radius; None: by
+#: the chord tolerance above.
+FACETS = None
 
 
 def segments(r, sweep=360.0):
     """How many straight pieces an arc of radius `r` sweeping `sweep` degrees gets."""
     r = abs(in_mm(r))
-    if r <= CHORD:
+    if FACETS is not None:
+        per_turn = FACETS
+    elif r <= CHORD:
         per_turn = TURN_MIN
     else:
         per_turn = math.ceil(math.pi / math.acos(1 - CHORD / r))
