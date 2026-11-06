@@ -198,7 +198,7 @@ class _Operands:
     def __init__(self, ob, tools, operation, strip):
         self.base, meshes, self.operation = *_operands(ob, tools, strip), operation
         self.box = _extent([self.base] + (meshes if operation == "UNION" else []))
-        self.tools_box = _extent(meshes) if operation == "DIFFERENCE" else None
+        self.tools_box = _extent(meshes) if operation in {"DIFFERENCE", "INTERSECT"} else None
         self.tools, self.same, kept = [], {}, {}
         for k, (tool, me) in enumerate(zip(tools, meshes), 1):
             shape = _Shape(me)
@@ -305,6 +305,14 @@ def _boolean(ob, tools, operation, strip, self_intersect=False, verb="boolean", 
         for tool in consumed:
             delete(tool)
         raise ValueError(f"{verb}: the tools take all of {name!r} away — nothing would be left")
+    if operation == "INTERSECT" and not bm.faces:
+        bm.free()
+        names = ", ".join(repr(_core.given_name(t)) for t in tools)
+        part, tools_at = _boxes(ob, operands)
+        for tool in consumed:
+            delete(tool)
+        raise ValueError(f"{verb}: {name!r} and {names} share nothing — they miss each other, or only touch "
+                         f"(their boxes {part}; {tools_at})")
     if operation == "DIFFERENCE":
         # a tool that leaves no face took no volume out: it only touched, and printed its
         # footprint on the face it stands on, in slivers a later bevel clamps to nothing
@@ -442,7 +450,8 @@ def _materials_lost(ob, others):
 def intersect(ob, tool):
     """Keep the common part.
 
-    What `ob` and `tool` share. The tool is used up."""
+    What `ob` and `tool` share. Raises if the intersection is empty, leaving `ob`
+    unchanged. The tool is used up even when they share nothing."""
     _solids("intersect", ob, tool)
     refuse_using_up([tool], "intersect")
     _guard.using_up([tool], ob)
