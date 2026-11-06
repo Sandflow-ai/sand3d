@@ -267,7 +267,7 @@ class Text(unittest.TestCase):
         for name, said in (("washer.ply", ".ply"), ("washer.gltf", ".gltf"), ("washer.FBX", ".fbx"),
                            ("washer", "a path with no extension")):
             with self.assertRaisesRegex(ValueError, rf"^export: {re.escape(said)} is not a format sand3d writes: "
-                                                    rf"name the file \.glb, \.obj, \.stl, \.urdf or \.usda$"):
+                                                    rf"name the file \.glb, \.ifc, \.obj, \.stl, \.urdf or \.usda$"):
                 s3d.export(root, self.tmp / name)
         self.assertEqual(list(self.tmp.iterdir()), [])
         s3d.export(root, self.tmp / "washer.GLB")

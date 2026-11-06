@@ -22,6 +22,9 @@ PYTHONPATH=src .venv/bin/python tests/run.py                         # the suite
 
 - The USD export test reads files back with `usd-core` in a separate Python, named by
   `SAND3D_USD_PYTHON`; without one, it is skipped.
+- The IFC export test validates files with IfcOpenShell (and `pytest`, which its EXPRESS
+  rules need) in a separate Python, named by `SAND3D_IFC_PYTHON`; without one, that test is
+  skipped.
 - `tests/test_golden.py` compares the digest of every case, program and example with
   `tests/golden/bpy-<version>.json`. The recorded digests are Linux CI's; a few differ on
   other platforms.

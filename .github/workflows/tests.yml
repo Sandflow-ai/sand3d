@@ -21,7 +21,10 @@ jobs:
         run: uv venv -p 3.13 .venv && uv pip install -p .venv -r env/kit.lock
       - name: usd-core, apart from bpy, to read the USD export back
         run: uv venv -p 3.12 .cache/venv-usd && uv pip install -p .cache/venv-usd usd-core==26.8
+      - name: IfcOpenShell, apart from bpy, to validate the IFC export
+        run: uv venv -p 3.12 .cache/venv-ifc && uv pip install -p .cache/venv-ifc ifcopenshell==0.9.0.post1 pytest==9.2.0
       - name: Suite
         env:
           SAND3D_USD_PYTHON: .cache/venv-usd/bin/python
+          SAND3D_IFC_PYTHON: .cache/venv-ifc/bin/python
         run: .venv/bin/python tests/run.py

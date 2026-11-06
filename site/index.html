@@ -61,14 +61,15 @@ s3d.joint(<span class="s">&quot;dial_turn&quot;</span>, dial, top_band.move(-<sp
 to turn in 3D and play joint by joint: <a href="gallery.html">the gallery</a>.</p>
 <div class="actions"><a class="btn plein" href="gallery.html">Play the articulated gallery</a></div>
 
-<h2 id="export">Export: GLB, URDF, USD, OBJ, STL</h2>
+<h2 id="export">Export: GLB, URDF, USD, IFC, OBJ, STL</h2>
 <p>One call; the file's extension names the format; lengths in metres.</p>
 <div class="tablo"><table><tr><th>format</th><th>what it carries</th><th>for</th></tr>
 <tr><td><strong>GLB</strong></td><td>meshes, materials, the joints in each node's extras, at the current pose</td><td>the web, viewers, game engines</td></tr>
 <tr><td><strong>URDF</strong></td><td>a link per moving part, its joints and their limits, at rest; OBJ meshes beside it</td><td>ROS, PyBullet, MuJoCo, Isaac</td></tr>
 <tr><td><strong>USDA</strong></td><td>the same tree in OpenUSD (UsdGeom, UsdPhysics), with the materials</td><td>Omniverse, Isaac Sim, USD pipelines</td></tr>
+<tr><td><strong>IFC</strong></td><td>the part tree as an IFC4 project — assemblies, a proxy per part, triangulated face sets, the materials</td><td>Revit, ArchiCAD, Tekla, BIM</td></tr>
 <tr><td><strong>OBJ</strong>, <strong>STL</strong></td><td>the meshes alone, at the current pose: OBJ Y up, binary STL Z up</td><td>any 3D tool, slicers</td></tr></table></div>
-<p><code>.usd</code>, <code>.usdc</code> and <code>.usdz</code> come from the <code>.usda</code> through USD's own tools.</p>
+<p><code>.usd</code>, <code>.usdc</code> and <code>.usdz</code> come from the <code>.usda</code> through USD's own tools. Revit's own <code>.rvt</code> is written by Revit alone, so <code>export</code> names <code>.ifc</code> for it.</p>
 
 <h2 id="start">Install, and a first program</h2>
 <p>Python 3.13 (recommended) or 3.11. Blender comes with it, as the <code>bpy</code> module: 5.2 LTS on Python 3.13,

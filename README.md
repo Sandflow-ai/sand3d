@@ -56,12 +56,12 @@ s3d.joint("dial_turn", dial, top_band.move(-150), kind="continuous")
 return s3d.assembly("washing_machine", cab, drum, door, drawer, dial, front=front)
 ```
 
-## Export: GLB, URDF, USD, OBJ, STL
+## Export: GLB, URDF, USD, IFC, OBJ, STL
 
 One call; the file's extension names the format; lengths in metres.
 
 ```python
-s3d.export(machine, "washer.glb")    # or .urdf, .usda, .obj, .stl
+s3d.export(machine, "washer.glb")    # or .urdf, .usda, .ifc, .obj, .stl
 ```
 
 | format | what it carries | for |
@@ -69,10 +69,13 @@ s3d.export(machine, "washer.glb")    # or .urdf, .usda, .obj, .stl
 | **GLB** | meshes, materials, the joints in each node's extras, at the current pose | the web, viewers, game engines |
 | **URDF** | a link per moving part, its joints and their limits, at rest; OBJ meshes beside it | ROS, PyBullet, MuJoCo, Isaac |
 | **USDA** | the same tree in OpenUSD (UsdGeom, UsdPhysics), with the materials | Omniverse, Isaac Sim, USD pipelines |
+| **IFC** | the part tree as an IFC4 project — assemblies, a proxy per part, triangulated face sets, the materials | Revit, ArchiCAD, Tekla, BIM |
 | **OBJ**, **STL** | the meshes alone, at the current pose: OBJ Y up, binary STL Z up | any 3D tool, slicers |
 
 `.usd`, `.usdc` and `.usdz` come from the `.usda` through USD's own tools (`usdcat`,
-`usdzip`). The scene is also an ordinary Blender scene, for anything else Blender writes.
+`usdzip`). Revit's own `.rvt` is written by Revit alone — no library writes one — so
+`export` names `.ifc` for it, the open standard (ISO 16739) Revit opens and links. The
+scene is also an ordinary Blender scene, for anything else Blender writes.
 
 ## Install
 

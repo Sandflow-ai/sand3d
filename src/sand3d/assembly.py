@@ -63,17 +63,21 @@ def attach(handle, name, *children):
 def export(root, path):
     """root and what hangs on it by its joints, in metres: .glb at the current pose, joints
     in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's
-    tree as OpenUSD text, with the materials; .obj and .stl its meshes at the current pose.
+    tree as OpenUSD text, with the materials; .ifc the part tree as IFC4, the open standard
+    Revit opens and links (.rvt only Revit writes); .obj and .stl its meshes at the current pose.
 
     The program's unit to metres, then one file, its extension the format: a GLB — with
     the materials the program set, if it set any; nested by the joints, each in its
     node's extras, if it has any — or a URDF, the mechanism at rest whatever its pose,
     its meshes as OBJ in `<stem>_meshes/` beside it, the colours `material` set — or a
     USD layer as text, the URDF's links, joints and names in UsdGeom and UsdPhysics, Z up,
-    with the materials (`.usdc` is binary: convert the `.usda`) — or the meshes alone, as
-    OBJ (Y up) or binary STL (Z up), at the current pose. Limits only: masses,
+    with the materials (`.usdc` is binary: convert the `.usda`) — or an IFC4 file, the part
+    tree as an IfcProject of assemblies and proxies, every mesh a triangulated face set at
+    the current pose, with the materials, which Revit, ArchiCAD, Tekla and Solibri open and
+    link — or the meshes alone, as OBJ (Y up) or binary STL (Z up), at the current pose.
+    Limits only: masses,
     frictions, efforts and drives are dynamics, which sand3d does not say."""
-    from . import meshfile, urdf, usd
+    from . import ifcfile, meshfile, urdf, usd
     from .assembly import Handle
     root = root.root if isinstance(root, Handle) else root
     suffix = os.path.splitext(str(path))[1].lower()
@@ -81,13 +85,20 @@ def export(root, path):
         tool = "usdzip" if suffix == ".usdz" else f"usdcat x.usda -o x{suffix}"
         raise ValueError(f"export: {suffix} is written by USD's own library, which sand3d does not take: write "
                          f".usda, USD as text, and convert it with USD's tools ({tool})")
-    if suffix not in (".glb", ".obj", ".stl", ".urdf", ".usda"):
+    if suffix in (".rvt", ".rfa", ".rte", ".rft"):
+        raise ValueError(f"export: {suffix} is Revit's own format, which Revit alone writes — its API runs inside "
+                         f"Revit, and no library writes one: write .ifc, the open standard (IFC4), and open or "
+                         f"link that in Revit")
+    if suffix not in (".glb", ".ifc", ".obj", ".stl", ".urdf", ".usda"):
         raise ValueError(f"export: {suffix or 'a path with no extension'} is not a format sand3d writes: "
-                         f"name the file .glb, .obj, .stl, .urdf or .usda")
+                         f"name the file .glb, .ifc, .obj, .stl, .urdf or .usda")
     if suffix in (".obj", ".stl"):
         (meshfile.write_obj if suffix == ".obj" else meshfile.write_stl)(root, path)
         return
     materials.resolve()
+    if suffix == ".ifc":
+        ifcfile.write_ifc(root, path)
+        return
     if suffix == ".urdf":
         urdf.write_urdf(root, path)
         return

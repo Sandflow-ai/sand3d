@@ -1,6 +1,6 @@
 # sand3d
 
-> 3D modeling in Python, built for LLMs. A library for writing 3D objects as short programs over Blender's bpy: profiles, solids, edits, frames, joints and assemblies. Programs use `import sand3d as s3d`; lengths are in millimetres; every verb returns a named object; export to GLB, URDF, USDA, OBJ or STL.
+> 3D modeling in Python, built for LLMs. A library for writing 3D objects as short programs over Blender's bpy: profiles, solids, edits, frames, joints and assemblies. Programs use `import sand3d as s3d`; lengths are in millimetres; every verb returns a named object; export to GLB, URDF, USDA, IFC, OBJ or STL.
 
 ## Docs
 

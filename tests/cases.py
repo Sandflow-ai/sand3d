@@ -425,6 +425,26 @@ def export_usd():
 
 
 @case("export")
+def export_ifc():
+    """A glass door, its mirror image and a brass knob on a cabinet on its feet, posed: the
+    IFC4 project at the pose — the part tree, a group in it, the triangulated face sets,
+    the looks, the ids."""
+    cab = s3d.box("cab", 600, 600, 850)
+    door = s3d.material(s3d.at(s3d.cylinder("door", 420, 30), on=cab.face("+X").move(z=400)), "glass")
+    s3d.joint("door_hinge", door, s3d.bbox(cab, "+X-Y"), axis="-Z", range=(0, 143))
+    knob = s3d.material(s3d.at(s3d.cylinder("knob", 30, 15), on=door.face("top").move(x=100)), "brass")
+    s3d.joint("knob_turn", knob, door.face("top").move(x=100), kind="continuous")
+    twin = s3d.transform(s3d.copy(door), mirror="y")
+    feet = s3d.material(s3d.group("feet", *(s3d.at(s3d.box(f"foot_{i}", 40, 40, 20), x=x, z=-20)
+                                            for i, x in enumerate((-250, 250)))), "rubber")
+    root = s3d.group("washer", cab, door, knob, twin, feet)
+    s3d.pose(door, 70)
+    with tempfile.TemporaryDirectory() as tmp:
+        s3d.export(root, Path(tmp) / "washer.ifc")
+        return hashlib.sha256((Path(tmp) / "washer.ifc").read_bytes()).hexdigest()
+
+
+@case("export")
 def export_meshes():
     """A cabinet, a door posed open and its mirror image: the OBJ and the STL at the pose."""
     cab = s3d.box("cab", 600, 600, 850)
