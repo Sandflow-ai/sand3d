@@ -374,6 +374,8 @@ once, before it is repeated. On shape-only data, such as CAD pieces, it is optio
 
 - On a group, `material` reaches every part with no material of its own. The nearest call wins.
 - `join` keeps the first object's material, `group` keeps each part's. Join only what is one colour.
+- Smoke, fog, steam, murky water: one closed envelope (a `field`, say) with `smoke`, `fog` or
+  `scatter_distance`, not stacked alpha shells. GLB has no scattering and shows it dark.
 
 **Right**: dressed before the grid.
 

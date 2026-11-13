@@ -120,7 +120,7 @@ gear(name, teeth, module, width, bore=0, angle=20)  # Involute spur gear
 knurl(name, d, h, pitch=None, straight=False)  # Knurled grip; pitch 1 mm by default
 thread(name, d, length, pitch, left=False)  # Threaded rod
 # materials
-material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, emission=None, absorb=None, absorb_distance=None, thickness="auto", ior=None, transmission=None)  # Kind: oak walnut pine birch steel brushed_steel chrome aluminium brass copper painted_metal plastic glossy_plastic rubber glass ceramic fabric velvet leather marble concrete bark leaf moss grass rock soil sand water snow foam light; color "#rrggbb" or color(x,y,z[,n[,u]])
+material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, emission=None, absorb=None, absorb_distance=None, thickness="auto", ior=None, transmission=None, scatter=None, scatter_distance=None, scatter_anisotropy=None)  # Kind: oak walnut pine birch steel brushed_steel chrome aluminium brass copper painted_metal plastic glossy_plastic rubber glass ceramic fabric velvet leather marble concrete bark leaf moss grass rock soil sand water snow foam smoke fog light; color "#rrggbb" or color(x,y,z[,n[,u]])
 # articulation
 joint(name, child, on, kind='revolute', axis='normal', range=None, follows=None, ratio=1)  # How child moves on the part on was read on: revolute (range in degrees), continuous (no range), prismatic (range in the unit), free (no axis, no range); follows: a child or a joint name, and this joint's value is ratio × its (degrees per unit, or units per degree), no range; returns child
 pose(ob, value, joint=None)  # Move the mechanism: that joint to value (degrees or the unit), an error outside its range; what it carries follows; joint= when child has two
@@ -145,10 +145,30 @@ Distance 0 disables absorption. `ior` is finite in 1..1000; `transmission` in 0.
 controls the transmitted fraction, independently of alpha (`opacity`).
 `absorb_distance` must be finite and nonnegative; `thickness` is "auto" or such a length.
 
-| preset | surface colour | roughness | transmission | IOR | absorb at distance |
-|---|---|---|---|---|---|
-| `water` | `#f4f8f8` | 0.08 | 1 | 1.333 | `#b8e8ed` at 1 m |
-| `glass` | `#ffffff` | 0 | 1 | 1.5 | none |
+`scatter` is the sRGB colour a medium sends light back in, `scatter_distance` (program
+units, finite, 0 or more) how far white light travels on average before it scatters:
+channel c scatters `linear(scatter)[c] / scatter_distance` per unit. Distance 0 disables
+scattering. `scatter_anisotropy` in -1..1 is the Henyey-Greenstein g: 0 scatters every
+way alike, > 0 forwards (a bright glow with the light behind), < 0 backwards. Absorption
+and scattering add up: extinction is their sum. A light smoke mostly scatters, a black
+smoke only absorbs (`absorb`), murky water is `water` with `scatter` added.
+
+The medium fills the closed mesh; the surface stays what its own values say and hides
+the medium when opaque. A medium with no visible boundary needs `transmission=1`,
+`ior=1`, `roughness=0`, as `smoke` and `fog` set. One closed envelope with a constant
+medium gives a soft mass, not filaments: the density is the same everywhere inside.
+Cycles renders single scattering unless the scene allows volume bounces
+(`scene.cycles.volume_bounces`, 0 by default); sand3d leaves render settings alone.
+
+| preset | surface colour | roughness | transmission | IOR | absorb at distance | scatter at distance, anisotropy |
+|---|---|---|---|---|---|---|
+| `water` | `#f4f8f8` | 0.08 | 1 | 1.333 | `#b8e8ed` at 1 m | none |
+| `glass` | `#ffffff` | 0 | 1 | 1.5 | none | none |
+| `smoke` | `#ffffff` | 0 | 1 | 1 | `#d6d6d6` at 1 m | `#ffffff` at 625 mm, 0.3 |
+| `fog` | `#ffffff` | 0 | 1 | 1 | none | `#ffffff` at 10 m, 0.3 |
+
+Fog, mist, steam and cloud are `fog` with a shorter `scatter_distance` where the medium
+is thicker.
 
 Water is a volume bounded by a **closed mesh**, not a single surface: model its
 bottom and sides as well as its top, with outward normals. Cycles uses actual ray
@@ -163,13 +183,18 @@ A black absorb channel is approximated as 1e-6 in Cycles to keep density finite.
 
 GLB carries `KHR_materials_volume`, `KHR_materials_ior` and transmission; absorption
 requires a viewer supporting these extensions. Export converts distance to world
-metres and leaves thickness in mesh units, scaled by the exported node. Cycles
+metres and leaves thickness in mesh units, scaled by the exported node. **glTF has no
+ratified scattering** (`KHR_materials_volume_scatter` is a draft): a scattering medium
+exports its total extinction, absorption plus scattering, as `KHR_materials_volume`
+attenuation over the distance that dims its densest channel to 1/e. It keeps its place
+and its transmission, but the light it would scatter is lost: a GLB viewer, and Blender after
+reimport, show smoke or fog as a dark medium. No other extension is written. Cycles
 and glTF use different absorption socket conventions; export temporarily converts
 them and restores the Cycles material. USD Preview Surface carries IOR and coat,
 approximates transmission by `opacity * (1 - transmission)` and carries no volume
-absorption, thickness or sheen. Fully transmitting water/glass can thus be invisible
-in USD. IFC carries surface colour and transparency `max(1-opacity, .85*transmission)`
-with GLASS reflectance; no IOR or volume absorption. OBJ carries vertex colour; URDF carries surface colour
+absorption, scattering, thickness or sheen. Fully transmitting water, glass, smoke
+or fog can thus be invisible in USD. IFC carries surface colour and transparency `max(1-opacity, .85*transmission)`
+with GLASS reflectance; no IOR, volume absorption or scattering. OBJ carries vertex colour; URDF carries surface colour
 and opacity only; STL has no materials.
 
 Natural presets have average untextured colours: `bark` (outer wood), `leaf`

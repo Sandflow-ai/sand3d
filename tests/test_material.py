@@ -408,5 +408,125 @@ os._exit(0)
             self.assertNotIn("absorption", ifc.read_text().lower())
 
 
+class Scattering(unittest.TestCase):
+    """A medium that scatters: Volume Scatter beside Absorption in Cycles, extinction in glTF."""
+
+    def setUp(self):
+        s3d.empty_scene()
+
+    def extinction(self, volume):
+        """Per metre, per channel, from a glTF KHR_materials_volume."""
+        import math
+        return [-math.log(c) / volume["attenuationDistance"] for c in volume["attenuationColor"]]
+
+    def test_scattering_and_absorption_add_up(self):
+        import math
+        for unit, metre in (("mm", 1000), ("cm", 100), ("m", 1)):
+            for mode in ("material", "vertex"):
+                s3d.empty_scene()
+                s3d.units(unit)
+                ob = s3d.material(s3d.box("plume", metre, metre, metre), "smoke")
+                nodes = ob.data.materials[0].node_tree.nodes
+                scatter, absorption = nodes["Scatter"], nodes["Absorption"]
+                medium = nodes["Material Output"].inputs["Volume"].links[0].from_node
+                self.assertEqual(medium.name, "Medium")
+                self.assertEqual({link.from_node.name for socket in medium.inputs for link in socket.links},
+                                 {"Scatter", "Absorption"})
+                self.assertAlmostEqual(scatter.inputs["Anisotropy"].default_value, .3, places=6)
+                # Cycles: sigma_s = colour x density; white light scatters every 625 mm.
+                for c in scatter.inputs["Color"].default_value[:3]:
+                    self.assertAlmostEqual(c * scatter.inputs["Density"].default_value * metre, 1 / .625, places=4)
+                sigma_a = -math.log(materials._linear("#d6d6d6")[0])
+                rgba = tuple(absorption.inputs["Color"].default_value)
+                density = absorption.inputs["Density"].default_value
+                self.assertAlmostEqual((1 - rgba[0]) * density * metre, sigma_a, places=4)
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = Path(tmp) / "plume.glb"
+                    s3d.export(ob, path, colors=mode)
+                    ext = gltf(path)["materials"][0]["extensions"]
+                for sigma in self.extinction(ext["KHR_materials_volume"]):
+                    self.assertAlmostEqual(sigma, sigma_a + 1 / .625, places=4)
+                self.assertAlmostEqual(ext["KHR_materials_volume"]["thicknessFactor"], metre / 3, places=4)
+                self.assertAlmostEqual(ext["KHR_materials_ior"]["ior"], 1)
+                self.assertEqual(ext["KHR_materials_transmission"]["transmissionFactor"], 1)
+                self.assertEqual(tuple(absorption.inputs["Color"].default_value), rgba)
+                self.assertEqual(absorption.inputs["Density"].default_value, density)
+
+    def test_a_tinted_medium_attenuates_by_channel(self):
+        # Water made murky: its absorption and a yellow-green scattering, per channel.
+        import math
+        ob = s3d.material(s3d.box("pond", 1000, 1000, 1000), "water", scatter="#c0d080", scatter_distance=2000)
+        ext = export(ob)[0]["materials"][0]["extensions"]
+        for sigma, a, sc in zip(self.extinction(ext["KHR_materials_volume"]),
+                                materials._linear("#b8e8ed"), materials._linear("#c0d080")):
+            self.assertAlmostEqual(sigma, -math.log(a) + sc / 2, places=5)
+        # Fog scattering no blue: blue passes unattenuated.
+        s3d.material(ob, "fog", scatter="#ff8000")
+        self.assertNotIn("Absorption", [l.from_node.name for l in
+                                        ob.data.materials[0].node_tree.nodes["Material Output"].inputs["Volume"].links])
+        volume = export(ob)[0]["materials"][0]["extensions"]["KHR_materials_volume"]
+        self.assertAlmostEqual(volume["attenuationColor"][2], 1)
+        self.assertAlmostEqual(self.extinction(volume)[0], 1 / 10, places=5)
+
+    def test_absorption_alone_is_unchanged(self):
+        ob = s3d.material(s3d.box("pool", 10, 10, 10), "water")
+        nodes = ob.data.materials[0].node_tree.nodes
+        self.assertNotIn("Scatter", nodes)
+        self.assertEqual(nodes["Material Output"].inputs["Volume"].links[0].from_node.name, "Absorption")
+
+    def test_disable_bounds_and_errors(self):
+        ob = s3d.box("cloud", 10, 10, 10)
+        for kind, kw in (("fog", {"scatter_distance": 0}), ("smoke", {"thickness": 0})):
+            s3d.material(ob, kind, **kw)
+            nodes = ob.data.materials[0].node_tree.nodes
+            self.assertNotIn("Scatter", nodes)
+            self.assertFalse(nodes["Material Output"].inputs["Volume"].is_linked)
+            self.assertNotIn("KHR_materials_volume", export(ob)[0]["materials"][0]["extensions"])
+        for g in (-1, 1, 0):
+            s3d.material(ob, "fog", scatter_anisotropy=g)
+            self.assertEqual(ob.data.materials[0].node_tree.nodes["Scatter"].inputs["Anisotropy"].default_value, g)
+        for key, values in (("scatter_distance", (-1, True, float("nan"), float("inf"), "1")),
+                            ("scatter_anisotropy", (-1.01, 1.01, True, float("nan"), "0"))):
+            for value in values:
+                with self.subTest(key=key, value=value), self.assertRaisesRegex(ValueError, key):
+                    s3d.material(ob, "smoke", **{key: value})
+        with self.assertRaisesRegex(ValueError, "scatter='grey'"):
+            s3d.material(ob, "smoke", scatter="grey")
+
+    def test_surface_formats_ignore_scattering(self):
+        """USD and IFC write the surface: adding a medium changes nothing they carry."""
+        def inputs(**kw):
+            s3d.empty_scene()
+            ob = s3d.material(s3d.box("pond", 10, 10, 10), "water", **kw)
+            with tempfile.TemporaryDirectory() as tmp:
+                usd, ifc = Path(tmp) / "pond.usda", Path(tmp) / "pond.ifc"
+                s3d.export(ob, usd)
+                s3d.export(ob, ifc)
+                return ([line.strip() for line in usd.read_text().splitlines() if "inputs:" in line],
+                        [line for line in ifc.read_text().splitlines() if "IFCSURFACESTYLERENDERING" in line])
+        self.assertEqual(inputs(), inputs(scatter="#c0d080", scatter_distance=2000, scatter_anisotropy=.5))
+
+    def test_medium_in_fresh_processes(self):
+        import subprocess
+        import sys
+        code = """import sand3d as s3d
+import json, tempfile, struct, pathlib, os
+s3d.empty_scene()
+ob=s3d.material(s3d.box('plume',300,300,900),'smoke',scatter='#d0d8e0',scatter_anisotropy=.6)
+with tempfile.TemporaryDirectory() as tmp:
+ path=pathlib.Path(tmp)/'plume.glb'
+ s3d.export(ob,path)
+ raw=path.read_bytes(); n=struct.unpack('<I',raw[12:16])[0]
+ doc=json.loads(raw[20:20+n]); doc.pop('asset',None)
+ print('@@medium',json.dumps(doc,sort_keys=True),flush=True)
+os._exit(0)
+"""
+        outputs = [subprocess.run([sys.executable, '-c', code], check=True,
+                                 capture_output=True).stdout for _ in range(2)]
+        lines = [[line for line in output.splitlines() if line.startswith(b'@@medium')] for output in outputs]
+        self.assertTrue(lines[0])
+        self.assertEqual(*lines)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -134,7 +134,8 @@ LENGTHS = {
     # assembly
     "material": {"ob": "-", "kind": "-", "color": "-", "roughness": "-", "metallic": "-", "opacity": "-",
                  "emission": "-", "absorb": "-", "absorb_distance": "L", "thickness": "P",
-                 "ior": "-", "transmission": "-"},
+                 "ior": "-", "transmission": "-", "scatter": "-", "scatter_distance": "L",
+                 "scatter_anisotropy": "-"},
     "group": {"name": "-", "children": "-"},
     "assembly": {"name": "-", "children": "-", "anchors": "-"},
     "attach": {"handle": "-", "name": "-", "children": "-"},

@@ -69,16 +69,23 @@ PRESETS = {
                            ior=1.333, absorb="#b8e8ed", absorb_distance=1000.0),
     "snow":           dict(color="#eef1f3", roughness=0.85, coat=0.03),
     "foam":           dict(color="#f5f5f2", roughness=0.95),
+    # media: an unseen boundary around light that scatters inside
+    "smoke":          dict(color="#ffffff", roughness=0.0, transmission=1.0, ior=1.0,
+                           scatter="#ffffff", scatter_distance=625.0, scatter_anisotropy=0.3,
+                           absorb="#d6d6d6", absorb_distance=1000.0),
+    "fog":            dict(color="#ffffff", roughness=0.0, transmission=1.0, ior=1.0,
+                           scatter="#ffffff", scatter_distance=10000.0, scatter_anisotropy=0.3),
     # a surface that gives light, in its own colour
     "light":          dict(color="#fff1dc", roughness=0.5, emission=12.0),
 }
 
 
 def material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, emission=None,
-             absorb=None, absorb_distance=None, thickness="auto", ior=None, transmission=None):
+             absorb=None, absorb_distance=None, thickness="auto", ior=None, transmission=None,
+             scatter=None, scatter_distance=None, scatter_anisotropy=None):
     """Kind: oak walnut pine birch steel brushed_steel chrome aluminium brass copper
     painted_metal plastic glossy_plastic rubber glass ceramic fabric velvet leather marble
-    concrete bark leaf moss grass rock soil sand water snow foam light; color "#rrggbb".
+    concrete bark leaf moss grass rock soil sand water snow foam smoke fog light; color "#rrggbb".
 
     `ob` — a part, a group, an assembly or a list — made of `kind`, one of the presets,
     its colour (sRGB: "#rrggbb" or (r, g, b) in 0..1), roughness, metallic, opacity (1
@@ -92,6 +99,16 @@ def material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, 
     it at export from the meshes that wear the material, 2 x volume / area; a length
     sets it. Cycles uses the closed mesh's actual depth. ior is 1..1000, transmission 0..1.
     None inherits the preset. Water absorbs over one metre with IOR 1.333.
+
+    scatter is the sRGB colour the medium inside the closed mesh sends light back in:
+    channel c scatters linear(scatter)[c] / scatter_distance per program unit, so white
+    light travels scatter_distance on average before it scatters. Zero distance disables
+    scattering. scatter_anisotropy, -1..1, sends that light backwards (< 0), every way
+    (0) or forwards (> 0: a glow against the light). Absorption and scattering add up.
+    The surface stays what its values say and hides the medium when opaque: smoke and
+    fog are media behind an unseen boundary (transmission 1, IOR 1, roughness 0). glTF
+    has no scattering: GLB carries the total attenuation (absorption plus scattering)
+    in KHR_materials_volume, so a scattering medium shows there as a dark one.
 
     color may be a deterministic callable declaring exactly three, four or five
     positional parameters, no variadics or keyword-only parameters:
@@ -119,7 +136,7 @@ def material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, 
         arity(color)
         function = str(len(FUNCTIONS))
         FUNCTIONS[function] = color
-    given = {"color": None if color is None or function is not None else _hex(color)}
+    given = {"color": None if color is None or function is not None else _hex(color, "color")}
     for name, value, top in (("roughness", roughness, 1), ("metallic", metallic, 1), ("opacity", opacity, 1),
                              ("emission", emission, None)):
         if value is not None:
@@ -128,15 +145,18 @@ def material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, 
                                  + ("between 0 and 1" if top else "of 0 or more")
                                  + (" — 1 is opaque, 0 invisible" if name == "opacity" else ""))
         given[name] = None if value is None else float(value)
-    if absorb is not None:
-        given["absorb"] = _hex(absorb)
+    for name, value in (("absorb", absorb), ("scatter", scatter)):
+        if value is not None:
+            given[name] = _hex(value, name)
     if thickness != "auto":
         if (isinstance(thickness, bool) or not isinstance(thickness, (int, float))
                 or not math.isfinite(thickness) or thickness < 0):
             raise ValueError(f'material: thickness must be "auto" or a finite length of 0 or more, not {thickness!r}')
         given["thickness"] = float(thickness)
     for name, value, low, high in (("absorb_distance", absorb_distance, 0, None),
-                                    ("ior", ior, 1, 1000), ("transmission", transmission, 0, 1)):
+                                    ("ior", ior, 1, 1000), ("transmission", transmission, 0, 1),
+                                    ("scatter_distance", scatter_distance, 0, None),
+                                    ("scatter_anisotropy", scatter_anisotropy, -1, 1)):
         if value is not None:
             if (isinstance(value, bool) or not isinstance(value, (int, float))
                     or not math.isfinite(value) or value < low or (high is not None and value > high)):
@@ -155,7 +175,7 @@ def material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, 
     return ob
 
 
-def _hex(color):
+def _hex(color, name="color"):
     """`color` as '#rrggbb', lower case: one spelling per colour, so one material."""
     if isinstance(color, str):
         h = color[1:] if color.startswith("#") else ""
@@ -164,7 +184,7 @@ def _hex(color):
     elif (isinstance(color, (tuple, list)) and len(color) == 3
           and all(isinstance(c, (int, float)) and not isinstance(c, bool) and 0 <= c <= 1 for c in color)):
         return "#" + "".join(f"{round(c * 255):02x}" for c in color)
-    raise ValueError(f"material: color={color!r} is not a colour — write '#rrggbb' or (r, g, b) in 0..1")
+    raise ValueError(f"material: {name}={color!r} is not a colour — write '#rrggbb' or (r, g, b) in 0..1")
 
 
 def _linear(hex_color):
@@ -179,10 +199,12 @@ def look(tag):
     spec.pop(FUNCTION, None)
     values = dict(metallic=0.0, opacity=1.0, transmission=0.0, coat=0.0, sheen=0.0, emission=0.0)
     kind = spec.pop("kind")
-    values.update(ior=1.5, absorb="#ffffff", absorb_distance=0.0, thickness="auto")
+    values.update(ior=1.5, absorb="#ffffff", absorb_distance=0.0, thickness="auto",
+                  scatter="#ffffff", scatter_distance=0.0, scatter_anisotropy=0.0)
     values.update(PRESETS[kind])
-    if kind == "water":
-        values["absorb_distance"] = _core.mm(values["absorb_distance"])
+    for name in ("absorb_distance", "scatter_distance"):    # presets are written in millimetres
+        if name in PRESETS[kind]:
+            values[name] = _core.mm(values[name])
     values.update(spec)
     return values
 
@@ -212,15 +234,32 @@ def _material(tag, made):
                           ("Coat Weight", v["coat"]), ("Sheen Weight", v["sheen"]),
                           ("Emission Color", rgba), ("Emission Strength", v["emission"])):
         bsdf.inputs[socket].default_value = value
-    if v["absorb_distance"] > 0 and (v["thickness"] == "auto" or v["thickness"] > 0):
+    medium = v["absorb_distance"] > 0 or v["scatter_distance"] > 0
+    if medium and (v["thickness"] == "auto" or v["thickness"] > 0):
         node = mat.node_tree.nodes.new("ShaderNodeVolumeAbsorption")
         node.name = "Absorption"
         # Cycles uses sigma = (1 - colour) * density, not -log(colour)/distance.
-        sigma = [-math.log(max(c, 1e-6)) / v["absorb_distance"] for c in _linear(v["absorb"])[:3]]
+        sigma = ([-math.log(max(c, 1e-6)) / v["absorb_distance"] for c in _linear(v["absorb"])[:3]]
+                 if v["absorb_distance"] > 0 else [0.0] * 3)
         density = max(sigma)
         node.inputs["Density"].default_value = density
         node.inputs["Color"].default_value = (*(1 - c / density if density else 1 for c in sigma), 1)
-        mat.node_tree.links.new(node.outputs["Volume"], mat.node_tree.nodes["Material Output"].inputs["Volume"])
+        volume = node.outputs["Volume"]
+        if v["scatter_distance"] > 0:
+            scatter = mat.node_tree.nodes.new("ShaderNodeVolumeScatter")
+            scatter.name = "Scatter"
+            # Cycles scatters sigma = colour * density.
+            sigma = [c / v["scatter_distance"] for c in _linear(v["scatter"])[:3]]
+            density = max(sigma)
+            scatter.inputs["Density"].default_value = density
+            scatter.inputs["Color"].default_value = (*(c / density if density else 0 for c in sigma), 1)
+            scatter.inputs["Anisotropy"].default_value = v["scatter_anisotropy"]
+            both = mat.node_tree.nodes.new("ShaderNodeAddShader")
+            both.name = "Medium"
+            mat.node_tree.links.new(volume, both.inputs[0])
+            mat.node_tree.links.new(scatter.outputs["Volume"], both.inputs[1])
+            volume = both.outputs["Shader"]
+        mat.node_tree.links.new(volume, mat.node_tree.nodes["Material Output"].inputs["Volume"])
         group = bpy.data.node_groups.get("glTF Material Output")
         if group is None:
             group = bpy.data.node_groups.new("glTF Material Output", "ShaderNodeTree")
@@ -480,6 +519,8 @@ def volume_export():
 
     The exporter copies colour and reciprocal density literally. Distance is in
     world metres; thickness remains in mesh units (the export root scales it).
+    glTF has no scattering: a scattering medium lends its total attenuation,
+    absorption plus scattering, over the distance that dims its densest channel to 1/e.
     """
     saved = []
     try:
@@ -493,8 +534,17 @@ def volume_export():
             color, density = node.inputs["Color"], node.inputs["Density"]
             saved.append((color, tuple(color.default_value)))
             saved.append((density, density.default_value))
-            color.default_value = _linear(v["absorb"])
-            density.default_value = 1 / (v["absorb_distance"] * _core.MM / 1000)
+            metres = _core.MM / 1000
+            if v["scatter_distance"] > 0:
+                sigma = [(-math.log(max(a, 1e-6)) / (v["absorb_distance"] * metres) if v["absorb_distance"] > 0 else 0)
+                         + s / (v["scatter_distance"] * metres)
+                         for a, s in zip(_linear(v["absorb"])[:3], _linear(v["scatter"])[:3])]
+                top = max(sigma)
+                color.default_value = (*(math.exp(-s / top) if top else 1 for s in sigma), 1)
+                density.default_value = top
+            else:
+                color.default_value = _linear(v["absorb"])
+                density.default_value = 1 / (v["absorb_distance"] * metres)
             if v["thickness"] == "auto":
                 output = next(n for n in mat.node_tree.nodes
                               if n.type == "GROUP" and n.node_tree and n.node_tree.name == "glTF Material Output")
