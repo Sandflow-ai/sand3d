@@ -69,7 +69,7 @@ def main(argv):
             traceback.print_exc()
     if "--write" in argv:
         GOLDEN.mkdir(exist_ok=True)
-        golden_path().write_text(json.dumps({"bpy": bpy.app.version_string, "digests": out}, indent=1) + "\n")
+        golden_path().write_text(json.dumps({"bpy": bpy.app.version_string, "digests": out}, indent=1) + "\n", encoding="utf-8")
     print(MARK + json.dumps({"digests": out, "golden": str(golden_path())}), flush=True)
 
 

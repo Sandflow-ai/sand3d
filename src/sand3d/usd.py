@@ -265,7 +265,7 @@ def write_usda(root, path):
     out.close()
 
     path = os.fspath(path)
-    with open(path, "w", newline="\n") as f:
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write("#usda 1.0\n(\n")
         f.write(f'    defaultPrim = "{top}"\n')
         f.write(f'    doc = "written by sand3d: {top} at rest, metres and degrees"\n')

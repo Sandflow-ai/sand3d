@@ -21,7 +21,7 @@ def machine():
 def read_obj(path):
     """name -> (vertices, triangles), indices local to the object."""
     objects, verts, name, base = {}, [], None, 0
-    for line in Path(path).read_text().splitlines():
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
         if line.startswith("o "):
             name = line[2:] + ("'" if line[2:] in objects else "")
             base = len(verts)

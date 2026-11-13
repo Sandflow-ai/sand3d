@@ -48,7 +48,7 @@ def build(units, tmp):
         stdout, stderr = run.communicate(timeout=1800)
         if not any(line.startswith(MARK) for line in stdout.splitlines()):
             raise AssertionError(f"run_units.py --unit {unit} wrote nothing:\n{stderr[-3000:]}")
-        out[unit] = json.loads((Path(tmp) / f"{unit}.json").read_text())["pieces"]
+        out[unit] = json.loads((Path(tmp) / f"{unit}.json").read_text(encoding="utf-8"))["pieces"]
     return out
 
 
@@ -324,7 +324,7 @@ class UnitSetting(unittest.TestCase):
 
 if __name__ == "__main__":
     if len(sys.argv) >= 3:
-        report = compare(*(json.loads(Path(p).read_text())["pieces"] for p in sys.argv[1:3]),
+        report = compare(*(json.loads(Path(p).read_text(encoding="utf-8"))["pieces"] for p in sys.argv[1:3]),
                          exact="--loose" not in sys.argv)
         for name, found in report.items():
             print(f"{'DIFF' if found else 'ok  '} {name:45} {found or ''}")

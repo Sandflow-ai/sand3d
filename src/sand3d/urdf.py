@@ -318,7 +318,7 @@ def _write_obj(path, ob, m, unit):
         if flip:
             vs.reverse()
         lines.append("f " + " ".join(map(str, vs)))
-    with open(path, "w", newline="\n") as f:
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(lines) + "\n")
 
 
@@ -368,7 +368,7 @@ def write_urdf(root, path):
             leader, ratio, kind = j["follows"]
             ET.SubElement(node, "mimic", joint=leader, multiplier=_num(ratio * _si(j["kind"]) / _si(kind)), offset="0")
     ET.indent(robot, "  ")
-    with open(path, "w", newline="\n") as f:
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write('<?xml version="1.0"?>\n')
         f.write(f"<!-- written by sand3d: {mech.link[None]} at rest, metres and radians -->\n")
         f.write(ET.tostring(robot, encoding="unicode") + "\n")
