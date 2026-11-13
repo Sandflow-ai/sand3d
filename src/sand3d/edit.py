@@ -14,7 +14,9 @@ qualified ones (`slot.side`) are kept. An edge left lying flat between two
 coplanar faces loses its names.
 """
 import bisect
+import contextlib
 import math
+import os
 import warnings
 from copy import deepcopy
 
@@ -265,6 +267,43 @@ class NothingCut(ValueError):
     """A cut, a hole or a pocket whose tools all miss the part, or only touch it."""
 
 
+class MissedCut(UserWarning):
+    """The warning a missed cut, hole or pocket gives outside strict mode: the part is left as it was."""
+
+
+_STRICT = None      # None: the SAND3D_STRICT environment variable decides
+
+
+def _is_strict():
+    if _STRICT is not None:
+        return _STRICT
+    return os.environ.get("SAND3D_STRICT", "").strip().lower() not in ("", "0", "false", "no")
+
+
+@contextlib.contextmanager
+def strict(on=True):
+    """Within the block, a cut, a hole or a pocket whose tools all miss the part raises
+    NothingCut (on) or warns with MissedCut and leaves the part as it was (off).
+
+    Outside any block, SAND3D_STRICT=1 in the environment makes it raise; by default it
+    warns, as a boolean that misses does in Blender or in a CAD kernel. Strict mode is
+    for checking programs, a dataset's for instance: a tool in the wrong place is the
+    commonest silent mistake, and a warning lets the program go on to a wrong object."""
+    global _STRICT
+    before, _STRICT = _STRICT, on
+    try:
+        yield
+    finally:
+        _STRICT = before
+
+
+def _missed(error):
+    """A missed cut: raise it in strict mode, else warn and let the program go on."""
+    if _is_strict():
+        raise error
+    warnings.warn(str(error), MissedCut, stacklevel=4)
+
+
 def _boxes(ob, operands):
     """The part's box and the tools', in its parent's frame — where the program placed them."""
     m = _core.world(ob)
@@ -326,8 +365,8 @@ def _boolean(ob, tools, operation, strip, self_intersect=False, verb="boolean", 
                     delete(tool)
                 if aimed:   # a tool in the wrong place is the commonest silent mistake: say so
                     part, tools_at = _boxes(ob, operands)
-                    raise NothingCut(f"{verb}: no tool cuts into {name!r} — they miss it, or only touch it (its box "
-                                     f"{part}; the tools' {tools_at})")
+                    _missed(NothingCut(f"{verb}: no tool cuts into {name!r} — they miss it, or only touch it (its "
+                                       f"box {part}; the tools' {tools_at})"))
                 return ob
             operands = _Operands(ob, tools, operation, strip)
             bm = _solve(operands.base, operands.tools, operation, self_intersect)
@@ -488,7 +527,8 @@ def seat(host, part):
         tool.matrix_basis = _core.snapped(to_host @ k.rest_world(ob))
         tools.append(tool)
     try:
-        return _boolean(host, tools, "DIFFERENCE", strip=True, verb="seat", aimed=True)
+        with strict():      # a part that shares no volume with its host has nothing to seat: always an error
+            return _boolean(host, tools, "DIFFERENCE", strip=True, verb="seat", aimed=True)
     except NothingCut:
         raise ValueError(f"seat: {_core.given_name(root)!r} shares no volume with {_core.given_name(host)!r} at "
                          f"rest — they miss each other, or only touch: there is nothing to seat") from None
@@ -695,11 +735,12 @@ def pocket(ob, profile, depth=None, on=None):
         missed = []
         for f in frames_of(on, "pocket"):     # one after the other, as the loop it replaces
             try:
-                pocket(ob, profile, depth, f)
+                with strict():
+                    pocket(ob, profile, depth, f)
             except NothingCut as error:       # one frame off an irregular part: dropped, as a hole's
                 missed.append(error)
         if len(missed) == len(on):
-            raise missed[0]
+            _missed(missed[0])
         return ob
     profile = _drawing(profile, "pocket: the profile is placed out of the face's plane: draw it in its plane — "
                                 "x, y and rz only — and give the face or frames with on=: s3d.pocket(ob, profile, "

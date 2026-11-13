@@ -10,6 +10,7 @@ import bpy  # noqa: F401 — before bmesh, which bpy provides
 import bmesh
 
 import sand3d as s3d
+from sand3d.edit import MissedCut
 from test_solids import closed_volume, edges
 
 
@@ -192,7 +193,7 @@ class FoundByIssues(unittest.TestCase):
         top = block.face("top")
         s3d.fillet(block, 3, edges="side")
         before = len(block.data.vertices)
-        with self.assertRaisesRegex(ValueError, r"^cut: no tool cuts into 'block' — they miss it, or only touch it"):
+        with self.assertWarnsRegex(MissedCut, r"^cut: no tool cuts into 'block' — they miss it, or only touch it"):
             s3d.cut(block, s3d.extrude("groove", s3d.rect(4, 60), 9, on=top.move(20, 0)))
         self.assertEqual(len(block.data.vertices), before)
         s3d.chamfer(block, 0.8, edges="top")
@@ -204,7 +205,7 @@ class FoundByIssues(unittest.TestCase):
         block = s3d.box("block", 80, 60, 20)
         s3d.cut(block, s3d.at(s3d.box("step", 40, 70, 20), x=20, z=10))
         before = len(block.data.vertices)
-        with self.assertRaisesRegex(ValueError, r"^cut: no tool cuts into 'block'"):
+        with self.assertWarnsRegex(MissedCut, r"^cut: no tool cuts into 'block'"):
             s3d.cut(block, s3d.extrude("pocket", s3d.circle(8), 6, on=s3d.Frame((20, 0, 10))))
         self.assertEqual(len(block.data.vertices), before)
 
@@ -489,8 +490,8 @@ class FoundByIssues(unittest.TestCase):
         s3d.hole(plate, 8.0, on=(W / 2, H / 2), depth=6.0)
         for x, y in ((10, 10), (W - 10, 10)):
             s3d.hole(plate, 5.0, on=(x, y))
-        for x, y in ((10, H - 10), (W - 10, H - 10)):            # off the L: they raise
-            with self.assertRaisesRegex(ValueError, r"^hole: no tool cuts into 'Bracket'"):
+        for x, y in ((10, H - 10), (W - 10, H - 10)):            # off the L: they warn, the L is left as it was
+            with self.assertWarnsRegex(MissedCut, r"^hole: no tool cuts into 'Bracket'"):
                 s3d.hole(plate, 5.0, on=(x, y))
         self.assertTrue(closed_volume(plate)[0])
         co = [v.co for v in plate.data.vertices]
