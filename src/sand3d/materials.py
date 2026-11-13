@@ -260,6 +260,19 @@ def _material(tag, made):
             mat.node_tree.links.new(scatter.outputs["Volume"], both.inputs[1])
             volume = both.outputs["Shader"]
         mat.node_tree.links.new(volume, mat.node_tree.nodes["Material Output"].inputs["Volume"])
+        if (v["transmission"] == 1 and v["ior"] == 1 and v["roughness"] == 0
+                and not (v["metallic"] or v["coat"] or v["sheen"] or v["emission"])):
+            # A clear IOR-1 boundary bends no ray, but Cycles stops shadow rays at any refracting
+            # surface: the medium inside would get no direct light and cast too dark a shadow.
+            # Cycles reads its own output, a transparent boundary; glTF and EEVEE keep the active one.
+            output = mat.node_tree.nodes.new("ShaderNodeOutputMaterial")
+            output.name = "Cycles Output"
+            output.target = "CYCLES"
+            clear = mat.node_tree.nodes.new("ShaderNodeBsdfTransparent")
+            clear.name = "Boundary"
+            clear.inputs["Color"].default_value = (*(v["opacity"] * c + 1 - v["opacity"] for c in rgba[:3]), 1)
+            mat.node_tree.links.new(clear.outputs["BSDF"], output.inputs["Surface"])
+            mat.node_tree.links.new(volume, output.inputs["Volume"])
         group = bpy.data.node_groups.get("glTF Material Output")
         if group is None:
             group = bpy.data.node_groups.new("glTF Material Output", "ShaderNodeTree")

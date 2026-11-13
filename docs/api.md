@@ -155,10 +155,17 @@ smoke only absorbs (`absorb`), murky water is `water` with `scatter` added.
 
 The medium fills the closed mesh; the surface stays what its own values say and hides
 the medium when opaque. A medium with no visible boundary needs `transmission=1`,
-`ior=1`, `roughness=0`, as `smoke` and `fog` set. One closed envelope with a constant
-medium gives a soft mass, not filaments: the density is the same everywhere inside.
-Cycles renders single scattering unless the scene allows volume bounces
-(`scene.cycles.volume_bounces`, 0 by default); sand3d leaves render settings alone.
+`ior=1`, `roughness=0`, as `smoke` and `fog` set. Cycles stops shadow rays at any
+refracting surface, IOR 1 included, so such a clear boundary around a medium (no
+metallic, coat, sheen or emission either) reaches Cycles as a transparent surface tinted
+by `color`: the medium gets direct light and casts its own shadow. GLB and EEVEE keep
+the Principled BSDF. Each crossing of that boundary is one of Cycles' transparent
+bounces (`scene.cycles.transparent_max_bounces`, 8 by default): a folded envelope, a
+noisy `field`, can take a grazing ray past them and show black cracks along its outline;
+raise the limit. One closed envelope with a constant medium gives a soft mass, not
+filaments: the density is the same everywhere inside. Cycles renders single scattering
+unless the scene allows volume bounces (`scene.cycles.volume_bounces`, 0 by default);
+sand3d leaves render settings alone.
 
 | preset | surface colour | roughness | transmission | IOR | absorb at distance | scatter at distance, anisotropy |
 |---|---|---|---|---|---|---|

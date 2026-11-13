@@ -474,6 +474,24 @@ class Scattering(unittest.TestCase):
         self.assertNotIn("Scatter", nodes)
         self.assertEqual(nodes["Material Output"].inputs["Volume"].links[0].from_node.name, "Absorption")
 
+    def test_cycles_sees_a_clear_boundary_as_transparent(self):
+        """Cycles blocks shadow rays at refracting surfaces, IOR 1 included: the medium would go unlit."""
+        ob = s3d.material(s3d.box("plume", 10, 10, 10), "smoke", color="#ff0000", opacity=.5)
+        tree = ob.data.materials[0].node_tree
+        self.assertEqual(tree.get_output_node("CYCLES").name, "Cycles Output")
+        self.assertEqual(tree.get_output_node("EEVEE").name, "Material Output")
+        self.assertTrue(tree.nodes["Material Output"].is_active_output)       # what glTF reads
+        cycles = tree.nodes["Cycles Output"].inputs
+        self.assertEqual(cycles["Surface"].links[0].from_node.name, "Boundary")
+        self.assertEqual(cycles["Volume"].links[0].from_node.name, "Medium")
+        for got, want in zip(tree.nodes["Boundary"].inputs["Color"].default_value, (1, .5, .5)):
+            self.assertAlmostEqual(got, want, places=6)
+        # A boundary that reflects or refracts keeps the Principled BSDF in Cycles too.
+        for kind, kw in (("water", {}), ("smoke", {"roughness": .2}), ("smoke", {"ior": 1.1}),
+                         ("smoke", {"scatter_distance": 0, "absorb_distance": 0})):
+            s3d.material(ob, kind, **kw)
+            self.assertNotIn("Cycles Output", ob.data.materials[0].node_tree.nodes)
+
     def test_disable_bounds_and_errors(self):
         ob = s3d.box("cloud", 10, 10, 10)
         for kind, kw in (("fog", {"scatter_distance": 0}), ("smoke", {"thickness": 0})):
