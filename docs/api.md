@@ -33,6 +33,8 @@ plate.top).
    moves as the image of the motion); `at` refuses it. Two joints on one child compose in order (a screw: a
    turn, and a slide that follows it with `ratio=pitch / 360`).
 
+## Profiles and outlines
+
 ```python
 # profiles
 rect(w, d, r=0, chamfer=0)  # Centred; corners rounded or cut
@@ -51,11 +53,31 @@ offset(p, t)  # Grown by t
 stroke(path, t)  # A band t wide along an open path, centred on it: a closed outline
 wrap(*profiles)  # Convex outline round profiles
 mirror(p, flip='x')  # Plus its image, flip negated
+```
+
+## Solids and paths
+
+```python
 # solids, paths
 fill(name, container, level, clearance=None)  # Bounded voids below a height or Frame; None: -0.04 mm overlap; 0: exact contact
+```
+
+## Implicit surfaces
+
+```python
 field(name, size, density, *, cell, level=0, min_component_cells=3)  # Closed isosurface: density(x,y,z) < level; size=(w,d,h), local coordinates, centred XY, Z=0..h; faces field
+```
+
+## Scalar fields
+
+```python
 waves(wavelength, direction=None, centers=None, sharpness=0, spread=0, decay=None, phase=0, seed=0)  # Factory: bounded scalar/array f(x,y,z), local XY; lengths in program units, angles in degrees
 noise(x, y, z, seed=0, kind="perlin")  # Dimensionless scalar or broadcast arrays [-1,1]; perlin cells ridged turbulence; independent of displace
+```
+
+## Constructed solids
+
+```python
 hull(name, points)  # Closed convex hull where points are given, no recentering; (x, y, z) or Frame origins; at least 4 distinct non-coplanar points, finite coordinates; unnamed planar faces (read by direction), edges rim
 extrude(name, profile, h=None, taper=0, twist=0, both=False, h2=None, on=None, until=None)  # Prism up Z (taper > 0 narrows it upward), or until a plane or solid; on a face, by on
 revolve(name, profile, angle=360)  # X radius, Y height, turned about Z
@@ -63,8 +85,18 @@ sweep(name, profile, path, scale=1, twist=0, frenet=False, *, tip="round", rings
 loft(name, *sections, follow=False, loop=False, tip="round", rings=0)  # Through placed sections, capped; loop: a ring
 body(name, plan, top, bottom, n=2)  # Solid along Y from its views, where they draw it: plan (y, width), side top and bottom (y, z) or numbers; superellipse sections
 wire(name, path, d, closed=None, fillet=0, *, tip="round", rings=0)  # d also takes a diameter law, zero ends rounded; path: (x, y, z) points, a spline, an arc, a helix; fillet rounds the corners of points, d / 2 at least
+```
+
+## Analytic paths
+
+```python
 helix(d, pitch, h, left=False)  # Coil path up Z
 spiral(d, d2, turns, h=0, left=False)  # Open path about Z, diameter changes geometrically, height linearly
+```
+
+## Solid primitives
+
+```python
 box(name, w, d, h)  # On Z = 0, centred in X and Y
 cylinder(name, d, h)  # Along Z, from Z = 0
 tube(name, d, d_in, h)  # Along Z, from Z = 0
@@ -73,6 +105,11 @@ sphere(name, d)  # On Z = 0
 wedge(name, w, d, h, top=0)  # Box narrowed on top
 torus(name, d, d_wire)  # Ring about Z, on Z = 0
 dome(name, d, h)  # Cap on Z = 0
+```
+
+## Boolean and mesh edits
+
+```python
 # edits
 cut(ob, *tools)  # Subtract tools
 join(ob, *others)  # Fuse others in; ob's material wins: group keeps each its own
@@ -88,6 +125,11 @@ fillet(ob, r, edges='all')  # Round named edges
 chamfer(ob, d, edges='all', d2=None, angle=None)  # Bevel named edges
 soften(ob, r, angle=30)  # Round all sharp edges
 shell(ob, t, open=None)  # Hollow; open named faces, or the flat faces looking "+Y", "-X +X"
+```
+
+## Surface and form deformation
+
+```python
 dent(ob, points, r, depth, *, coords="local")  # Press hollows at points in the mesh's local space; parent: the space the part is in
 blend(ob, *others, r)  # Fuse others in, creases filled to about radius r on voxels of r / 5; its faces are all blend
 displace(ob, amount, size, noise='perlin', octaves=1, seed=0, direction='normal', fade=None, *, faces=None, coords='local', refine=True)  # Push the surface out and in by up to amount, features size across: noise callable or perlin cells ridged turbulence; direction normal, radial or "+Z"…; fade=(z0, z1) along its own Z
@@ -96,6 +138,11 @@ twist(ob, angle, axis="+Y")  # Turn sections about its own axis, right handed; n
 taper(ob, s, axis="+Y")  # Scale across its own axis, from 1 at the near end to ratio s > 0 at the far end
 smooth(ob, angle=55)  # Shade each descendant mesh by angle; 0 flat, 180 all smooth
 lay(ob, over, refine=0, reach=None)  # Seat on a surface along own Z, retaining height above own Z=0
+```
+
+## Frames and placement
+
+```python
 # frames, placement
 Frame(origin=(0, 0, 0), normal=(0, 0, 1), up=None)  # A place to build on
 .offset(d) .turn(rx=0, ry=0, rz=0) .move(x=0, y=0, z=0) .point(x=0, y=0, z=0)
@@ -106,6 +153,11 @@ bbox(ob, which)  # Frame on its bounding box: a side "+X", an edge "+X-Y", a cor
 local(ob, x=0, y=0, z=0, rx=0, ry=0, rz=0)  # Frame at (x, y, z) of its own space, turned (rx, ry, rz) degrees
 at(ob, x=None, y=None, z=None, rx=None, ry=None, rz=None, on=None, anchor=None)  # Place it: set what is given, keep the rest; anchor: "-Z", "+Y-Z"…
 transform(ob, x=0, y=0, z=0, rx=0, ry=0, rz=0, mirror=None)  # Move it by, as a parent would; its placement, not its mesh
+```
+
+## Distributions
+
+```python
 grid(nx, ny=1, px=0, py=0, stagger=False, on=None)  # On a grid
 ring(n, r, start=0, angle=360, on=None)  # On a circle
 along(path, pitch=None, count=None, spin=0, span=(0, 1))  # Along a path
@@ -115,27 +167,55 @@ Frames.jitter(rx=0, ry=0, rz=0, x=0, y=0, z=0, seed=0)  # Random turns and moves
 vary(value, spread, n, seed=0)  # Values within spread of value, most near it
 scatter(n, size, seed=0, surface=False, on=None)  # size: ellipsoid diameters, or a mesh part / list of mesh parts for its surface
 snap(targets, points, direction=None)  # On a surface: nearest, or along direction "-Z", "+X"… or (x, y, z)
+```
+
+## Mechanical parts
+
+```python
 # parts
 gear(name, teeth, module, width, bore=0, angle=20)  # Involute spur gear
 knurl(name, d, h, pitch=None, straight=False)  # Knurled grip; pitch 1 mm by default
 thread(name, d, length, pitch, left=False)  # Threaded rod
+```
+
+## Materials
+
+```python
 # materials
 material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, emission=None, absorb=None, absorb_distance=None, thickness="auto", ior=None, transmission=None, scatter=None, scatter_distance=None, scatter_anisotropy=None)  # Kind: oak walnut pine birch steel brushed_steel chrome aluminium brass copper painted_metal plastic glossy_plastic rubber glass ceramic fabric velvet leather marble concrete bark leaf moss grass rock soil sand water snow foam smoke fog light; color "#rrggbb" or color(x,y,z[,n[,u]])
+```
+
+## Articulation
+
+```python
 # articulation
 joint(name, child, on, kind='revolute', axis='normal', range=None, follows=None, ratio=1)  # How child moves on the part on was read on: revolute (range in degrees), continuous (no range), prismatic (range in the unit), free (no axis, no range); follows: a child or a joint name, and this joint's value is ratio × its (degrees per unit, or units per degree), no range; returns child
 pose(ob, value, joint=None)  # Move the mechanism: that joint to value (degrees or the unit), an error outside its range; what it carries follows; joint= when child has two
 seat(host, part)  # Take out of host the volume part fills, as it sits at rest; part untouched
+```
+
+## Assembly
+
+```python
 # assembly
 group(name, *children)  # Parent of children
 assembly(name, *children, **anchors)  # Parts and anchors
 attach(handle, name, *children)  # A detail, under a handle
 Handle(root, **anchors)  # Root and anchors
+```
+
+## Export and scene settings
+
+```python
 export(root, path, colors="material")  # root and what hangs on it by its joints, in metres: .glb at the current pose, joints in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's tree as OpenUSD text, with the materials; .ifc the part tree as IFC4 at the current pose, no joints; GlobalIds can change with geometry or placement and may repeat across models; .obj and .stl its meshes at the current pose
 empty_scene()  # Fresh scene
 facets(n=None, smooth=...)  # Read count, or set segments per turn (integer >=3 or "auto") at any point; with facets(n): one part, then the previous count
 units(name=None)  # Length unit: "mm" (default), "cm", "m"
 fingerprint()  # Digest of the source
 ```
+
+
+## Materials and media
 
 `material` overrides inherit their preset when None. `absorb` is an sRGB colour
 (`#rrggbb` or RGB tuple), independent of the surface `color`: white light becomes
@@ -211,6 +291,8 @@ All are nonmetallic with alpha 1; leaf has coat 0.12 and snow 0.03.
 `color=` changes the surface tint without changing absorption or other properties.
 Material names contain the preset and explicit overrides, not its default values.
 
+## Scale and local frames
+
 `scale` on a group or an assembly (its handle) takes one factor s > 0 — no (sx, sy, sz), no 0, no
 negative — and scales everything under it in place about the group's own origin: each mesh's
 coordinates and each part's place in its parent are multiplied by s; the group stays where it is in its
@@ -253,6 +335,8 @@ into a `Path`; children attach by its arc length, facing its tangent. With both 
 remain exact straight two-point segments. Curvature radii exceed twice the local section
 radius, so axes build with `wire` or a matching `sweep` scale law. `jitter` also perturbs
 child azimuth by up to its fraction of `azimuth`, as well as lean and length.
+
+## Along and surface distributions
 
 `along` covers `span` of the path's arc length. `spin` adds degrees per frame about its tangent.
 Nonzero spin uses rotation-minimizing parallel transport through every path segment, starting
@@ -315,6 +399,8 @@ def gate(w=750, h=1200, post=100):
     return gate
 ```
 
+## Implicit fields
+
 `field` samples each axis at evenly spaced intervals no larger than `cell` (at least two).
 Boundary samples are forced outside: leave a margin of `cell` to preserve the surface;
 otherwise it closes within the outermost cell. The density must be a deterministic callable
@@ -355,6 +441,8 @@ can miss wholly hidden sub-cell features. Boundary samples are forced outside;
 leave one cell of margin. Non-finite, empty and singular surfaces are refused.
 `min_component_cells` drops closed components shorter than that many cells on
 every axis; always keeps the largest. Set 0 to keep all components.
+
+## Noise and waves
 
 `noise` returns a float for scalar input, otherwise a float64 broadcast-shaped
 array, in [-1,1]. Seeded gradient/nearest-cell noise is deterministic
@@ -412,6 +500,8 @@ real values in [-1, 1]; invalid results raise. Values multiply amount and fade
 directly, without the named noises' area centring. Size still controls surface
 refinement (about size / 4); coordinates are not divided by size. Keep octaves=1
 and seed=0; compose seeded `s3d.noise` calls inside f for layers and domain warps.
+
+## Displacement
 
 `faces=None` preserves whole-surface displacement. Use `faces="top"` or a list
 of construction face names to displace only their vertices; names select all
@@ -494,6 +584,8 @@ zero end size by its neighbouring section size and caps it in the end plane.
 Nonzero ends stay capped. `rings` adds that many rings per span; wire also accepts
 explicit arc-length fractions strictly inside (0,1). `wire(d=(width,thickness))`
 has a constant elliptical section; laws still describe circular diameters.
+
+## Denting and laying
 
 `dent` reads points and Frame origins in the mesh's local space by default, preserving
 that convention after placement. With `coords="parent"`, it reads them in the space
