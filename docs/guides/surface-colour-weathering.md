@@ -1,0 +1,3 @@
+# Per-vertex colour, broad weathering and geometry cost.
+
+material(ob, kind, color=callback) evaluates color(x,y,z[,n[,u]]) at vertices; coordinates are local, n is the normal and u is available surface parameterization. Return RGB/RGBA colours. Vertex colour resolution follows existing vertices: tiny freckles disappear on coarse meshes. Prefer broad gradients, height/moisture bands, directional grime and seeded noise at visible scales. Detail costs faces: displacing a mesh solely to carry finer colour increases build cost. Do not refine geometry solely for colour; use broad readable weathering first. Geometry relief is justified when it changes silhouette or material structure.

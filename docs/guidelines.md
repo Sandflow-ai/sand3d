@@ -496,3 +496,49 @@ already holds about two million triangles.
 than `min_component_cells * cell` (default 3). The largest component is always
 kept; `min_component_cells=0` keeps every component. The filter removes complete
 closed shells, never individual faces. Thin connected features remain.
+
+## Natural forms
+
+- **Seeds: one per call.** The same seed replays the same stream in every verb:
+  two `vary(..., seed=seed)` calls are 100 % correlated (the longest leaf is
+  always the widest). Give each call its own derived seed (`seed`, `seed + 1`,
+  `seed + 2`…, or `seed * 100 + k` for part k). Use `vary(mean, spread, n, seed=…)`
+  for n values of one quantity; its spread is absolute, in the value's units
+  (`.2` means ±.2, not ±20 %). For case-by-case draws inside a loop (rejections,
+  choices, colours), open one `rng = random.Random(seed + k)` per part and draw
+  from it. `Frames.jitter` and `scatter` take their own derived seeds too;
+  `FruitStrawberryFactory.py:achenes` projects scattered sites onto flesh.
+
+- **Outline first, surface second.** A natural form reads as irregular by its
+  silhouette and proportions before its skin. Small noise on a symmetric base gives
+  a rough skin on a regular shape. Break the outline first (uneven points for
+  `hull`, uneven lengths with `vary`, a lean with `bend`, `twist` or `taper`, a
+  `displace` whose features are about as large as the part), then add grain:
+
+  ```python
+  form = s3d.hull("form", sites.jitter(x=lean, y=lean, seed=seed))   # uneven proportions
+  s3d.bend(form, tilt)                                               # the whole form leans
+  s3d.displace(form, swell, size=width, seed=seed + 1)              # the outline moves
+  s3d.displace(form, grain, size=grain_size, seed=seed + 2)         # then the skin
+  ```
+
+- **Attach to the actual parent.** Strawberry's crown reads a surface frame with
+  `snap`; its achenes snap again after denting. `LeafMapleFactory.py:petiole`
+  returns the path end from `along(path, count=2)[-1]` for the blade.
+  `KelpMonocotFactory.py:fronds` and `TreeFactory.py:structure` place children
+  using `along(..., spin=137.508, span=(...))`. Derive placement from geometry,
+  not offsets measured on a render. A child's anchor must follow seed changes.
+
+- **Materials are mandatory.** Dress every visible component:
+  Strawberry separates flesh, stalk and achenes; Maple separates blade and veins;
+  Boulder uses a height-dependent colour. Use the nature presets `bark`,
+  `leaf`, `moss`, `grass`, `rock`, `soil`, `sand`, `water`, `snow`, `foam`, `smoke`, `fog` where appropriate,
+  with explicit colour overrides for the requested mood. The examples predate these
+  presets: adapt generic wood examples to `oak`, and coral to coloured `rock`
+  or `ceramic`. Only use the listed kinds.
+
+- **Low-poly.** Use `facets(n, smooth=False)` for the requested flat style,
+  including organic field/displace/blend surfaces. Hull still follows its input
+  points. The bench's polygonal coral tubes and Tree fans show deliberate angular
+  silhouettes; avoid smoothing them away. Increase resolution when a low count
+  loses a branch or hole. `facets("auto")` restores normal adaptive resolution.
