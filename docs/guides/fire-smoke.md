@@ -20,3 +20,23 @@ shadows; GLB/EEVEE keep Principled. Each boundary crossing spends a transparent
 bounce (Cycles default 8): folded envelopes can show black edge cracks; raise
 transparent_max_bounces if needed. volume_bounces defaults to 0, so multiple
 scattering needs an explicit scene setting. sand3d does not change render settings.
+
+## Parameter tables for repeated flame layers and smoke columns
+
+Use one construction loop over a parameter table instead of copying each stage.
+Keep table order, random-draw order and fusion order stable when refactoring.
+Derive one seed per item and pass it to that item's helper; do not restart every
+item at the same seed. The helper below is a program-local function you define,
+not an extra library verb. The same pattern covers leaf tiers, flame layers,
+smoke columns and layered fungi.
+
+```python
+layers = [(0, 1.0, 0), (80, .75, 23), (140, .45, -17)]
+parts = []
+for i, (height, scale, turn) in enumerate(layers):
+    part = make_layer(scale=scale, seed=seed + 100 + i)
+    parts.append(s3d.at(part, z=height, rz=turn))
+```
+
+Keep the brief's requested facets level, including smooth=False for flat faces.
+A face budget is a ceiling, not a target: break the outline before adding detail.

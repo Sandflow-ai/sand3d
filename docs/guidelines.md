@@ -542,3 +542,18 @@ closed shells, never individual faces. Thin connected features remain.
   points. The bench's polygonal coral tubes and Tree fans show deliberate angular
   silhouettes; avoid smoothing them away. Increase resolution when a low count
   loses a branch or hole. `facets("auto")` restores normal adaptive resolution.
+
+## Frames, facets, seeds and lighting
+
+Honour the requested facets(n, smooth=...) level; low-poly does not mean adding
+noise at a finer resolution to paint detail. Local callback coordinates describe
+the part before placement; sampled sites live in their documented parent frame.
+Compose frames with on= rather than manually adding translations across rotated
+parents. Derive deterministic per-item seeds from the root seed and keep draw
+order stable. Do not hide unused seed parameters with `_ = seed`: use the seed
+for the intended variation or leave the parameter honestly unused. Root seed=0
+remains the reproducibility contract. Surface colour describes reflectance or
+an authored surface property, not a painted light/shadow field. Review shading
+uses fixed illumination and approximate emission/media; Cycles uses scene lights
+and actual shader nodes. Their images need not match, and neither automatically
+proves a physically realistic material.

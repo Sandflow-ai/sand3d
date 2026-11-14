@@ -21,3 +21,27 @@
   ground under a chosen spot, and `Frame(hit.origin)` keeps an upright post upright.
 
 Make terrain as a supported solid and displace its top. displace accepts named or callable noise and direction="+Z"; amount is displacement, size is feature scale, refine controls added topology. noise accepts scalar or broadcastable arrays, values in [-1,1]; ridged/turbulence transform gradient noise. snap(targets, points, direction="-Z") finds contact points in their shared frame. lay(ob, over, refine=0, reach=None) seats a placed piece along its own Z while preserving height above local Z=0. Derive vegetation and rock contact from terrain rather than guessing world Z. Give composition ground enough area to support the subject; avoid hidden floating islands.
+
+## Select sites once, place through one helper
+
+Filter the frames returned by scatter or phyllotaxis with one predicate, then
+reuse a placement helper for all accepted sites. Do not duplicate nearly identical
+loops for two plant or stone populations. Record the achieved count: filtering
+can yield fewer than the requested number. Increasing samples or changing the
+predicate changes the distribution and random draws; it is not an equivalent
+refactor. `keep_site(frame)` and `place_item(frame, seed)` below are local helpers
+you write, not API verbs.
+
+```python
+sites = s3d.scatter(120, terrain, seed=seed + 1)
+selected = [site for site in sites if keep_site(site)]
+parts = [place_item(site, seed=seed + 100 + i)
+         for i, site in enumerate(selected)]
+```
+
+Respect frames: a sampled mesh site's frame is in that mesh's parent space.
+Use on=site for its full orientation; adding translations manually is only valid
+for aligned axes. Offsets after on= run along that frame's axes. Do not mix local
+callback coordinates, parent-space sites and world-space positions. Choose the
+actual parent surface before snap/lay and preserve the return/prototype-consumption
+contract of at when placing a prototype on multiple frames.

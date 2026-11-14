@@ -686,3 +686,27 @@ highlight or cast shadow into RGB via normals. Use normals for an authored surfa
 property (e.g. deposited dust), not fake lighting. The review renderer supplies
 fixed lighting; emission adds visible colour without lighting neighbours. Cycles
 uses actual lights, emission and volume nodes and can show different appearance.
+
+## Select sites once, place through one helper
+
+Filter the frames returned by scatter or phyllotaxis with one predicate, then
+reuse a placement helper for all accepted sites. Do not duplicate nearly identical
+loops for two plant or stone populations. Record the achieved count: filtering
+can yield fewer than the requested number. Increasing samples or changing the
+predicate changes the distribution and random draws; it is not an equivalent
+refactor. `keep_site(frame)` and `place_item(frame, seed)` below are local helpers
+you write, not API verbs.
+
+```python
+sites = s3d.scatter(120, terrain, seed=seed + 1)
+selected = [site for site in sites if keep_site(site)]
+parts = [place_item(site, seed=seed + 100 + i)
+         for i, site in enumerate(selected)]
+```
+
+Respect frames: a sampled mesh site's frame is in that mesh's parent space.
+Use on=site for its full orientation; adding translations manually is only valid
+for aligned axes. Offsets after on= run along that frame's axes. Do not mix local
+callback coordinates, parent-space sites and world-space positions. Choose the
+actual parent surface before snap/lay and preserve the return/prototype-consumption
+contract of at when placing a prototype on multiple frames.

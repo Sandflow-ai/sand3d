@@ -14,3 +14,23 @@
   apply `on` a second time. Use their paths for wire/sweep and their tips for buds.
 
 branches creates paths and along creates frames, not geometry. Build trunks and branches from tapering wire/sweep paths. along(path, count=13, spin=137.508, span=(.12,.92)) follows arc length; turn(ry=60) departs from the tangent. Place organs built from their base along local +Z; angular jitter preserves attachment, position jitter can detach leaves. scatter(n, size, seed=seed, surface=False) distributes frames in an ellipsoid; scatter(n, mesh, seed=seed) samples a surface. Vary foliage scale, orientation and clusters with derived seeds. Budget crown cost as leaf count times faces per leaf plus twigs: thousands of finely tessellated leaves dominate. Prefer simple broad leaf geometry that reads at review scale, expose branch structure and keep roots in ground contact.
+
+## Parameter tables for repeated leaf tiers
+
+Use one construction loop over a parameter table instead of copying each stage.
+Keep table order, random-draw order and fusion order stable when refactoring.
+Derive one seed per item and pass it to that item's helper; do not restart every
+item at the same seed. The helper below is a program-local function you define,
+not an extra library verb. The same pattern covers leaf tiers, flame layers,
+smoke columns and layered fungi.
+
+```python
+layers = [(0, 1.0, 0), (80, .75, 23), (140, .45, -17)]
+parts = []
+for i, (height, scale, turn) in enumerate(layers):
+    part = make_layer(scale=scale, seed=seed + 100 + i)
+    parts.append(s3d.at(part, z=height, rz=turn))
+```
+
+Keep the brief's requested facets level, including smooth=False for flat faces.
+A face budget is a ceiling, not a target: break the outline before adding detail.
