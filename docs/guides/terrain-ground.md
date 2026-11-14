@@ -33,6 +33,13 @@ refactor. `keep_site(frame)` and `place_item(frame, seed)` below are local helpe
 you write, not API verbs.
 
 ```python
+def keep_site(frame):
+    x, y, z = frame.origin
+    return z > 5 and x*x + y*y > 400
+
+def place_item(site, seed):
+    return s3d.at(make_stone(seed=seed), on=site)
+
 sites = s3d.scatter(120, terrain, seed=seed + 1)
 selected = [site for site in sites if keep_site(site)]
 parts = [place_item(site, seed=seed + 100 + i)

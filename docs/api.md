@@ -480,8 +480,8 @@ not wavelength: resolve the shortest component with at least 16 samples per
 period, more for sharp crests. Use a fixed push direction for a height surface;
 normal displacement on an already curved mesh does not guarantee no crossings.
 For foam colouring, wrap the scalar field in an RGB colour function:
-`material(ob, "plastic", color=lambda x,y,z: (1,1,1) if f(x,y,z) > .7 else (.02,.15,.2))`.
-This colours crests; it does not model foam. Colour callbacks still run per face.
+`material(ob, "plastic", color=lambda x,y,z: np.where((f(x,y,z) > .7)[:, None], np.array([1.,1.,1.]), np.array([.02,.15,.2])))`.
+This colours crests; it does not model foam. The vectorized callback returns one RGB row per face.
 
 A shore belongs to composition, not radial decay: multiply `f(x,y,z)` by a
 bounded mask such as `np.clip((x-shore)/width, 0, 1)` (positive width).
@@ -698,6 +698,13 @@ refactor. `keep_site(frame)` and `place_item(frame, seed)` below are local helpe
 you write, not API verbs.
 
 ```python
+def keep_site(frame):
+    x, y, z = frame.origin
+    return z > 5 and x*x + y*y > 400
+
+def place_item(site, seed):
+    return s3d.at(make_stone(seed=seed), on=site)
+
 sites = s3d.scatter(120, terrain, seed=seed + 1)
 selected = [site for site in sites if keep_site(site)]
 parts = [place_item(site, seed=seed + 100 + i)
