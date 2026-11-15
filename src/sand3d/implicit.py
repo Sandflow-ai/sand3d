@@ -218,6 +218,73 @@ def waves(wavelength, direction=None, centers=None, sharpness=0, spread=0,
     return evaluate
 
 
+def weave(pitch, row=None, across="+X", up="+Z", stake=0.3):
+    """Return a bounded basket-weave height field f(x, y, z), in program units.
+
+    Strands `row` high (pitch / 2 by default) run along `across` and pass over one stake
+    and under the next; the stakes stand `pitch` apart and run along `up`. Each row is
+    shifted by one stake. `across` is +X, -X, +Y, -Y, +Z, -Z or degrees in XY, as in
+    `waves`; `up` is a signed axis at right angles to it. `stake` (0..1] is a stake's
+    width as a share of the pitch.
+    """
+    def number(name, value):
+        if isinstance(value, (bool, str, bytes)):
+            raise ValueError(f"weave: {name} must be a finite number")
+        try:
+            value = float(value)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f"weave: {name} must be a finite number") from exc
+        if not math.isfinite(value):
+            raise ValueError(f"weave: {name} must be a finite number")
+        return value
+
+    axes = {"+X": (1, 0, 0), "-X": (-1, 0, 0), "+Y": (0, 1, 0), "-Y": (0, -1, 0), "+Z": (0, 0, 1), "-Z": (0, 0, -1)}
+    pitch = number("pitch", pitch)
+    row = pitch / 2 if row is None else number("row", row)
+    stake = number("stake", stake)
+    if pitch <= 0 or row <= 0:
+        raise ValueError("weave: pitch and row must be positive")
+    if not 0 < stake <= 1:
+        raise ValueError("weave: stake must lie in (0, 1]")
+    if isinstance(across, str):
+        if across not in axes:
+            raise ValueError("weave: across must be degrees or +X, -X, +Y, -Y, +Z, -Z")
+        a = axes[across]
+    else:
+        angle = math.radians(number("across", across) % 360)
+        a = (math.cos(angle), math.sin(angle), 0.0)
+    if not isinstance(up, str) or up not in axes:
+        raise ValueError("weave: up must be +X, -X, +Y, -Y, +Z or -Z")
+    b = axes[up]
+    if abs(sum(p * q for p, q in zip(a, b))) > 1e-12:
+        raise ValueError("weave: across and up must be at right angles")
+
+    def evaluate(x, y, z):
+        q = np.broadcast_arrays(*[np.asarray(c, dtype=np.float64) for c in (x, y, z)])
+        if any(not np.all(np.isfinite(c)) for c in q):
+            raise ValueError("weave: coordinates must be finite")
+        x, y, z = q
+        with np.errstate(over="ignore", invalid="ignore"):
+            u = (x * a[0] + y * a[1] + z * a[2]) / pitch     # in stakes
+            v = (x * b[0] + y * b[1] + z * b[2]) / row       # in rows
+        if not (np.all(np.isfinite(u)) and np.all(np.isfinite(v))) or np.any(np.abs(u) > 2**50) \
+                or np.any(np.abs(v) > 2**50):
+            raise ValueError("weave: distance / pitch and distance / row must be finite and within 2**50")
+        k = np.floor(v)                                      # the row
+        m = np.floor(u + 0.5)                                # the nearest stake
+        # A strand is round across its row, proud over a stake and level under the next.
+        section = np.sqrt(np.clip(1 - (2 * (v - k) - 1) ** 2, 0, 1))
+        strand = section * (0.5 + 0.5 * np.cos(math.pi * np.remainder(u + k, 2)))
+        # Where the strand passes under, the stake shows: a ridge `stake` wide.
+        under = np.remainder(m + k, 2) == 1
+        ridge = np.clip(1 - np.abs(u - m) / (stake / 2), 0, 1)
+        result = 2 * np.maximum(strand, np.where(under, 0.8 * ridge * np.sqrt(section), 0)) - 1
+        result = np.clip(result, -1, 1)
+        return float(result) if result.ndim == 0 else result
+
+    return evaluate
+
+
 DENSE_SAMPLES = 1_000_000
 MAX_COARSE_SAMPLES = 1_000_000
 MAX_SAMPLES = 8_000_000

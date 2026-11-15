@@ -714,3 +714,13 @@ def retained_fill():
     pot = s3d.shell(s3d.box("pot", 40, 30, 30), 2, open="top")
     s3d.fill("contents", pot, 24)
     s3d.fill("sloped", pot, s3d.local(pot, z=15, ry=8), clearance=0)
+
+
+@case("weave")
+def woven_walls():
+    basket = s3d.box("basket", 46, 26, 22)
+    # one field for the four walls: at 45 degrees in XY, each wall sees the pitch times the square root of 2
+    s3d.displace(basket, .4, 1.5, noise=s3d.weave(3, across=45), faces="side")
+    mat = s3d.at(s3d.box("mat", 20, 20, 1), x=40)
+    s3d.displace(mat, .2, 1, noise=s3d.weave(2.5, row=2, up="+Y", stake=.5), faces="top", direction="+Z")
+    return basket, mat

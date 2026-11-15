@@ -72,6 +72,7 @@ field(name, size, density, *, cell, level=0, min_component_cells=3)  # Closed is
 
 ```python
 waves(wavelength, direction=None, centers=None, sharpness=0, spread=0, decay=None, phase=0, seed=0)  # Factory: bounded scalar/array f(x,y,z), local XY; lengths in program units, angles in degrees
+weave(pitch, row=None, across="+X", up="+Z", stake=0.3)  # Factory: basket-weave f(x,y,z) in [-1,1]: strands row high over and under stakes pitch apart; lengths in program units
 noise(x, y, z, seed=0, kind="perlin")  # Dimensionless scalar or broadcast arrays [-1,1]; perlin cells ridged turbulence; independent of displace
 ```
 
@@ -491,6 +492,28 @@ The same field describes sand ripples (`waves(80, direction=20, sharpness=.7)`),
 dunes (`waves(8000, direction=15, spread=20, sharpness=.6, seed=3)`) and
 corrugated sheet (`waves(75, direction="+X")`), each displaced along "+Z" with
 an appropriate amplitude. These are surface heights, not thickness-preserving bends.
+
+
+`weave` returns a deterministic basket-weave `f(x,y,z)` in [-1,1]: float for
+scalars, float64 ndarray for broadcast arrays. Horizontal strands, `row` high
+(`pitch / 2` by default), run along `across` and pass over one stake and under
+the next; the stakes stand `pitch` apart and run along `up`; each row is shifted
+by one stake. The field is 1 where a strand passes over a stake, falls to -1 in
+the groove between two rows, and shows the stake as a ridge `stake` x `pitch`
+wide (0.6 high) where the strand passes under it. It is constant along the third
+axis, so it reaches through a wall. `across` is "+X", "-X", "+Y", "-Y", "+Z",
+"-Z" or degrees in XY counterclockwise from +X, as `waves`' direction; `up` is a
+signed axis at right angles to it. `pitch` and `row` are positive lengths in
+program units, `stake` lies in (0, 1]. `weave` creates no mesh.
+
+Use it as a displacement on the faces to weave, pushed along their normal:
+`displace(basket, 3, 9, noise=weave(28), faces="front")`, with `amount` about a
+fifth of `row` and `size` at most `row`, so that a strand is resolved. A wall
+looking ±Y takes `across="+X"`, one looking ±X takes `across="+Y"`, a mat lying
+flat takes `up="+Y"` with `direction="+Z"`. The four walls of a box in one call:
+`weave(pitch / 2**.5, across=45)` with `faces="side"`: every wall then sees the
+same pitch. Seen with no texture, a box so woven reads as a basket; a plain one
+reads as a crate.
 
 
 Callable displacement: `displace(ob, amount, size, noise=f, coords="local")`

@@ -17,7 +17,7 @@ from .assembly import Handle, assembly, attach, empty_scene, export, group, unit
 from .edit import (bend, blend, chamfer, copy, cut, delete, dent, displace, fillet, hole, intersect, join, merge,
                    pocket, scale, seat, lay, shell, soften, split, taper, twist)
 from .shade import smooth
-from .implicit import field, noise, waves
+from .implicit import field, noise, waves, weave
 from .filling import fill
 from .parts import gear, knurl, thread
 from .frames import Frame, Frames, along, at, bbox, grid, local, ring, phyllotaxis, branches, vary, scatter, snap, transform
@@ -35,7 +35,8 @@ __all__ = [
     "rect", "circle", "ellipse", "slot", "polygon", "poly", "arc", "tangent_arc", "spline", "superellipse",
     "station", "text", "offset", "stroke", "wrap", "mirror",
     # solids, paths
-    "extrude", "revolve", "sweep", "loft", "body", "hull", "field", "noise", "waves", "fill", "wire", "helix", "spiral",
+    "extrude", "revolve", "sweep", "loft", "body", "hull", "field", "noise", "waves", "weave", "fill", "wire", "helix",
+    "spiral",
     "box", "cylinder", "tube", "cone", "sphere", "wedge", "torus", "dome",
     # edits
     "cut", "join", "intersect", "split", "delete", "copy", "hole", "pocket", "merge", "scale",
