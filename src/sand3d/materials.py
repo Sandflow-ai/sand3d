@@ -40,6 +40,7 @@ PRESETS = {
     # metals
     "steel":          dict(color="#a8abb0", roughness=0.3, metallic=1.0),
     "brushed_steel":  dict(color="#b4b7bb", roughness=0.35, metallic=1.0),
+    "galvanized_steel": dict(color="#b9bdbf", roughness=0.5, metallic=1.0),
     "chrome":         dict(color="#e6e8ea", roughness=0.05, metallic=1.0),
     "aluminium":      dict(color="#c9ccd0", roughness=0.4, metallic=1.0),
     "brass":          dict(color="#c9a24a", roughness=0.25, metallic=1.0),
@@ -51,10 +52,13 @@ PRESETS = {
     "rubber":         dict(color="#202020", roughness=0.9),
     "glass":          dict(color="#ffffff", roughness=0.0, transmission=1.0),
     "ceramic":        dict(color="#f2f0ea", roughness=0.15, coat=0.6),
-    # soft goods, stone
+    # soft goods, woven fibres, stone
     "fabric":         dict(color="#8a8f96", roughness=0.85, sheen=0.6),
     "velvet":         dict(color="#2f4f5f", roughness=0.9, sheen=1.0),
+    "felt":           dict(color="#7d8288", roughness=0.95, sheen=0.2),
     "leather":        dict(color="#6b3e26", roughness=0.5),
+    "wicker":         dict(color="#b88a52", roughness=0.7),
+    "rattan":         dict(color="#cfa972", roughness=0.6),
     "marble":         dict(color="#e8e6e1", roughness=0.15, coat=0.4),
     "concrete":       dict(color="#9a9893", roughness=0.85),
     # natural materials: flat average colours, no texture
@@ -83,9 +87,10 @@ PRESETS = {
 def material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, emission=None,
              absorb=None, absorb_distance=None, thickness="auto", ior=None, transmission=None,
              scatter=None, scatter_distance=None, scatter_anisotropy=None):
-    """Kind: oak walnut pine birch steel brushed_steel chrome aluminium brass copper
-    painted_metal plastic glossy_plastic rubber glass ceramic fabric velvet leather marble
-    concrete bark leaf moss grass rock soil sand water snow foam smoke fog light; color "#rrggbb".
+    """Kind: oak walnut pine birch steel brushed_steel galvanized_steel chrome aluminium brass
+    copper painted_metal plastic glossy_plastic rubber glass ceramic fabric velvet felt leather
+    wicker rattan marble concrete bark leaf moss grass rock soil sand water snow foam smoke fog
+    light; color "#rrggbb".
 
     `ob` — a part, a group, an assembly or a list — made of `kind`, one of the presets,
     its colour (sRGB: "#rrggbb" or (r, g, b) in 0..1), roughness, metallic, opacity (1
