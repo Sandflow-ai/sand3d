@@ -52,3 +52,9 @@ for aligned axes. Offsets after on= run along that frame's axes. Do not mix loca
 callback coordinates, parent-space sites and world-space positions. Choose the
 actual parent surface before snap/lay and preserve the return/prototype-consumption
 contract of at when placing a prototype on multiple frames.
+
+Resolution costs triangles: use `step` to separate displacement feature size
+from mesh sampling, and `detail` for automatic density (see `resolution`).
+Colour callbacks assign one RGB per face without UVs or textures, so fine colour
+patterns need fine faces. Prefer colour for thin veins or grain over displaced
+relief that is sub-millimetre at render scale.
