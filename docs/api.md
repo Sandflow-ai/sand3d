@@ -112,15 +112,15 @@ dome(name, d, h)  # Cap on Z = 0
 ```python
 # edits
 cut(ob, *tools)  # Subtract tools
-join(ob, *others)  # Fuse others in; ob's material wins: group keeps each its own
+join(ob, *others)  # Return fused ob, consume others; use the return value. ob's material wins
 intersect(ob, tool)  # Keep the common part
 split(ob, frame, keep='above')  # By a frame's plane
 delete(ob)  # Remove it
 copy(ob)  # An independent copy, its joints with it; a list, the list of copies
 hole(ob, d, on=(0, 0), depth=None, cbore=None, csk=None)  # On frames or points: through, or depth deep
 pocket(ob, profile, depth=None, on=None)  # Profile cut in from a face
-merge(*obs)  # No boolean
-scale(ob, s)  # About its origin; a group or an assembly whole, by one factor s > 0 — frames and anchors read before stay where they were
+merge(*obs)  # Return one mesh without boolean, consume other inputs; use the return value
+scale(ob, s)  # Solid: s or (sx, sy, sz); group/assembly: one factor s > 0; about its own origin
 fillet(ob, r, edges='all')  # Round named edges
 chamfer(ob, d, edges='all', d2=None, angle=None)  # Bevel named edges
 soften(ob, r, angle=30)  # Round all sharp edges
@@ -151,7 +151,7 @@ ob.face(which)  # Frame of a named face, or furthest along "+Z"
 ob.edge(which)  # Path along the edges named which, in the space ob is in: the longest run (as long: the one reaching furthest -X, then -Y, -Z), closed if it closes
 bbox(ob, which)  # Frame on its bounding box: a side "+X", an edge "+X-Y", a corner "+X-Y+Z"
 local(ob, x=0, y=0, z=0, rx=0, ry=0, rz=0)  # Frame at (x, y, z) of its own space, turned (rx, ry, rz) degrees
-at(ob, x=None, y=None, z=None, rx=None, ry=None, rz=None, on=None, anchor=None)  # Place it: set what is given, keep the rest; anchor: "-Z", "+Y-Z"…
+at(ob, x=None, y=None, z=None, rx=None, ry=None, rz=None, on=None, anchor=None, *, scale=None)  # Scale about own origin, then place (anchor read after): set what is given, keep the rest; anchor: "-Z", "+Y-Z"…
 transform(ob, x=0, y=0, z=0, rx=0, ry=0, rz=0, mirror=None)  # Move it by, as a parent would; its placement, not its mesh
 ```
 
@@ -733,3 +733,26 @@ volumetric grid; `facets(n)` and `rings=n` are counts.
 Resolution costs triangles. Colour is one RGB per face, with no UVs/textures:
 fine colour needs fine faces. Prefer colour to sub-millimetre displaced veins
 or grain at render scale. See [resolution](guides/resolution.md).
+
+### Repeated size variation and named anchors
+
+```python
+sites = s3d.ring(12, 80)
+flowers = s3d.at(flower_part(), on=sites, scale=s3d.vary(1.0, .2, len(sites), seed=3))
+pot = s3d.assembly("pot", body, handle, rim=body.face("top"))
+s3d.at(flower, on=pot.rim)
+```
+
+`at` consumes the prototype when `on` is a frame list and returns its copies.
+`scale` is one number or an axis tuple for all copies, or a sequence of exactly
+`len(on)` values (use a list for per-copy scalars, even for three sites).
+Groups/assembly handles take only positive scalar factors, including per-copy.
+With one frame or no `on`, give one scale value. Scaling precedes placement and
+placement-anchor lookup. Profiles/paths reject scale; previously read frames and
+assembly anchors stay unchanged: read/rebuild them after scaling.
+Named assembly anchors are attributes, such as `pot.rim` above.
+
+For outlines, use `arc(r=r)` for a circle. For an irregular planar outline:
+`poly([tuple(f.origin)[:2] for f in ring(n, r).jitter(x=j, y=j, seed=3)])`.
+For an organic blob, extrude or loft `superellipse(w, d, n=2)` sections, then
+`displace` the solid at the outline scale before adding fine grain.

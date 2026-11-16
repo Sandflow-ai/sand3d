@@ -559,7 +559,7 @@ def _turned(values):
         (math.radians(v["rx"]), math.radians(v["ry"]), math.radians(v["rz"]))).to_matrix().to_4x4()
 
 
-def at(ob, x=None, y=None, z=None, rx=None, ry=None, rz=None, on=None, anchor=None):
+def at(ob, x=None, y=None, z=None, rx=None, ry=None, rz=None, on=None, anchor=None, *, scale=None):
     """Place it: set what is given, keep the rest; anchor: "-Z", "+Y-Z"….
 
     Put `ob` at (x, y, z), turned (rx, ry, rz) degrees, in the frame `on` — or in the
@@ -572,18 +572,27 @@ def at(ob, x=None, y=None, z=None, rx=None, ry=None, rz=None, on=None, anchor=No
     object, a handle, a profile (placed — a loft's section) or a path (moved); each of
     a list. With a list of frames for `on`, `ob` is used up and one copy goes on each
     frame: the list of copies is returned (of placed profiles, for a profile). A mirror
-    image is `transform`'s."""
+    image is `transform`'s.
+
+    `scale` acts about its own origin before placement and reading the placement
+    anchor: a solid takes a number or (sx, sy, sz), a group/handle one positive
+    factor, as scale(). With frame lists, a number or numeric axis tuple applies
+    to every copy; other sequences give exactly one value per frame. With one/no
+    frame, give one value. Profiles/paths do not take scale. Read geometry frames
+    after scaling; previously read frames and handle anchors do not rescale."""
     from .assembly import Handle
     given = {k: v for k, v in zip(KEYS, (x, y, z, rx, ry, rz)) if v is not None}
     if isinstance(on, (list, tuple)):
-        return _on_frames(ob, frames_of(on, "at"), given, anchor)
+        return _on_frames(ob, frames_of(on, "at"), given, anchor, scale)
     if on is not None and not hasattr(on, "matrix"):
         raise TypeError(f"at: on is a frame or a list of frames, as grid(), ring() and along() give, not {on!r}")
     items = _elements(ob)
     if items is not None:
         if anchor is not None and any(isinstance(i, (bpy.types.Object, Handle)) for i in items):
             raise ValueError("at: anchor on a list of objects: each has its own box — place them one by one")
-        return [at(i, x, y, z, rx, ry, rz, on, anchor) for i in items]
+        return [at(i, x, y, z, rx, ry, rz, on, anchor, scale=scale) for i in items]
+    if scale is not None:
+        anchor = _scaled(ob, scale, anchor)
     frame = on.matrix if on is not None else None
     if isinstance(ob, Handle):
         at(ob.root, x, y, z, rx, ry, rz, on, anchor)
@@ -748,17 +757,35 @@ def _recalled(ob):
     return (None if frame == Matrix.Identity(4) else frame), dict.fromkeys(KEYS, 0.0), None, Vector((0, 0, 0))
 
 
-def _on_frames(ob, frames, given, anchor):
+def _scaled(ob, factor, anchor):
+    """Scale through the editing verb, then refresh any kept placement anchor."""
+    from .assembly import Handle
+    from .edit import scale
+    root = ob.root if isinstance(ob, Handle) else ob
+    scale(ob, factor)
+    return _recalled(root)[2] if anchor is None else anchor
+
+
+def _on_frames(ob, frames, given, anchor, scale=None):
     """`at(ob, on=[frames])`: `ob` used up, a copy on each frame — placed as `at` with one
     frame would place it."""
     from . import _guard
     from .assembly import Handle
     from .edit import _children, _copy, _delete_tree
+    factors = [scale] * len(frames)
+    if scale is not None and not isinstance(scale, (int, float)):
+        if not (isinstance(scale, tuple) and len(scale) == 3
+                and all(isinstance(v, (int, float)) for v in scale)):
+            factors = list(scale)
+            if len(factors) != len(frames):
+                raise ValueError(f"at: on has {len(frames)} frames but scale has {len(factors)} values")
     items = _elements(ob)
     if items is not None:
         _not_nested(items, "at")
-        return [c for i in items for c in _on_frames(i, frames, given, anchor)]
+        return [c for i in items for c in _on_frames(i, frames, given, anchor, scale)]
     if not isinstance(ob, (bpy.types.Object, Handle)):
+        if scale is not None:
+            _scaled(ob, scale, anchor)
         return [_replaced(ob, f.matrix, given) for f in frames]
     _anchor_point(Vector(), Vector(), anchor)          # a wrong word raises before anything is made
     root = ob.root if isinstance(ob, Handle) else ob
@@ -767,10 +794,11 @@ def _on_frames(ob, frames, given, anchor):
     children = _children() if root.children else {}
     out = []
     try:
-        for f in frames:
+        for f, factor in zip(frames, factors):
             twin = _copy(ob, children)
-            _posed(twin.root if isinstance(twin, Handle) else twin, f.matrix, given, anchor)
             out.append(twin)
+            placed_anchor = _scaled(twin, factor, anchor) if scale is not None else anchor
+            _posed(twin.root if isinstance(twin, Handle) else twin, f.matrix, given, placed_anchor)
     except Exception:
         for twin in out:
             _delete_tree(twin.root if isinstance(twin, Handle) else twin)

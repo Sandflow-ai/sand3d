@@ -1,5 +1,7 @@
 # Water, foam, absorption, fill, waves, falls and banks.
 
+- **Water following a relief uses `fill`, not a copy of the terrain.** Let the
+  existing banks and bottom bound the water instead of repeating their formulas.
 - **Water is a closed volume.** Never a single plane: model its bottom and sides
   too. Dig the basin, channel or bowl into a closed solid, then `fill` it to a
   level; the result's free surface is its face `top`. Tint by depth with `absorb`

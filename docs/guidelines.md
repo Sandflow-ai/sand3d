@@ -564,3 +564,29 @@ Use `displace(..., step=length)` to separate mesh cost from noise feature size;
 Colour is per face, without UVs/textures: fine patterns also need fine mesh.
 Prefer colour for thin veins/grain to displaced relief when the relief is
 sub-millimetre at render scale. See `guides/resolution.md`.
+
+## Placement with size variation
+
+Replace copy → scale → place → delete-prototype loops with:
+
+```python
+sites = s3d.ring(12, 80)
+flowers = s3d.at(flower_part(), on=sites, scale=s3d.vary(1.0, .2, len(sites), seed=3))
+```
+
+A solid's scale is a number or (sx, sy, sz); a group/assembly takes one positive
+factor. In batch placement, use a numeric axis tuple for one common per-axis
+scale, a list for per-copy values of exactly len(sites). Scaling is about the
+object's own origin before placement; placement anchors are read afterwards.
+Read geometry frames and rebuild named anchors after scaling, as with scale().
+Access an assembly's named anchors as attributes:
+`pot = s3d.assembly("pot", body, handle, rim=body.face("top"))`, then
+`s3d.at(flower, on=pot.rim)`.
+
+`join` returns the fused first solid and consumes the others (first material wins).
+`merge` returns one mesh without boolean and consumes the other inputs.
+Always use their return value; keep separate materials with group().
+
+For a circle use arc(), not trigonometry. For irregular outlines use
+`poly([tuple(f.origin)[:2] for f in ring(n, r).jitter(x=j, y=j, seed=seed)])`.
+For organic blobs, extrude/loft superellipse() sections, then displace() the solid.

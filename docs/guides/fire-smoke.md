@@ -2,6 +2,26 @@
 
 Use material(flame, "light", color="#ff7b20", emission=4) on actual tapered flame geometry. Layer warm irregular tongues around visible fuel, with bright cores and dark char. Emission adds linear colour to the review image; it does not illuminate nearby geometry, cast volumetric shadows or create bloom. Smoke and fog presets are invisible boundaries containing scattering media: build closed plume volumes. material(plume, "smoke", scatter="#b3aea8", scatter_distance=600) controls scattering per unit; fog is lighter by preset. Zero scatter_distance disables scattering. The raster review approximates opacity by 1-exp(-sigma_s*path_length), tinted per channel; anisotropy and multiple scattering are not simulated. Use readable plume shape and density, not opaque grey balls.
 
+
+## Emission scale
+
+Emission multiplies the material's **linear base colour**, not its displayed sRGB
+numbers. Start at 0.3–1 for dim embers, 2–4 for bright flame tongues, and 8–12
+for small hot cores. These are starting ranges, not physical temperatures:
+black base colour emits nothing at any strength; a saturated orange keeps its
+orange ratios until the display clips or tone maps the bright channels.
+Use a lighter base colour for a pale core rather than only increasing strength.
+
+A local Cycles CPU check (16×16 pixels, four samples, black world, no lights,
+orange #ff7b20 surface) measured linear centre RGB approximately
+(0.30, 0.060, 0.0043), (1.00, 0.199, 0.0144), (4.01, 0.793, 0.0575) and
+(12.03, 2.376, 0.175) at strengths 0.3, 1, 4 and 12. The near-linear increase
+matches the review shader's additive emission. Review emission does not light
+neighbours or bloom; Cycles emission can light nearby surfaces. Exposure,
+lighting and view transform change perceived brightness, so inspect both.
+
+Use one closed smoke envelope with one medium, not nested alpha shells.
+
 At sand3d 3ca794c, smoke/fog set transmission=1, ior=1 and roughness=0 to expose
 their volume. Smoke presets scatter_distance=625 mm, scatter_anisotropy=.3,
 absorb="#d6d6d6" at 1000 mm; fog scatters at 10000 mm. Explicit distances use
