@@ -737,6 +737,19 @@ def lit_room():
     return s3d.assembly("room", lamps, spot, sun)
 
 
+@case("tiles", "stripes", "grain", "material")
+def drawn_room():
+    floor = s3d.material(s3d.box("floor", 400, 400, 2), "ceramic", color=s3d.tiles(40, joint=1))
+    wall = s3d.material(s3d.at(s3d.box("wall", 400, 2, 250), y=200), "plastic",
+                        color=s3d.stripes(30, "#f2ead8", "#9fb3c8", share=.4))
+    top = s3d.material(s3d.at(s3d.box("top", 140, 60, 4), z=74), "oak", color=s3d.grain(pitch=1.4, seed=3))
+    legs = s3d.group("legs", *s3d.at(s3d.box("leg", 5, 5, 72), on=s3d.grid(2, 2, px=120, py=44)))
+    s3d.material(legs, "oak", color=s3d.grain("#7a3b1e", pitch=1, along="v"))
+    deck = s3d.material(s3d.fillet(s3d.at(s3d.box("deck", 160, 90, 2), x=-90, y=-120, z=2), 1, "top"), "oak",
+                        color=s3d.tiles(80, 12, joint=.4, color="#b9824f", joint_color="#4a2f1a", shift=.5))
+    return s3d.assembly("room", floor, wall, top, legs, deck)
+
+
 @case("light", "shadow", "render")
 def lit_picture():
     import os

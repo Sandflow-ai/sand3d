@@ -29,6 +29,7 @@ from . import _core
 TAG = "s3d_material"
 FUNCTIONS = {}
 FUNCTION = "function"
+DRAWING = "drawing"
 
 #: The presets: sRGB colour, roughness, and what else sets the look apart.
 PRESETS = {
@@ -115,6 +116,10 @@ def material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, 
     has no scattering: GLB carries the total attenuation (absorption plus scattering)
     in KHR_materials_volume, so a scattering medium shows there as a dark one.
 
+    color may be a drawing, which is finer than the faces: `tiles`, `stripes` or `grain`.
+    It is laid on every face of the part and repeats over it; its mean colour is what a
+    reader of one colour is given.
+
     color may be a deterministic callable declaring exactly three, four or five
     positional parameters, no variadics or keyword-only parameters:
     color(x, y, z[, n[, u]]), at local face centres in program units. Scalar calls
@@ -136,7 +141,10 @@ def material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, 
         raise ValueError(f"material: no preset named {kind!r}" + (f" — did you mean {' or '.join(map(repr, near))}?"
                                                                   if near else "")
                          + f"; the presets: {', '.join(PRESETS)}")
-    function = None
+    from .drawings import Drawing
+    function, drawing = None, None
+    if isinstance(color, Drawing):          # a drawing: its mean is the colour every single-colour reader gets
+        drawing, color = color.spec, color.color
     if callable(color):
         arity(color)
         function = str(len(FUNCTIONS))
@@ -168,7 +176,9 @@ def material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, 
                 raise ValueError(f"material: {name} must be finite and "
                                  + (f"between {low} and {high}" if high is not None else "0 or more"))
             given[name] = float(value)
-    tag = json.dumps({"kind": kind, **({FUNCTION: function} if function is not None else {}), **{k: v for k, v in given.items() if v is not None}}, sort_keys=True)
+    tag = json.dumps({"kind": kind, **({FUNCTION: function} if function is not None else {}),
+                      **({DRAWING: drawing} if drawing is not None else {}),
+                      **{k: v for k, v in given.items() if v is not None}}, sort_keys=True)
     targets = [t.root if isinstance(t, Handle) else t for t in _flat([ob])]
     for target in targets:                  # all checked before any is tagged
         if not isinstance(target, bpy.types.Object):
@@ -202,6 +212,7 @@ def look(tag):
     """The values a tag stands for: its preset, changed where the call said."""
     spec = json.loads(tag)
     spec.pop(FUNCTION, None)
+    spec.pop(DRAWING, None)
     values = dict(metallic=0.0, opacity=1.0, transmission=0.0, coat=0.0, sheen=0.0, emission=0.0)
     kind = spec.pop("kind")
     values.update(ior=1.5, absorb="#ffffff", absorb_distance=0.0, thickness="auto",
@@ -221,6 +232,10 @@ def _name(tag):
     if FUNCTION in spec:
         spec.pop(FUNCTION, None)
         kind += " face colours"
+    if DRAWING in spec:
+        from .drawings import Drawing
+        drawn = Drawing(spec.pop(DRAWING))
+        kind += f" {drawn.spec['draw']} {drawn.key}"
     return " ".join([kind, *(str(v) if k == "color" else f"absorb={v}" if k == "absorb" else f"{k}={v}" if isinstance(v, str) else f"{k}={v:g}" for k, v in sorted(spec.items()))])
 
 
@@ -291,6 +306,15 @@ def _material(tag, made):
         output.node_tree = group
         # "auto" is estimated from the meshes at export; Cycles never reads it.
         output.inputs["Thickness"].default_value = 0.0 if v["thickness"] == "auto" else v["thickness"]
+    drawn = json.loads(tag).get(DRAWING)
+    if drawn is not None:                   # the base colour is the drawing's, read where each corner falls in it
+        from .drawings import LAYER, Drawing, picture
+        where = mat.node_tree.nodes.new("ShaderNodeUVMap")
+        where.name, where.uv_map = "Drawing Place", LAYER
+        shown = mat.node_tree.nodes.new("ShaderNodeTexImage")
+        shown.name, shown.image, shown.extension = "Drawing", picture(Drawing(drawn)), "REPEAT"
+        mat.node_tree.links.new(where.outputs["UV"], shown.inputs["Vector"])
+        mat.node_tree.links.new(shown.outputs["Color"], bsdf.inputs["Base Color"])
     if v["coat"]:
         bsdf.inputs["Coat Roughness"].default_value = 0.05
     if v["opacity"] < 1:
@@ -343,6 +367,10 @@ def resolve(objects=None):
         if have != [want]:
             ob.data.materials.clear()
             ob.data.materials.append(want)
+        drawn = json.loads(tag).get(DRAWING)
+        if drawn is not None:               # where each corner falls in the drawing: anew, the mesh may have changed
+            from .drawings import Drawing, wrap
+            wrap(ob.data, Drawing(drawn))
         if ob.data.attributes.get("material_index") is not None:
             indices = np.empty(len(ob.data.polygons), dtype=np.int32)
             ob.data.polygons.foreach_get("material_index", indices)

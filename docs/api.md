@@ -189,6 +189,9 @@ material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, emis
 ## Lights
 
 ```python
+tiles(w, d=None, joint=2, color="#d9d4c7", joint_color="#8c877b", shift=0)  # Tiles w by d (square when d is None) with a joint between them; shift: each row slid by that share of a tile
+stripes(pitch, color="#ffffff", other="#1f3a5f", share=0.5, along="v")  # Bands of two colours, one pair every pitch; share: how much of it the first takes; along: the way they run
+grain(color="#a0522d", pitch=12, depth=0.3, along="u", seed=0)  # A wood grain: streaks about pitch apart running along u or v, lighter and darker than color by depth
 light(name, kind="point", lm=None, lux=None, color="#ffffff", angle=None, blend=0.15, shadow=True, size=0, ground=None)  # Kind: point spot sun ambient; lm lumens (point, spot; 800), lux (sun 3, ambient 1); shines along its own -Z; size, angle: soft shadows
 shadow(ob, cast=True)  # Whether a part casts a shadow
 render(root, path, eye, target=(0, 0, 0), fov=40, size=(960, 640), background=None, exposure=1.0, bounces=4, tone="plain", samples=48)  # Writes a picture (.png, .jpg) of root's tree, lit by the lights it holds and by nothing else
@@ -299,6 +302,37 @@ no transmission or volume absorption).
 All are nonmetallic with alpha 1; leaf has coat 0.12 and snow 0.03.
 `color=` changes the surface tint without changing absorption or other properties.
 Material names contain the preset and explicit overrides, not its default values.
+
+## Drawing on a surface
+
+A colour function is asked once for each face, so a floor that is one face gets one
+colour. A drawing is finer than the faces: `tiles`, `stripes` and `grain` each return
+one, and `material(ob, kind, color=tiles(400, joint=8))` lays it on every face of `ob`.
+It is one period of the drawing, kept as a small picture and repeated: a floor of
+16 m carries the same picture as a tile of it, and the part gains no face.
+
+- `tiles(w, d, joint, color, joint_color, shift)`: rectangles parted by a joint.
+  Floor tiles `tiles(400, joint=8)`; floor boards `tiles(1200, 120, joint=2, shift=.5)`,
+  each row slid by half a board; bricks `tiles(215, 65, joint=10, shift=.5)`; a mesh
+  or a net, small tiles with a joint as wide as they are.
+- `stripes(pitch, color, other, share, along)`: bands of two colours.
+- `grain(color, pitch, depth, along, seed)`: the streaks of a wood, about `pitch`
+  apart, running `along`.
+
+A drawing lies in each face's own plane. On a face that looks up or down, u is
+the part's X and v its Y; on any other, u runs level along the face, to the right
+of someone facing it, and v is the part's Z. So `tiles(1200, 120)` lays boards
+along X on a floor and level on a wall, and `along="v"` runs stripes up a wall.
+It is laid in the part's own space, from its origin, and moves and turns with it;
+it is laid anew after each edit. A face that tilts or curves is drawn from the
+side it looks to most, so the drawing stretches there: fine on a round leg, wrong
+on a sphere. Lengths are in the program's unit.
+
+A drawing is the surface's colour: its mean is what every reader of one colour is
+given (`.color`), the other values of the material stay what `kind` and the call
+say. `render` shows it. `export` carries it in a .glb as a texture that repeats,
+with the part's places in it; the other formats take its mean colour. There is no
+verb for a drawing that does not repeat (a dial's scale, lettering, a label).
 
 ## Placing, showing and exporting lights
 
