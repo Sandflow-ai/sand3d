@@ -108,7 +108,7 @@ LENGTHS = {
     "Frames.turn": {"rx": "-", "ry": "-", "rz": "-"},
     "Frames.move": {"x": "L", "y": "L", "z": "L"},
     "Frames.jitter": {"rx": "-", "ry": "-", "rz": "-", "x": "L", "y": "L", "z": "L", "seed": "-"},
-    "at": {"ob": "-", "x": "L", "y": "L", "z": "L", "rx": "-", "ry": "-", "rz": "-", "on": "-", "anchor": "-"},
+    "at": {"ob": "-", "x": "L", "y": "L", "z": "L", "rx": "-", "ry": "-", "rz": "-", "on": "-", "anchor": "-", "scale": "-"},
     "transform": {"ob": "-", "x": "L", "y": "L", "z": "L", "rx": "-", "ry": "-", "rz": "-", "mirror": "-"},
     "grid": {"nx": "-", "ny": "-", "px": "L", "py": "L", "stagger": "-", "on": "-"},
     "ring": {"n": "-", "r": "L", "start": "-", "angle": "-", "on": "-"},
