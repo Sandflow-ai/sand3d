@@ -118,7 +118,7 @@ LENGTHS = {
     "phyllotaxis": {"n": "-", "d": "L", "h": "L", "angle": "-", "on": "-"},
     "branches": {"length": "L", "d": "L", "levels": "-", "children": "-", "attach": "-", "angle": "-",
                  "azimuth": "-", "length_ratio": "-", "diameter_ratio": "-", "tip_ratio": "-",
-                 "jitter": "-", "seed": "-", "on": "-", "wander": "-", "droop": "-"},
+                 "jitter": "-", "seed": "-", "on": "-", "wander": "-", "droop": "-", "step": "L"},
     "snap": {"targets": "-", "points": "P", "direction": "-"},
     "ob.face": {"which": "-"},
     "ob.edge": {"which": "-"},

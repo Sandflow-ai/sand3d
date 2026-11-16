@@ -162,7 +162,7 @@ grid(nx, ny=1, px=0, py=0, stagger=False, on=None)  # On a grid
 ring(n, r, start=0, angle=360, on=None)  # On a circle
 along(path, pitch=None, count=None, spin=0, span=(0, 1))  # Along a path
 phyllotaxis(n, d, h=0, angle=137.508, on=None)  # Frames on a disc, or facing out from a cylinder when h > 0
-branches(length, d, levels=3, children=3, attach=(0.45, 0.9), angle=45, azimuth=137.508, length_ratio=0.55, diameter_ratio=0.55, tip_ratio=0.15, jitter=0, seed=0, on=None, wander=0, droop=0)  # Depth-first axes and leaf-tip frames, straight or smoothly curved
+branches(length, d, levels=3, children=3, attach=(0.45, 0.9), angle=45, azimuth=137.508, length_ratio=0.55, diameter_ratio=0.55, tip_ratio=0.15, jitter=0, seed=0, on=None, wander=0, droop=0, *, step=None)  # Depth-first axes and leaf-tip frames, straight or smoothly curved
 Frames.jitter(rx=0, ry=0, rz=0, x=0, y=0, z=0, seed=0)  # Random turns and moves along own axes, bounded and bell-shaped
 vary(value, spread, n, seed=0)  # Values within spread of value, most near it
 scatter(n, size, seed=0, surface=False, on=None)  # size: ellipsoid diameters, or a mesh part / list of mesh parts for its surface

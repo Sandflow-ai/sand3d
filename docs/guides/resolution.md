@@ -25,3 +25,22 @@ s3d.bend(stem, 35, step=4.0)
 s3d.lay(patch, terrain, step=3.0)
 s3d.blend(rocks, r=4.0, step=1.0)
 ```
+
+Indicative budgets at 1024 px (triangles, not a quality score):
+
+| Subject | Budget |
+|---|---:|
+| Single piece | ~50,000 |
+| Plant, bouquet or small group | ~150,000 |
+| Full tree | ~200,000 |
+| Scene with ground, water, fire or smoke | ~300,000 |
+
+A six-sided sweep costs about 12 triangles per path interval, plus its caps.
+`branches` samples curved axes by accumulated turn (3° by default, or `facets`);
+`branches(step=...)` instead chooses longitudinal spacing. Make the path inside
+its intended `facets` context: setting facets only around sweep does not remove
+stations already in the path. `along(count=...)` chooses placements, not mesh
+rings. Copies multiply the whole part's triangle cost; instancing does not reduce
+that visible total. Smaller editing `step`, more cross-section facets and more
+path rings all spend triangles. Per-face colour also spends faces when a pattern
+must remain visible; choose the coarsest mesh that preserves it.

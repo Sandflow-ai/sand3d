@@ -1146,7 +1146,7 @@ def _branch_bend_bound(path, diameter, tip_ratio):
 
 def branches(length, d, levels=3, children=3, attach=(0.45, 0.9), angle=45,
              azimuth=137.508, length_ratio=0.55, diameter_ratio=0.55,
-             tip_ratio=0.15, jitter=0, seed=0, on=None, wander=0, droop=0):
+             tip_ratio=0.15, jitter=0, seed=0, on=None, wander=0, droop=0, *, step=None):
     """Depth-first axes and leaf-tip frames, straight or smoothly curved.
 
     A root along +Z and levels generations of children. Children attach evenly over `attach` (a lone child at its midpoint). Each axis
@@ -1158,6 +1158,8 @@ def branches(length, d, levels=3, children=3, attach=(0.45, 0.9), angle=45,
     wire(axis.name, axis.path, axis.d), without applying `on` a second time.
     Wander bounds the random heading turn per each of eight segments (degrees).
     Droop turns toward on's -Z by up to its degrees over the axis; negative rises.
+    Mesh rings sample accumulated turn at 3 degrees by default (facets overrides
+    the angular count); step gives a positive maximum arc-length spacing.
     Curved axes are spline-smoothed Paths; attachments use their arc length and
     transported tangents. Zero wander and droop retain exact two-point straight axes.
     Curvature radii exceed twice the local section radius, so axes build with
@@ -1166,6 +1168,8 @@ def branches(length, d, levels=3, children=3, attach=(0.45, 0.9), angle=45,
     """
     if any(not isinstance(v, int) or v < 0 for v in (levels, children)):
         raise ValueError("branches: levels and children must be nonnegative integers")
+    if step is not None and (isinstance(step, bool) or not isinstance(step, (int, float)) or not math.isfinite(step) or step <= 0):
+        raise ValueError("branches: step must be a positive finite spacing")
     count, generation = 1, 1
     for _ in range(levels):
         generation *= children
@@ -1194,7 +1198,7 @@ def branches(length, d, levels=3, children=3, attach=(0.45, 0.9), angle=45,
         curved = bool(wander or droop)
         path = Path([frame.origin, frame.point(z=size)])
         if curved:
-            from .profile import spline
+            from .profile import spline, _centripetal
             # Draw once: retries must not change the seeded child sequence.
             turns = [(rng.uniform(0, 360), rng.uniform(-wander, wander))
                      if wander else (0, 0) for _ in range(8)]
@@ -1227,6 +1231,9 @@ def branches(length, d, levels=3, children=3, attach=(0.45, 0.9), angle=45,
                 candidate = spline(controls)
                 if _branch_bend_bound(candidate, diameter, tip_ratio) < .5:
                     path = candidate
+                    sampled = Path(_centripetal(controls, False, angular=3, step=step))
+                    if _branch_bend_bound(sampled, diameter, tip_ratio) < .5:
+                        path._mesh_path = sampled
                     break
             # At extreme size/coordinate ratios float32 can obscure curvature;
             # the original straight path is the deterministic safe fallback.

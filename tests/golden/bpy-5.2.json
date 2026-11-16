@@ -1,5 +1,5 @@
 {
- "bpy": "5.2.2 LTS",
+ "bpy": "5.2.3 LTS",
  "digests": {
   "case:profile_shapes": "f7ec6b11db40c9d6",
   "case:stations": "5e4438297c70327f",
@@ -36,8 +36,8 @@
   "case:mechanism_posed": "387657250adb99c1",
   "case:parts_seated": "37ef3a756eb8cfe1",
   "case:assembly_layer": "8af7a0b9e624e741",
-  "case:export_glb": "b86f969688b56f5a",
-  "case:export_articulated": "1056bb5b95a1d463",
+  "case:export_glb": "e9313601bdeae596",
+  "case:export_articulated": "43f4f6efe73d99c5",
   "case:export_usd": "ce602d8180c1f8a8",
   "case:export_ifc": "13d05c90ead7eeb7",
   "case:export_meshes": "49d47323e897e4ac",
@@ -59,7 +59,7 @@
   "case:bounded_loft_and_end_scale": "189a8642efc25229",
   "case:filleted_wire_laws": "a25b67f0b571870f",
   "case:convex_hulls": "aaa161febb85b548",
-  "case:varied_growth": "de24287bfad6f5a1",
+  "case:varied_growth": "b9a6e8f172926b2a",
   "case:surface_scatter": "bf605f9018abd9c5",
   "case:implicit_solid": "8277d78dd0cf19b5",
   "case:surface_details": "295fbb8c7af6c31d",

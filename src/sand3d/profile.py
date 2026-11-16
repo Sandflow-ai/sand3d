@@ -506,7 +506,7 @@ def _phantom(end, inner, tangent):
     return end + 2 * along * t - chord
 
 
-def _centripetal(pts, closed, steps=12, tangents=(None, None), _record=None):
+def _centripetal(pts, closed, steps=12, tangents=(None, None), _record=None, angular=None, step=None):
     """Centripetal Catmull–Rom through `pts`, `steps` pieces per span: no loops, no overshoot."""
     m = len(pts)
     if m < 2:
@@ -539,6 +539,15 @@ def _centripetal(pts, closed, steps=12, tangents=(None, None), _record=None):
         pieces = steps
         if _core.FACETS is not None:
             pieces = _core.turn_steps([[evaluate(k, 64) for k in range(65)]])
+        if angular is not None and _core.FACETS is None:
+            probes = [evaluate(k, 64) for k in range(65)]
+            chords = [b-a for a,b in zip(probes, probes[1:])]
+            directions = [v.normalized() for v in chords if v.length > 1e-10]
+            turn = sum(math.atan2(a.cross(b).length, a.dot(b)) for a,b in zip(directions, directions[1:]))
+            pieces = max(1, math.ceil(turn / math.radians(angular)))
+        if step is not None and step > 0:
+            probes = [evaluate(k, 64) for k in range(65)]
+            pieces = max(1, math.ceil(sum((b-a).length for a,b in zip(probes, probes[1:])) / step))
         if _record is not None:
             _record.append((evaluate, pieces))
         out.extend(tuple(evaluate(k, pieces))[:dim] for k in range(pieces))

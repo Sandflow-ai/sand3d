@@ -642,6 +642,7 @@ def sweep(name, profile, path, scale=1, twist=0, frenet=False, *, tip="round", r
     numeric scale and twist keep their existing meaning. Law paths are refined
     with their changing size and twist; crossing rings are refused (reduce
     the size or round the path)."""
+    path = getattr(path, "_mesh_path", path)
     tips = _ring_options(tip, rings)
     extra = rings
     profile, placement = _placed(profile)
@@ -810,6 +811,7 @@ def wire(name, path, d, closed=None, fillet=0, *, tip="round", rings=0):
     too large for a side, under `d / 2` (the tube would fold on itself), at a point where
     the path turns back. A point written twice is one. A stool's leg:
     `wire("leg", [(0, 0, 0), (0, 0, 650), (-250, 0, 650)], 33, fillet=60)`."""
+    path = getattr(path, "_mesh_path", path)
     elliptical = (isinstance(d, (tuple, list)) and len(d) == 2
                   and all(isinstance(v, (int, float)) for v in d))
     explicit = not isinstance(rings, (int, bool))
