@@ -66,6 +66,9 @@ def export(root, path, colors="material"):
     tree as OpenUSD text, with the materials; .ifc the part tree as IFC4, the open standard
     Revit opens and links (.rvt only Revit writes); .obj and .stl its meshes at the current pose.
 
+    A .glb also carries the lights of the tree (`light`): KHR_lights_punctual, a point or
+    a spot in candela, a sun in lux. The other formats carry no light.
+
     colors="vertex" (.glb only) puts all base colours on corners, sharing a white
     material per non-colour look; a surface that gives light keeps a material of its
     own colour (the mean of a colour function's), which its emission reads.
@@ -137,9 +140,11 @@ def _export(root, path):
             if clash is not None:
                 clash.name = "s3d~export~lent"
             coll.name = name
+            from .lights import lit
+            more = {"export_lights": True} if lit(root) else {}     # only then: no other GLB moves
             bpy.ops.export_scene.gltf(filepath=str(path), export_format="GLB", collection=coll.name,
                                       export_extras=True, export_vertex_color="MATERIAL",
-                                      export_materials="EXPORT" if dressed else "NONE")
+                                      export_materials="EXPORT" if dressed else "NONE", **more)
         finally:
             coll.name = "s3d~export"
             if clash is not None:

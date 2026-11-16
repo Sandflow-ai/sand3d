@@ -400,7 +400,7 @@ def _twins(mech, renamed, coll):
     root, k = mech.root, mech.k
     made = {}
     for ob, name in renamed:
-        twin = bpy.data.objects.new(name, ob.data if ob.type == "MESH" else None)
+        twin = bpy.data.objects.new(name, ob.data if ob.type in ("MESH", "LIGHT") else None)
         coll.objects.link(twin)
         made[ob.as_pointer()] = twin
     world = {ob.as_pointer(): _core.world(ob) for ob, _ in renamed}

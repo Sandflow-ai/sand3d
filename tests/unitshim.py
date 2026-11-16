@@ -53,6 +53,7 @@ LENGTHS = {
     "waves": {"wavelength": "L", "direction": "-", "centers": "P", "sharpness": "-",
               "spread": "-", "decay": "L", "phase": "-", "seed": "-"},
     "weave": {"pitch": "L", "row": "L", "across": "-", "up": "-", "stake": "-"},
+    "light": {"name": "-", "kind": "-", "lm": "-", "lux": "-", "color": "-", "angle": "-", "blend": "-"},
     "noise": {"x": "-", "y": "-", "z": "-", "seed": "-", "kind": "-"},
     "hull": {"name": "-", "points": "P"},
     "extrude": {"name": "-", "profile": "P", "h": "L", "taper": "-", "twist": "-", "both": "-", "h2": "L",

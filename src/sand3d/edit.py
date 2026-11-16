@@ -611,7 +611,7 @@ def delete(ob):
     meshes = set()
     for part in parts:
         _guard.deleting(part)
-        if part.type == "MESH":
+        if part.type in ("MESH", "LIGHT"):
             meshes.add(part.data)
     bpy.data.batch_remove(parts)
     bpy.data.batch_remove([mesh for mesh in meshes if mesh.users == 0])
@@ -1592,7 +1592,7 @@ def _scale_refusal(root, tree):
             return (f"scale: {_core.given_name(o)!r} moves by its joint {found[0]['name']!r}: scaling {name!r} would "
                     f"move its pivot and its range with it — scale {name!r} before declaring its joints, or build it "
                     f"at its size")
-        if o.type not in ("MESH", "EMPTY"):
+        if o.type not in ("MESH", "EMPTY", "LIGHT"):
             return f"scale: {_core.given_name(o)!r} under {name!r} is a {o.type.lower()} object, not a solid or a group"
     carrier = joints.body(root.parent)
     if carrier is not None:

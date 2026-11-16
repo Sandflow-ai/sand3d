@@ -186,6 +186,12 @@ thread(name, d, length, pitch, left=False)  # Threaded rod
 material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, emission=None, absorb=None, absorb_distance=None, thickness="auto", ior=None, transmission=None, scatter=None, scatter_distance=None, scatter_anisotropy=None)  # Kind: oak walnut pine birch steel brushed_steel galvanized_steel chrome aluminium brass copper painted_metal plastic glossy_plastic rubber glass ceramic fabric velvet felt leather wicker rattan marble concrete bark leaf moss grass rock soil sand water snow foam smoke fog light; color "#rrggbb" or color(x,y,z[,n[,u]])
 ```
 
+## Lights
+
+```python
+light(name, kind="point", lm=None, lux=None, color="#ffffff", angle=45, blend=0.15)  # Kind: point spot sun; lm lumens (point, spot; 800 by default), lux (sun; 3 by default); shines along its own -Z
+```
+
 ## Articulation
 
 ```python
@@ -291,6 +297,34 @@ no transmission or volume absorption).
 All are nonmetallic with alpha 1; leaf has coat 0.12 and snow 0.03.
 `color=` changes the surface tint without changing absorption or other properties.
 Material names contain the preset and explicit overrides, not its default values.
+
+## Placing and exporting lights
+
+`light` returns a named object that is not a solid: it has no faces, `at` and
+`transform` place it, `copy` copies it, `group` and `assembly` hold it, `scale`
+moves it with its group, and every edit refuses it. Hang a lamp's light in the
+lamp: `group("lamp", shade, at(light("bulb", lm=250, color="#ffb76c"), z=148))`.
+
+A "point" shines every way with `lm` lumens (800: a household bulb). A "spot" is
+a point cut to a cone about its own -Z: `angle` is the cone's full opening in
+degrees, above 0 and under 180, and `blend` (0..1) the share of the cone, from
+its edge inwards, over which the light fades; its `lm` are those of the whole
+point, so on its axis it is as bright as a point of the same `lm`. A "sun"
+shines along its own -Z from infinitely far with `lux` on a surface facing it;
+only its turn counts, not its place. A point or a spot refuses `lux`, a sun `lm`.
+
+A light shines down as built. `at(l, rx=90)` shines along +Y, `at(l, ry=90)`
+along -X; to shine from a point P at a point T, turn it so that its -Z runs from
+P to T. On a face's frame (`on=`), whose Z is the face's normal, `rx=180` turns it
+to shine out of the face.
+
+`export` writes the lights of the tree in a .glb, as KHR_lights_punctual: a
+point or a spot in candela (`lm` / 4π), a sun in lux, a spot's outer cone
+`angle` / 2 and inner cone `angle` / 2 x (1 - `blend`), colours linear, places
+in metres. The other formats carry no light. Light from a surface is
+`material(ob, "light")`: a surface that glows, which lights nothing in a GLB.
+There is no ambient light yet, and no range past which a light stops.
+
 
 ## Scale and local frames
 

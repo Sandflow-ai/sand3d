@@ -724,3 +724,14 @@ def woven_walls():
     mat = s3d.at(s3d.box("mat", 20, 20, 1), x=40)
     s3d.displace(mat, .2, 1, noise=s3d.weave(2.5, row=2, up="+Y", stake=.5), faces="top", direction="+Z")
     return basket, mat
+
+
+@case("light")
+def lit_room():
+    shade = s3d.at(s3d.tube("shade", 12, 11, 16), z=140)
+    bulb = s3d.at(s3d.light("bulb", lm=250, color="#ffb76c"), z=148)
+    lamp = s3d.group("lamp", shade, bulb)
+    lamps = s3d.at(lamp, on=s3d.grid(2, 1, px=90))
+    spot = s3d.at(s3d.light("spot", "spot", lm=1200, angle=50, blend=.4, color=(1, .9, .8)), x=30, z=220, ry=25)
+    sun = s3d.at(s3d.light("sun", "sun", lux=3.25), rx=40, rz=20)
+    return s3d.assembly("room", lamps, spot, sun)
