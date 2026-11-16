@@ -73,6 +73,48 @@ class Render(unittest.TestCase):
         got = seen(s3d.assembly("a", floor(), lid, sun, sky), shade)
         self.assertTrue(all(.15 < channel < .26 for channel in got), got)   # a quarter, less what the lid hides
 
+    def test_a_part_told_so_casts_no_shadow_and_is_still_seen_and_lit(self):
+        shade = (.45, .68, .55, .78)                     # the floor at y = 1000, where the lid's shadow would fall
+        lid = s3d.material(s3d.at(s3d.box("lid", 1000, 1000, 20), z=1000), "plastic", color="#ffffff", roughness=1)
+        self.assertIs(s3d.shadow(lid, False), lid)
+        sun = s3d.at(s3d.light("sun", "sun", lux=math.pi), rx=45)
+        room = s3d.assembly("a", floor(), lid, sun)
+        self.grey(seen(room, shade, bounces=0), math.cos(math.radians(45)))       # the sun goes through the lid
+        self.grey(seen(room, (.45, .45, .55, .55), bounces=0), math.cos(math.radians(45)))   # which is lit and seen
+        self.assertTrue(lid.visible_shadow)                                       # Blender's own flag is left alone
+        twin = s3d.copy(lid)
+        self.assertFalse(twin["s3d_shadow"])                                      # a copy casts none either
+        s3d.shadow(room, True)                                                    # a tree tells each of its solids
+        self.assertNotIn("s3d_shadow", lid)
+        self.grey(seen(room, shade, bounces=0), 0)
+        for wrong in (lambda: s3d.shadow(lid, 0), lambda: s3d.shadow(lid, "no")):
+            with self.assertRaisesRegex(ValueError, "shadow:"):
+                wrong()
+        with self.assertRaisesRegex(TypeError, "shadow:"):
+            s3d.shadow(sun, False)
+
+    def test_light_sent_on_from_face_to_face_can_be_left_out(self):
+        def by_the_wall(bounces):                        # a sun level with the floor lights only the wall
+            s3d.empty_scene()
+            wall = s3d.material(s3d.at(s3d.box("wall", 8000, 20, 4000), y=1500), "plastic", color="#ffffff",
+                                roughness=1)
+            sun = s3d.at(s3d.light("sun", "sun", lux=math.pi), rx=90)
+            return seen(s3d.assembly("a", floor(), wall, sun), (.4, .74, .6, .80), bounces=bounces)[0]
+        self.assertLess(by_the_wall(0), .01)             # straight light only: the floor gets none
+        self.assertGreater(by_the_wall(4), .2)           # the white wall sends nearly half of its own down
+
+    def test_film_bends_the_bright_end_and_keeps_the_backdrop(self):
+        root = s3d.assembly("a", floor(), s3d.light("sun", "sun", lux=4 * math.pi))
+        self.grey(seen(root), 1)                         # plain: four times white is white
+        film = seen(root, tone="film")
+        self.assertTrue(all(.5 < channel < .99 for channel in film), film)
+        dim = seen(root, tone="film", exposure=1 / 16)
+        self.assertTrue(all(channel < film[0] - .2 for channel in dim), dim)
+        s3d.empty_scene()
+        root = s3d.assembly("b", s3d.box("b", 10, 10, 10), s3d.light("sun", "sun"))
+        for channel, want in zip(seen(root, (0, 0, .2, .2), background="#26211d", tone="film"), (0x26, 0x21, 0x1d)):
+            self.assertAlmostEqual(channel, linear(want / 255), delta=.002)
+
     def test_a_wide_light_makes_a_soft_edge(self):
         def blurred(size):
             """Pixels of the row across the shadow's edge that are neither in the shadow nor in full light."""
@@ -139,6 +181,7 @@ class Render(unittest.TestCase):
                    dict(eye=(0, 0)), dict(eye="above"), dict(eye=(0, 0, 0)), dict(target=(0, 0, math.nan)),
                    dict(fov=0), dict(fov=180), dict(fov="wide"), dict(size=(0, 64)), dict(size=(96, 64.5)),
                    dict(size=96), dict(exposure=0), dict(exposure="bright"), dict(samples=0), dict(samples=1.5),
+                   dict(bounces=-1), dict(bounces=1.5), dict(bounces=True), dict(tone="aces"), dict(tone=None),
                    dict(background="dark"), dict(background=(2, 0, 0))):
             with self.subTest(kw=kw), self.assertRaisesRegex(ValueError, "render:"):
                 s3d.render(room, **{**good, **kw})

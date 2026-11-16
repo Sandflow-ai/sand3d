@@ -1,19 +1,24 @@
 """A picture of a scene under its own lights: what each light lights, and the shadows it casts."""
 import math
 import os
+import tempfile
 
 import bpy
 from mathutils import Vector
 
 from . import _core
-from .lights import LUMENS_PER_WATT, ambient
+from .lights import LUMENS_PER_WATT, SHADOW, ambient
 from .materials import _hex, _linear
 
 #: Threads a picture is traced on: a few, so that a machine building other scenes stays usable.
 THREADS = 4
 
+#: How the light a picture holds becomes its colours, and Blender's name for each way.
+TONES = {"plain": "Standard", "film": "AgX"}
 
-def render(root, path, eye, target=(0, 0, 0), fov=40, size=(960, 640), background=None, exposure=1.0, samples=48):
+
+def render(root, path, eye, target=(0, 0, 0), fov=40, size=(960, 640), background=None, exposure=1.0, bounces=4,
+           tone="plain", samples=48):
     """Writes a picture (.png, .jpg) of `root`'s tree, lit by the lights it holds and by nothing else.
 
     The camera stands at `eye` and looks at `target`, both in the program's unit, upright;
@@ -25,10 +30,15 @@ def render(root, path, eye, target=(0, 0, 0), fov=40, size=(960, 640), backgroun
     multiplies the picture's brightness: at 1, a white matte face that receives about 3 lux
     (π) comes out white — the scale three.js and the GLB viewers show a scene on, where a
     sun of 3 lux is a full key light. A room lit by real bulbs (hundreds of lux) wants a
-    smaller one. `background` is the colour behind the scene ("#rrggbb" or (r, g, b)); None
-    shows the sky an ambient light gives, black without one. `samples` trades grain for
-    time. Shadows, soft shadows (`light(size=)`), light bounced from one face to another
-    and the look of each material are traced: this is Blender's Cycles.
+    smaller one. `tone`: "plain" keeps that scale and clips what is brighter than white;
+    "film" bends the bright end as a camera does, so that nothing clips and all is darker.
+
+    `bounces`: how many times light is sent on from one matte face to another. In a closed
+    white room that is most of the light; at 0 a face gets only what the lights send it
+    straight, as in three.js and the GLB viewers. Shadows follow `light(shadow=, size=)`
+    and `shadow(ob, False)`. `background` is the colour behind the scene ("#rrggbb" or
+    (r, g, b)), shown as given; None shows the sky an ambient light gives, black without
+    one. `samples` trades grain for time. This is Blender's Cycles, on the processor.
 
     Nothing of the scene is changed: the camera and the sky made for the picture are
     removed, and every setting put back."""
@@ -50,10 +60,14 @@ def render(root, path, eye, target=(0, 0, 0), fov=40, size=(960, 640), backgroun
         raise ValueError(f"render: size is (width, height) in pixels, each from 1 to 8192, not {size!r}")
     if isinstance(exposure, bool) or not isinstance(exposure, (int, float)) or not exposure > 0:
         raise ValueError(f"render: exposure is a number above 0, not {exposure!r}")
+    if isinstance(bounces, bool) or not isinstance(bounces, int) or not 0 <= bounces <= 32:
+        raise ValueError(f"render: bounces is a whole number from 0 to 32, not {bounces!r}")
+    if tone not in TONES:
+        raise ValueError(f"render: tone is {' or '.join(repr(t) for t in TONES)}, not {tone!r}")
     if isinstance(samples, bool) or not isinstance(samples, int) or not 1 <= samples <= 4096:
         raise ValueError(f"render: samples is a whole number from 1 to 4096, not {samples!r}")
     try:
-        behind = None if background is None else _linear(_hex(background, "background"))[:3]
+        behind = None if background is None else _hex(background, "background")
     except ValueError as exc:
         raise ValueError(str(exc).replace("material:", "render:", 1)) from exc
 
@@ -68,9 +82,8 @@ def render(root, path, eye, target=(0, 0, 0), fov=40, size=(960, 640), backgroun
             lux, above, below = said
             sky += Vector(above) * lux / (LUMENS_PER_WATT * math.pi)
             soil += Vector(below) * lux / (LUMENS_PER_WATT * math.pi)
-    behind = sky * gain if behind is None else Vector(behind)   # shown as given, whatever the exposure
 
-    hidden = {ob: ob.hide_render for ob in scene.objects}
+    shown = {ob: (ob.hide_render, ob.visible_shadow) for ob in scene.objects}
     lamps = {ob.data: ob.data.energy for ob in mine if ob.type == "LIGHT" and ob.data.type in ("POINT", "SPOT")}
     look, cycles = scene.view_settings, scene.cycles
     was = {(holder, key): getattr(holder, key) for holder, key in (
@@ -79,13 +92,17 @@ def render(root, path, eye, target=(0, 0, 0), fov=40, size=(960, 640), backgroun
         (scene.render, "film_transparent"), (scene.render, "threads_mode"), (scene.render, "threads"),
         (scene.render.image_settings, "file_format"), (scene.render.image_settings, "color_mode"),
         (look, "view_transform"), (look, "look"), (look, "exposure"), (look, "gamma"))}
-    traced = {key: getattr(cycles, key) for key in ("samples", "use_denoising", "device", "seed",
-                                                     "use_adaptive_sampling")}
+    traced = {key: getattr(cycles, key) for key in (
+        "samples", "use_denoising", "device", "seed", "use_adaptive_sampling", "max_bounces", "diffuse_bounces",
+        "glossy_bounces", "transmission_bounces")}
     camera = world = lens = None
+    path = os.path.abspath(str(path))
+    raw = os.path.join(tempfile.mkdtemp(), "raw.png") if behind else path     # see through, then laid on its colour
     try:
         scene.render.engine = "CYCLES"
         for ob in scene.objects:
             ob.hide_render = ob not in mine
+            ob.visible_shadow = bool(ob.get(SHADOW, True))
         for data, watts in lamps.items():              # Blender counts a lamp's distance in its own unit
             data.energy = watts / metres ** 2
         lens = bpy.data.cameras.new("s3d~camera")
@@ -96,22 +113,26 @@ def render(root, path, eye, target=(0, 0, 0), fov=40, size=(960, 640), backgroun
         camera.location = eye
         camera.rotation_euler = (target - eye).to_track_quat("-Z", "Y").to_euler()
         scene.collection.objects.link(camera)
-        world = _sky(sky, soil, behind / gain)
+        world = _sky(sky, soil)
         scene.camera, scene.world = camera, world
         scene.render.resolution_x, scene.render.resolution_y = size
-        scene.render.resolution_percentage, scene.render.film_transparent = 100, False
+        scene.render.resolution_percentage, scene.render.film_transparent = 100, bool(behind)
         scene.render.threads_mode, scene.render.threads = "FIXED", min(THREADS, os.cpu_count() or 1)
-        scene.render.image_settings.file_format = "PNG" if suffix == ".png" else "JPEG"
-        scene.render.image_settings.color_mode = "RGB"
-        look.view_transform, look.look, look.gamma = "Standard", "None", 1.0
+        scene.render.image_settings.file_format = "PNG" if behind or suffix == ".png" else "JPEG"
+        scene.render.image_settings.color_mode = "RGBA" if behind else "RGB"
+        look.view_transform, look.look, look.gamma = TONES[tone], "None", 1.0
         look.exposure = math.log2(gain)
         cycles.samples, cycles.device, cycles.seed, cycles.use_adaptive_sampling = samples, "CPU", 0, False
+        cycles.diffuse_bounces, cycles.glossy_bounces, cycles.transmission_bounces = bounces, 4, 8
+        cycles.max_bounces = bounces + 8               # mirrors and glass still show what is behind them
         try:
             cycles.use_denoising = True
         except Exception:                              # a Blender built without a denoiser: more grain, same picture
             pass
-        scene.render.filepath = os.path.abspath(str(path))
+        scene.render.filepath = raw
         bpy.ops.render.render(write_still=True)
+        if behind:
+            _laid_on(raw, behind, path, suffix)
     finally:
         for (holder, key), value in was.items():
             setattr(holder, key, value)
@@ -119,14 +140,17 @@ def render(root, path, eye, target=(0, 0, 0), fov=40, size=(960, 640), backgroun
             setattr(cycles, key, value)
         for data, watts in lamps.items():
             data.energy = watts
-        for ob, flag in hidden.items():
-            ob.hide_render = flag
+        for ob, (hidden, casts) in shown.items():
+            ob.hide_render, ob.visible_shadow = hidden, casts
         if camera is not None:
             bpy.data.objects.remove(camera)
         if lens is not None:
             bpy.data.cameras.remove(lens)
         if world is not None:
             bpy.data.worlds.remove(world)
+        if raw != path and os.path.exists(raw):
+            os.remove(raw)
+            os.rmdir(os.path.dirname(raw))
     return path
 
 
@@ -137,9 +161,8 @@ def _point(what, value):
     return Vector(value)
 
 
-def _sky(above, below, behind):
-    """A world that lights with `above` from the upper half and `below` from the lower one (radiances), and shows
-    `behind` to the camera."""
+def _sky(above, below):
+    """A world that lights with `above` from the upper half and `below` from the lower one (radiances)."""
     world = bpy.data.worlds.new("s3d~sky")
     world.use_nodes = True
     nodes, links = world.node_tree.nodes, world.node_tree.links
@@ -152,16 +175,30 @@ def _sky(above, below, behind):
     up.inputs[1].default_value = 0.0
     half = nodes.new("ShaderNodeMixRGB")
     half.inputs[1].default_value, half.inputs[2].default_value = (*below, 1), (*above, 1)
-    path = nodes.new("ShaderNodeLightPath")
-    seen = nodes.new("ShaderNodeMixRGB")
-    seen.inputs[2].default_value = (*behind, 1)
     glow = nodes.new("ShaderNodeBackground")
     glow.inputs["Strength"].default_value = 1.0
     links.new(way.outputs["Generated"], axes.inputs[0])
     links.new(axes.outputs["Z"], up.inputs[0])
     links.new(up.outputs[0], half.inputs[0])
-    links.new(half.outputs[0], seen.inputs[1])
-    links.new(path.outputs["Is Camera Ray"], seen.inputs[0])
-    links.new(seen.outputs[0], glow.inputs["Color"])
+    links.new(half.outputs[0], glow.inputs["Color"])
     links.new(glow.outputs[0], out.inputs["Surface"])
     return world
+
+
+def _laid_on(raw, colour, path, suffix):
+    """The see-through picture `raw` laid on `colour` ('#rrggbb') and written at `path`: the backdrop is that very
+    colour, whatever the exposure and the tone."""
+    import numpy as np
+    image = bpy.data.images.load(raw)
+    try:
+        px = np.empty(len(image.pixels), dtype=np.float32)
+        image.pixels.foreach_get(px)
+        px = px.reshape(-1, 4)
+        back = np.array([int(colour[k:k + 2], 16) / 255 for k in (1, 3, 5)], dtype=np.float32)
+        px[:, :3] = px[:, :3] * px[:, 3:] + back * (1 - px[:, 3:])
+        px[:, 3] = 1
+        image.pixels.foreach_set(px.ravel())
+        image.filepath_raw, image.file_format = path, "PNG" if suffix == ".png" else "JPEG"
+        image.save()
+    finally:
+        bpy.data.images.remove(image)

@@ -17,6 +17,9 @@ LUMENS_PER_WATT = 683.0
 #: Where an ambient light keeps what it says, on its light data: [lux, r, g, b of the ground, linear].
 AMBIENT = "s3d_ambient"
 
+#: On a solid that casts no shadow: False. A solid that casts one carries nothing.
+SHADOW = "s3d_shadow"
+
 
 def light(name, kind="point", lm=None, lux=None, color="#ffffff", angle=None, blend=0.15, shadow=True, size=0,
           ground=None):
@@ -110,6 +113,29 @@ def _strength(what, value):
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
         raise ValueError(f"light: {what} is a number of 0 or more, not {value!r}")
     return float(value)
+
+
+def shadow(ob, cast=True):
+    """Whether a part casts a shadow.
+
+    `cast=False`: light goes through `ob` as if it were not there, while it is still seen
+    and still lit — the ceiling and the walls of a room lit from outside, a pane, a
+    backdrop. `cast=True` puts its shadow back. A group, an assembly or a list tells each
+    of its solids; a light is told by `light(shadow=)`. The choice follows the part
+    through later edits and copies. It shows in `render`; no export format has a word
+    for it."""
+    from ._surface import meshes
+    if not isinstance(cast, bool):
+        raise ValueError(f"shadow: cast is True or False, not {cast!r}")
+    parts = meshes(ob)
+    if not parts:
+        raise TypeError("shadow: a part, a group, an assembly or a list of them is expected")
+    for part in parts:
+        if cast:
+            part.pop(SHADOW, None)
+        else:
+            part[SHADOW] = False
+    return ob
 
 
 def lit(root):

@@ -66,6 +66,8 @@ def _object_digest(ob):
         h.update(("light:" + ",".join(v if isinstance(v, str) else float(v).hex() for v in said)).encode())
     if "s3d_material" in ob:
         h.update(f"tag:{ob['s3d_material']}".encode())
+    if "s3d_shadow" in ob:            # only once a program says a part casts no shadow: no other digest moves
+        h.update(b"no shadow")
     if "s3d~joints" in ob:            # only once a program declares a joint: no other digest moves
         from sand3d.joints import digest_text
         h.update(f"joints:{digest_text(ob)}".encode())
