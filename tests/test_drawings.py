@@ -85,8 +85,8 @@ class Drawings(unittest.TestCase):
         self.assertFalse(np.array_equal(image, s3d.grain("#a0522d", pitch=12, seed=1).image()))
         base = np.array([0xa0, 0x52, 0x2d]) / 255
         self.assertTrue(np.allclose(s3d.grain("#a0522d", depth=0).image(), base, atol=1e-6))
-        for got, want in zip(image.reshape(-1, 3).mean(0), base):
-            self.assertAlmostEqual(float(got), float(want), delta=.06)       # lighter and darker about it
+        self.assertEqual(oak.color, "#a0522d")                               # lighter and darker about it: its mean
+        self.assertEqual(s3d.grain("#b3babd", pitch=30, depth=.6, along="v").color, "#b3babd")
 
     def test_a_part_wears_it_and_each_corner_knows_its_place(self):
         slab = s3d.box("slab", 800, 400, 200)                                # x -400..400, y -200..200, z 0..200

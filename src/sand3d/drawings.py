@@ -90,7 +90,7 @@ def grain(color="#a0522d", pitch=12, depth=0.3, along="u", seed=0):
     A drawing for `material(ob, kind, color=grain(...))`: long uneven streaks, about `pitch` apart in the
     program's unit, that waver a little as they run `along` ("u": level on a wall, along X on a top; "v":
     up a wall, along Y on a top). `depth`, 0 to 1, is how far the streaks stray from `color`, darker and
-    lighter. `seed` picks another board. It repeats every 16 pitches across and 64 along."""
+    lighter: their mean is `color`. `seed` picks another board. It repeats every 16 pitches across and 64 along."""
     pitch = _length("grain", "pitch", pitch)
     if isinstance(depth, bool) or not isinstance(depth, (int, float)) or not 0 <= depth <= 1:
         raise ValueError(f"grain: depth is how far the streaks stray from the colour, 0 to 1, not {depth!r}")
@@ -144,8 +144,8 @@ def _grain_image(s):
         streak += rng.uniform(0.4, 1) * np.sin(2 * math.pi * (turns * (across + waver) + rng.random()))
     streak /= np.abs(streak).max()
     base = _to_linear(np.array(_rgb(s["color"])))
-    drawn = _to_srgb(np.clip(base * (1 - s["depth"] * streak[..., None] * np.where(streak[..., None] > 0, 1, .5)),
-                             0, 1))
+    light = 1 - s["depth"] * streak[..., None] * np.where(streak[..., None] > 0, 1, .5)
+    drawn = _to_srgb(np.clip(base * light / light.mean(), 0, 1))      # lighter and darker about the colour: its mean
     return drawn if s["along"] == "u" else drawn.transpose(1, 0, 2)
 
 
