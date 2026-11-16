@@ -131,13 +131,13 @@ shell(ob, t, open=None)  # Hollow; open named faces, or the flat faces looking "
 
 ```python
 dent(ob, points, r, depth, *, coords="local")  # Press hollows at points in the mesh's local space; parent: the space the part is in
-blend(ob, *others, r)  # Fuse others in, creases filled to about radius r on voxels of r / 5; its faces are all blend
-displace(ob, amount, size, noise='perlin', octaves=1, seed=0, direction='normal', fade=None, *, faces=None, coords='local', refine=True)  # Push the surface out and in by up to amount, features size across: noise callable or perlin cells ridged turbulence; direction normal, radial or "+Z"…; fade=(z0, z1) along its own Z
-bend(ob, angle, axis="+Y", toward="+Z")  # Curl along its own axis toward a perpendicular direction; degrees, groups bend together
-twist(ob, angle, axis="+Y")  # Turn sections about its own axis, right handed; near end fixed, far end turned angle degrees
+blend(ob, *others, r, step=None)  # Fuse others in, creases filled to about radius r on voxels of r / 5; its faces are all blend
+displace(ob, amount, size, noise='perlin', octaves=1, seed=0, direction='normal', fade=None, *, faces=None, coords='local', step=None, refine=True)  # Push the surface out and in by up to amount, features size across: noise callable or perlin cells ridged turbulence; direction normal, radial or "+Z"…; fade=(z0, z1) along its own Z
+bend(ob, angle, axis="+Y", toward="+Z", *, step=None)  # Curl along its own axis toward a perpendicular direction; degrees, groups bend together
+twist(ob, angle, axis="+Y", *, step=None)  # Turn sections about its own axis, right handed; near end fixed, far end turned angle degrees
 taper(ob, s, axis="+Y")  # Scale across its own axis, from 1 at the near end to ratio s > 0 at the far end
 smooth(ob, angle=55)  # Shade each descendant mesh by angle; 0 flat, 180 all smooth
-lay(ob, over, refine=0, reach=None)  # Seat on a surface along own Z, retaining height above own Z=0
+lay(ob, over, refine=0, reach=None, *, step=None)  # Seat on a surface along own Z, retaining height above own Z=0
 ```
 
 ## Frames and placement
@@ -475,7 +475,7 @@ Seed affects spread only. Inputs must be finite; distance / wavelength must
 have magnitude <= 2**50. `waves` creates no mesh and stores no animation state.
 
 Use `f = waves(3000, direction=25, sharpness=.8, spread=15, seed=7)` then
-`displace(ob, 200, 500, noise=f, direction="+Z")`. Size controls refinement,
+`displace(ob, 200, 500, noise=f, direction="+Z")`. Size controls automatic refinement (override with step),
 not wavelength: resolve the shortest component with at least 16 samples per
 period, more for sharp crests. Use a fixed push direction for a height surface;
 normal displacement on an already curved mesh does not guarantee no crossings.

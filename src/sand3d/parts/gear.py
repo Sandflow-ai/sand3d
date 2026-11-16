@@ -1,6 +1,7 @@
 """A spur gear with involute teeth."""
 import math
 
+from .. import _core
 from ..profile import circle, poly
 from ..solids import extrude
 
@@ -23,7 +24,7 @@ def gear(name, teeth, module, width, bore=0, angle=20):
     def flank(rho):
         return half - _inv(math.acos(min(1.0, rb / rho)))
 
-    steps = 6
+    steps = _core.resolution_count(6)
     start = max(rb, rf)
     radii = [start + (ra - start) * k / steps for k in range(steps + 1)]
     pts = []

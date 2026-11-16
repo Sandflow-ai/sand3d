@@ -24,6 +24,7 @@ coarse sampling can lose thin features or fail a geometry check.
 | sweep, loft, wire, body | automatic path samples, `rings=` extra samples | Auto path counts and chord error scale; extra rings scale only under override. Explicit station/law knots remain. |
 | extrude with twist | automatic layers | Angular spacing scales with detail. |
 | blend | `step=None` (auto voxel size r/5), or positive voxel length | Voxel length scales with detail; r remains the closing radius. |
+| gear, thread, knurl | automatic involute / thread sampling; knurl has feature-locked teeth | Gear flank and thread samples scale, teeth and turns stay fixed; knurl keeps four samples per tooth to preserve its V ridges. |
 | along, frames, copy, scatter | placement counts / supplied paths | No independent mesh refinement; instance counts do not scale. |
 | hull, fill, booleans, chamfer, shell, taper, dent | input topology / feature geometry | No density setting removes explicit topology or changes feature dimensions. |
 
