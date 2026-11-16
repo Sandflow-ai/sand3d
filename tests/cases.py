@@ -735,3 +735,19 @@ def lit_room():
     spot = s3d.at(s3d.light("spot", "spot", lm=1200, angle=50, blend=.4, color=(1, .9, .8)), x=30, z=220, ry=25)
     sun = s3d.at(s3d.light("sun", "sun", lux=3.25), rx=40, rz=20)
     return s3d.assembly("room", lamps, spot, sun)
+
+
+@case("light", "render")
+def lit_picture():
+    import os
+    import tempfile
+    floor = s3d.box("floor", 400, 400, 2)
+    post = s3d.at(s3d.cylinder("post", 20, 100), x=40, z=2)
+    bulb = s3d.at(s3d.light("bulb", lm=250, color="#ffb76c", size=6), x=-80, z=120)
+    fill = s3d.at(s3d.light("fill", "sun", lux=.5, shadow=False), rx=30)
+    key = s3d.at(s3d.light("key", "sun", lux=3, angle=.53), rx=40, rz=20)
+    sky = s3d.light("sky", "ambient", lux=1.35, color="#f2e8d7", ground="#33271e")
+    room = s3d.assembly("room", floor, post, bulb, fill, key, sky)
+    s3d.render(room, os.path.join(tempfile.mkdtemp(), "room.png"), eye=(500, -700, 400), target=(0, 0, 40),
+               size=(48, 32), samples=4, background="#26211d")     # a picture leaves the scene as it was
+    return room

@@ -134,7 +134,45 @@ class Lights(unittest.TestCase):
             s3d.export(room, os.path.join(folder, "room" + suffix))
             self.assertGreater(os.path.getsize(os.path.join(folder, "room" + suffix)), 0)
 
+    def test_a_shadow_is_sharp_soft_or_none(self):
+        self.assertEqual(s3d.light("hard").data.shadow_soft_size, 0)            # a sharp edge by default
+        self.assertTrue(s3d.light("casts").data.use_shadow)
+        bulb = s3d.light("bulb", size=60)
+        self.assertEqual(bulb.data.shadow_soft_size, 30)                        # the bulb's radius, in the unit
+        self.assertEqual(s3d.light("cone", "spot", size=20).data.shadow_soft_size, 10)
+        fill = s3d.light("fill", "sun", lux=.5, shadow=False)
+        self.assertFalse(fill.data.use_shadow)
+        self.assertEqual(fill.data.angle, 0)
+        self.assertAlmostEqual(math.degrees(s3d.light("real", "sun", angle=.53).data.angle), .53, places=5)
+        self.assertAlmostEqual(math.degrees(s3d.light("spot", "spot").data.spot_size), 45, places=4)
+
+    def test_an_ambient_light_says_the_sky_and_gives_nothing_as_a_lamp(self):
+        from sand3d.lights import ambient
+        sky = s3d.light("sky", "ambient", lux=1.35, color="#ffffff", ground="#000000")
+        self.assertEqual((sky.type, sky.data.type, sky.data.energy), ("LIGHT", "SUN", 0))
+        self.assertEqual(ambient(sky), (1.35, (1, 1, 1), (0, 0, 0)))
+        lux, above, below = ambient(s3d.light("even", "ambient", color="#ff8000"))
+        self.assertEqual(lux, 1)                                                # 1 lux, the same from below
+        for one, other in zip(above, below):
+            self.assertAlmostEqual(one, other, places=6)
+        self.assertIsNone(ambient(s3d.light("bulb")))
+        self.assertIsNone(ambient(s3d.box("box", 10, 10, 10)))
+        self.assertEqual(ambient(s3d.copy(sky)), ambient(sky))                  # a copy says the same
+        with self.assertRaisesRegex(TypeError, "is a light object, not a solid"):
+            s3d.fillet(sky, 1)
+        doc = glb_json(s3d.assembly("room", s3d.box("floor", 400, 400, 10), sky))
+        said = {l["name"]: l for l in doc["extensions"]["KHR_lights_punctual"]["lights"]}["sky"]
+        self.assertEqual((said["type"], said["intensity"]), ("directional", 0))  # glTF has no ambient light:
+        self.assertEqual(said["extras"]["s3d_ambient"], [1.35, 0, 0, 0])         # what it says rides along
+
     def test_errors(self):
+        for kw in (dict(kind="sun", size=10), dict(kind="sun", angle=180), dict(kind="sun", angle=-1),
+                   dict(shadow=1), dict(shadow="no"), dict(size=-1), dict(size="wide"), dict(ground="#ffffff"),
+                   dict(kind="spot", ground="#ffffff"), dict(kind="ambient", lm=5), dict(kind="ambient", size=3),
+                   dict(kind="ambient", shadow=False), dict(kind="ambient", angle=3),
+                   dict(kind="ambient", ground="soil"), dict(kind="ambient", lux=-1)):
+            with self.subTest(kw=kw), self.assertRaisesRegex(ValueError, "light:"):
+                s3d.light("l", **kw)
         for kw in (dict(kind="area"), dict(kind="sun", lm=800), dict(kind="point", lux=3), dict(kind="spot", lux=3),
                    dict(lm=-1), dict(lm="800"), dict(lm=True), dict(lm=math.inf), dict(kind="sun", lux=math.nan),
                    dict(color="warm"), dict(color="#fff"), dict(color=(2, 0, 0)),

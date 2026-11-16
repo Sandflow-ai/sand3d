@@ -23,6 +23,7 @@ from .parts import gear, knurl, thread
 from .frames import Frame, Frames, along, at, bbox, grid, local, ring, phyllotaxis, branches, vary, scatter, snap, transform
 from .materials import material, resolve as _resolve
 from .lights import light
+from .render import render
 from .joints import joint, placed_again as _placed_again, placed_on as _placed_on, pose
 from .profile import Path as _Path, Placed as _Placed, arc, circle, ellipse, mirror, offset, poly, polygon, rect, slot, spline, station, stroke, superellipse, tangent_arc, text, wrap
 from .solids import body, box, cone, cylinder, dome, extrude, helix, hull, loft, revolve, sphere, spiral, sweep, torus, tube, wedge, wire
@@ -47,7 +48,7 @@ __all__ = [
     # parts
     "gear", "knurl", "thread",
     # materials, lights
-    "material", "smooth", "light",
+    "material", "smooth", "light", "render",
     # articulation
     "joint", "pose", "seat",
     # assembly

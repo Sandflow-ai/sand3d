@@ -59,6 +59,10 @@ def _object_digest(ob):
         lamp = ob.data
         said = [lamp.type, lamp.energy, *lamp.color]
         said += [lamp.spot_size, lamp.spot_blend] if lamp.type == "SPOT" else []
+        wide = lamp.angle if lamp.type == "SUN" else lamp.shadow_soft_size
+        said += ["wide", wide] if wide else []                    # only once a program asks for a soft shadow,
+        said += [] if lamp.use_shadow else ["no shadow"]          # for none, or for an ambient light
+        said += ["ambient", *lamp["s3d_ambient"]] if lamp.get("s3d_ambient") is not None else []
         h.update(("light:" + ",".join(v if isinstance(v, str) else float(v).hex() for v in said)).encode())
     if "s3d_material" in ob:
         h.update(f"tag:{ob['s3d_material']}".encode())

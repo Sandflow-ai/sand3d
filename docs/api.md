@@ -189,7 +189,8 @@ material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, emis
 ## Lights
 
 ```python
-light(name, kind="point", lm=None, lux=None, color="#ffffff", angle=45, blend=0.15)  # Kind: point spot sun; lm lumens (point, spot; 800 by default), lux (sun; 3 by default); shines along its own -Z
+light(name, kind="point", lm=None, lux=None, color="#ffffff", angle=None, blend=0.15, shadow=True, size=0, ground=None)  # Kind: point spot sun ambient; lm lumens (point, spot; 800), lux (sun 3, ambient 1); shines along its own -Z; size, angle: soft shadows
+render(root, path, eye, target=(0, 0, 0), fov=40, size=(960, 640), background=None, exposure=1.0, samples=48)  # Writes a picture (.png, .jpg) of root's tree, lit by the lights it holds and by nothing else
 ```
 
 ## Articulation
@@ -298,7 +299,7 @@ All are nonmetallic with alpha 1; leaf has coat 0.12 and snow 0.03.
 `color=` changes the surface tint without changing absorption or other properties.
 Material names contain the preset and explicit overrides, not its default values.
 
-## Placing and exporting lights
+## Placing, showing and exporting lights
 
 `light` returns a named object that is not a solid: it has no faces, `at` and
 `transform` place it, `copy` copies it, `group` and `assembly` hold it, `scale`
@@ -312,18 +313,50 @@ its edge inwards, over which the light fades; its `lm` are those of the whole
 point, so on its axis it is as bright as a point of the same `lm`. A "sun"
 shines along its own -Z from infinitely far with `lux` on a surface facing it;
 only its turn counts, not its place. A point or a spot refuses `lux`, a sun `lm`.
+An "ambient" light comes from every side, as from an overcast sky: `lux` is what
+a face turned up receives under it in the open, `color` comes from above and
+`ground` from below (the same colour when `ground` is None), so a wall gets half
+of each. Neither its place nor its turn counts. It is what keeps a shadow from
+being black: a three.js AmbientLight, or a HemisphereLight with its two colours.
+
+What stands in a light's way casts a shadow; `shadow=False` makes a fill light
+that shines through everything. A shadow's edge is sharp unless the light has a
+width: `size`, the diameter of the bulb of a point or a spot, in the program's
+unit; for a sun `angle`, the angle it is seen under in degrees (the real sun:
+0.53). A bulb 100 wide, 2000 from a table edge that is 700 above the floor,
+blurs that edge over 100 x 700 / 2000 = 35 on the floor. An ambient light takes
+no `shadow`, `size` or `angle`.
 
 A light shines down as built. `at(l, rx=90)` shines along +Y, `at(l, ry=90)`
 along -X; to shine from a point P at a point T, turn it so that its -Z runs from
 P to T. On a face's frame (`on=`), whose Z is the face's normal, `rx=180` turns it
 to shine out of the face.
 
+`render(root, "room.png", eye=(3500, -5000, 3000), target=(0, 0, 800))` writes
+a picture of the tree under its own lights: only what is under `root` is seen,
+only its lights shine, and a scene with no light is black. The camera stands at
+`eye` and looks at `target`, upright, with a vertical angle of view `fov`.
+Distances are taken in metres whatever the program's unit, so a face receives
+the lux its lights give it: a white matte face under π lux (a sun of 3.14 facing
+it, a bulb of 4π x 12.6 lm two metres away) comes out white at `exposure=1`, one
+under half of that mid grey, and `exposure` multiplies the whole picture. That is
+the scale of three.js and of GLB viewers, where a sun of 3 lux is a full key
+light; a room lit by real bulbs (hundreds of lux) wants `exposure` near 0.01.
+`background` is the colour behind the scene, shown as given; None shows the sky
+of the ambient lights. Shadows, soft edges, light bounced between faces and the
+materials are traced (Cycles, on the processor; `samples` trades grain for
+time). The picture changes nothing in the scene.
+
 `export` writes the lights of the tree in a .glb, as KHR_lights_punctual: a
 point or a spot in candela (`lm` / 4π), a sun in lux, a spot's outer cone
 `angle` / 2 and inner cone `angle` / 2 x (1 - `blend`), colours linear, places
-in metres. The other formats carry no light. Light from a surface is
-`material(ob, "light")`: a surface that glows, which lights nothing in a GLB.
-There is no ambient light yet, and no range past which a light stops.
+in metres. glTF has no ambient light, no shadow switch and no width: an ambient
+light is written as a directional light of intensity 0 whose `extras` hold what
+it says (`s3d_ambient`: lux, then the ground's linear colour), and `shadow`,
+`size` and a sun's `angle` are not written. The other formats carry no light.
+Light from a surface is `material(ob, "light")`: a surface that glows, which
+lights nothing in a GLB and does light its surroundings in `render`. There is no
+range past which a light stops, and no area light.
 
 
 ## Scale and local frames
