@@ -391,7 +391,7 @@ def superellipse(w, d, n=2, taper=0):
     if w == 0 and d == 0:
         return Profile([Loop([(0, 0)], [False])])
     sides = (_core.segments(max(w, d) / 2) if _core.FACETS is not None
-             else max(_core.resolution_count(SUPERELLIPSE_SIDES, minimum=4), _core.segments(max(w, d) / 2)))
+             else max(SUPERELLIPSE_SIDES, _core.segments(max(w, d) / 2)))
     dense = []
     for k in range(256):
         t = 2 * math.pi * k / 256
@@ -536,7 +536,7 @@ def _centripetal(pts, closed, steps=12, tangents=(None, None), _record=None):
             b2 = (t3 - t) / (t3 - t1) * a2 + (t - t1) / (t3 - t1) * a3
             c = (t2 - t) / (t2 - t1) * b1 + (t - t1) / (t2 - t1) * b2
             return c
-        pieces = _core.resolution_count(steps)
+        pieces = steps
         if _core.FACETS is not None:
             pieces = _core.turn_steps([[evaluate(k, 64) for k in range(65)]])
         if _record is not None:
@@ -941,7 +941,7 @@ def text(s, size, font=None):
     curve = bpy.data.curves.new("_text", "FONT")
     curve.body = s
     curve.size = size
-    curve.resolution_u = _core.resolution_count(6)
+    curve.resolution_u = 6
     if font:
         curve.font = bpy.data.fonts.load(str(font), check_existing=True)
     ob = bpy.data.objects.new("_text", curve)

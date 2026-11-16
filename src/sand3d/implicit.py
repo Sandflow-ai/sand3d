@@ -297,7 +297,7 @@ def field(name, size, density, *, cell, level=0, min_component_cells=3):
         )
     if not callable(density):
         raise TypeError("field: density must be callable")
-    cell = max(_core.resolution_step(cell, explicit=True), _core.surface_edge(size))
+    cell = max(cell, _core.surface_edge(size))
     ratios = [v / cell for v in size]
     if any(not math.isfinite(v) or v > MAX_SAMPLES for v in ratios):
         raise ValueError("field: grid axis exceeds sample budget; increase cell")

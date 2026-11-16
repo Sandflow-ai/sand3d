@@ -131,7 +131,7 @@ def extrude(name, profile, h=None, taper=0, twist=0, both=False, h2=None, on=Non
     lo, hi = (-h / 2, h / 2) if both else (-(h2 or 0), h)
     if hi < lo:
         lo, hi = hi, lo
-    layers = max(1, math.ceil(abs(twist) / _core.resolution_step(3)))
+    layers = max(1, math.ceil(abs(twist) / 3))
     b = _core.Builder(name)
     miters = {i: _miter(pts, loop, k) for loop in loops for k, i in enumerate(loop)}
     rings = []
@@ -447,7 +447,6 @@ def _law_path(path, laws, scale=1, twist=0, radius=1, smooth=False, tips=("round
     tangents: inserting a ring beside an old sample must not create a jump
     in its normal. Point paths retain their corners and mitered sections.
     """
-    rings = _core.resolution_count(rings, explicit=True, minimum=0)
     points = [Vector(p) for p in path.points]
     exact = getattr(path, "_at_length", None)
     if exact is not None:
@@ -492,10 +491,10 @@ def _law_path(path, laws, scale=1, twist=0, radius=1, smooth=False, tips=("round
         samples[d] = q, tangent, size, angle
         return samples[d]
 
-    tolerance = _core.mm(_core.chord())
-    spots = sorted(set(lengths + [total * k / _core.resolution_count(64) for k in range(_core.resolution_count(64)+1)]
-                       + [total * (a + (c - a) * k / _core.resolution_count(16)) for law in laws
-                          for a, c in zip(law.u, law.u[1:]) for k in range(_core.resolution_count(16)+1)]))
+    tolerance = _core.mm(_core.CHORD)
+    spots = sorted(set(lengths + [total * k / 64 for k in range(64+1)]
+                       + [total * (a + (c - a) * k / 16) for law in laws
+                          for a, c in zip(law.u, law.u[1:]) for k in range(16+1)]))
     if isinstance(scale, _core.Law) and _core.FACETS is None:
         required = set(lengths + [total*u for law in laws for u in law.u])
         for end, neighbour, tip in ((0,1,tips[0]),(-1,-2,tips[1])):
@@ -644,7 +643,7 @@ def sweep(name, profile, path, scale=1, twist=0, frenet=False, *, tip="round", r
     with their changing size and twist; crossing rings are refused (reduce
     the size or round the path)."""
     tips = _ring_options(tip, rings)
-    extra = _core.resolution_count(rings, explicit=True, minimum=0)
+    extra = rings
     profile, placement = _placed(profile)
     pts, sharp, loops, tris = profile.mesh()
     local = [placement @ Vector((x, y, 0)) for x, y in pts]
@@ -1052,7 +1051,7 @@ def _faceted_wire(name, path, law, tip="round", rings=0):
 
 
 def _faceted_wire_mesh(name, path, law, tip="round", rings=0):
-    extra = _core.resolution_count(rings, explicit=True, minimum=0)
+    extra = rings
     tips = _ring_options(tip, rings)
     """Wire-only angular sampling of diameter meridians; sweep laws stay independent."""
     if path.closed:
@@ -1629,10 +1628,10 @@ def _bounded_loft(name, shapes, rings2d, flags, zero, follow, tip="round", extra
     for span in range(len(shapes) - 1):
         end = span if zero[span] else (span + 1 if zero[span + 1] else None)
         if end is None:
-            fractions = sorted(set([k / (4 * _core.resolution_count(LOFT_STEPS)) for k in range(4 * _core.resolution_count(LOFT_STEPS) + 1)]
+            fractions = sorted(set([k / (4 * LOFT_STEPS) for k in range(4 * LOFT_STEPS + 1)]
                                    + [1 / 256, 255 / 256]))
         else:
-            fractions = [math.sin(math.pi / 2 * k / _core.resolution_count(64)) ** 2 for k in range(_core.resolution_count(64)+1)]
+            fractions = [math.sin(math.pi / 2 * k / 64) ** 2 for k in range(64+1)]
             if end == span + 1:
                 fractions = [1 - t for t in reversed(fractions)]
         def evaluate(t):
@@ -1701,7 +1700,7 @@ def loft(name, *sections, follow=False, loop=False, tip="round", rings=0):
     shape-preserving cubics between the original stations; rounding stays in
     the terminal interval, without making the neighbouring body overshoot."""
     _ring_options(tip, rings)
-    extra = _core.resolution_count(rings, explicit=True, minimum=0)
+    extra = rings
     if len(sections) < 2:
         raise ValueError("loft needs two sections")
     if loop and len(sections) < 3:
@@ -1749,7 +1748,7 @@ def loft(name, *sections, follow=False, loop=False, tip="round", rings=0):
         return _bounded_loft(name, shapes, rings2d, flags, zero, follow, tip, extra)
     n = len(rings2d[0])
     steps = (max(64, 4 * _core.FACETS) if _core.FACETS is not None
-             else (1 if len(sections) == 2 and not loop else _core.resolution_count(LOFT_STEPS)))
+             else (1 if len(sections) == 2 and not loop else LOFT_STEPS))
     base_steps = steps
     if extra:
         steps *= extra + 1
@@ -1773,7 +1772,7 @@ def loft(name, *sections, follow=False, loop=False, tip="round", rings=0):
         mean = params[-1] / (len(params) - 1)
         ts = [params[0]]
         for i in range(len(params) - 1):
-            k = 1 if len(sections) == 2 else max(2, round(_core.resolution_count(LOFT_STEPS) * (params[i + 1] - params[i]) / mean))
+            k = 1 if len(sections) == 2 else max(2, round(LOFT_STEPS * (params[i + 1] - params[i]) / mean))
             if _core.FACETS is not None:
                 probes = [params[i] + (params[i + 1] - params[i]) * j / 64 for j in range(65)]
                 k = _core.turn_steps([_loft_through([sec[q] for sec in placed3d], params, probes) for q in range(n)])

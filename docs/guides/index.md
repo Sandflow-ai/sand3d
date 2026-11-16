@@ -6,4 +6,4 @@
 - surface-colour-weathering: Per-face colour, broad weathering and geometry cost.
 - glass-ice-crystals: Transmission, IOR, absorption, thickness and closed crystals.
 
-- resolution: Mesh triangle cost, step, detail and re-export overrides.
+- resolution: Mesh triangle cost and step sampling.

@@ -24,7 +24,7 @@ def gear(name, teeth, module, width, bore=0, angle=20):
     def flank(rho):
         return half - _inv(math.acos(min(1.0, rb / rho)))
 
-    steps = _core.resolution_count(6)
+    steps = 6
     start = max(rb, rf)
     radii = [start + (ra - start) * k / steps for k in range(steps + 1)]
     pts = []

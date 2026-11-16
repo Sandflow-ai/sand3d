@@ -53,7 +53,7 @@
   "case:bodies": "a26961124a7df603",
   "case:path_laws": "357a774304c71069",
   "case:growth_frames": "f2b93d884ebf02c7",
-  "case:own_frame_deformers": "b64a030b98e6f6d8",
+  "case:own_frame_deformers": "87aa21549ff1d17d",
   "case:spiral_paths": "eb2baad409288df9",
   "case:law_path_sampling": "1e99097d78caddca",
   "case:bounded_loft_and_end_scale": "189a8642efc25229",
@@ -77,7 +77,6 @@
   "program:rack.rack": "eb509aa649af09c0",
   "program:chair.chair": "c85b1f4ccb835a3a",
   "program:gate.gate": "876579fdcab50a89",
-  "program:pond.pond": "1d2b46b1f7fe6fb6",
-  "case:detail_sampling": "1b8ecfffd868b748"
+  "program:pond.pond": "1d2b46b1f7fe6fb6"
  }
 }

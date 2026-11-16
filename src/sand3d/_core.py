@@ -446,11 +446,11 @@ def segments(r, sweep=360.0):
     r = abs(in_mm(r))
     if FACETS is not None:
         per_turn = FACETS
-    elif r <= chord():
-        per_turn = resolution_count(TURN_MIN, minimum=3)
+    elif r <= CHORD:
+        per_turn = TURN_MIN
     else:
-        per_turn = math.ceil(math.pi / math.acos(1 - chord() / r))
-        per_turn = min(max(per_turn, resolution_count(TURN_MIN, minimum=3)), resolution_count(TURN_MAX, minimum=3))
+        per_turn = math.ceil(math.pi / math.acos(1 - CHORD / r))
+        per_turn = min(max(per_turn, TURN_MIN), TURN_MAX)
     return max(1, math.ceil(per_turn * abs(sweep) / 360.0 - 1e-9))
 
 
@@ -593,29 +593,3 @@ def own_mesh(ob):
     if ob.data.users > 1:
         ob.data = ob.data.copy()
     return ob.data
-
-
-DETAIL = 1.0
-
-
-def detail_scale(explicit=False):
-    """External density override wins; program density applies only to auto sampling."""
-    import os
-    raw = os.environ.get("SAND3D_DETAIL")
-    value = float(raw) if raw is not None else (1.0 if explicit else DETAIL)
-    if not math.isfinite(value) or value <= 0:
-        raise ValueError("SAND3D_DETAIL must be positive and finite")
-    return value
-
-
-def resolution_count(n, explicit=False, minimum=1):
-    scale = detail_scale(explicit)
-    return n if scale == 1 else max(minimum, round(n * scale))
-
-
-def resolution_step(step, explicit=False):
-    return step / detail_scale(explicit)
-
-
-def chord():
-    return CHORD / detail_scale() ** 2

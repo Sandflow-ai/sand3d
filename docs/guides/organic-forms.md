@@ -48,7 +48,7 @@ Keep the brief's requested facets level, including smooth=False for flat faces.
 A face budget is a ceiling, not a target: break the outline before adding detail.
 
 Resolution costs triangles: use `step` to separate displacement feature size
-from mesh sampling, and `detail` for automatic density (see `resolution`).
+from mesh sampling (see `resolution`).
 Colour callbacks assign one RGB per face without UVs or textures, so fine colour
 patterns need fine faces. Prefer colour for thin veins or grain over displaced
 relief that is sub-millimetre at render scale.

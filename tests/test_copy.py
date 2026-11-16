@@ -102,13 +102,13 @@ class Copy(unittest.TestCase):
 
     def test_lay_detaches_before_refinement_and_placement(self):
         for refine in (0, 8):
-            with self.subTest(refine=refine):
+            with self.subTest(step=refine):
                 s3d.empty_scene()
                 original = s3d.box("part", 10, 10, 2)
                 twin = s3d.copy(original)
                 before = mesh_of(original)
                 carrier = s3d.box("carrier", 40, 40, 5)
-                s3d.lay(twin, carrier, refine=refine)
+                s3d.lay(twin, carrier, step=refine)
                 self.assertEqual(mesh_of(original), before)
                 self.assertIsNot(original.data, twin.data)
 

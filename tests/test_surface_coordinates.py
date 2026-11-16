@@ -31,7 +31,7 @@ class Surfaces(unittest.TestCase):
         ob = s3d.wire('strand',[(0,0,0),(0,0,10)],(4,2),rings=2)
         before = ([tuple(f.vertices) for f in ob.data.polygons],
                   [[d.value for d in ob.data.attributes[n].data] for n in NAMES])
-        s3d.displace(ob,.1,1,refine=False)
+        s3d.displace(ob,.1,1,step=0)
         self.assertEqual(before,([tuple(f.vertices) for f in ob.data.polygons],
                   [[d.value for d in ob.data.attributes[n].data] for n in NAMES]))
 
@@ -40,7 +40,7 @@ class Surfaces(unittest.TestCase):
         patch = s3d.box('patch',4,4,2)
         with self.assertRaisesRegex(ValueError,'beyond reach'):
             s3d.lay(patch,support,reach=1)
-        s3d.lay(patch,support,refine=2)
+        s3d.lay(patch,support,step=2)
         self.assertAlmostEqual(min(v.co.z for v in patch.data.vertices),5)
         self.assertAlmostEqual(max(v.co.z for v in patch.data.vertices),7,places=5)
 
@@ -59,7 +59,7 @@ class Surfaces(unittest.TestCase):
             ball = s3d.at(s3d.sphere('ball', 200), z=-200)
             piece = s3d.extrude('strap', s3d.rect(120, 12), 2)
             coarse = len(piece.data.vertices)
-            s3d.lay(piece, ball, refine=8, reach=30)
+            s3d.lay(piece, ball, step=8, reach=30)
             self.assertGreater(len(piece.data.vertices), coarse)
             from mathutils.bvhtree import BVHTree
             tree = BVHTree.FromPolygons([_core.world(ball) @ v.co for v in ball.data.vertices],
@@ -73,7 +73,7 @@ class Surfaces(unittest.TestCase):
             self.assertTrue(all(0 <= h <= 2 for h in heights))
             flat = s3d.at(s3d.box('flat', 200, 200, 10), z=-10)
             patch = s3d.extrude('patch', s3d.rect(100, 40), 2)
-            s3d.lay(patch, flat, refine=8)
+            s3d.lay(patch, flat, step=8)
             self.assertTrue(all((patch.data.vertices[e.vertices[0]].co-
                                  patch.data.vertices[e.vertices[1]].co).length <= 8.0001 for e in patch.data.edges))
 
@@ -104,7 +104,7 @@ class Surfaces(unittest.TestCase):
                 piece = s3d.extrude('patch', s3d.rect(100,30), 2)
                 for ob in (ball, piece):
                     ob.matrix_world = move @ _core.world(ob)
-                s3d.lay(piece, ball, refine=0 if saddle else 15)
+                s3d.lay(piece, ball, step=0 if saddle else 15)
                 return [v.co.copy() for v in piece.data.vertices]
             baseline = build(Matrix.Identity(4))
             move = Matrix.Translation((513, -237, 851)) @ Euler((.3, .7, .5)).to_matrix().to_4x4()

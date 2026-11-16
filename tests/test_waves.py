@@ -34,7 +34,7 @@ class Waves(unittest.TestCase):
         mesh.from_pydata(verts, [], [(i, i+1, n+i+1, n+i) for i in range(n-1)])
         ob = bpy.data.objects.new('plane', mesh)
         bpy.context.scene.collection.objects.link(ob)
-        s3d.displace(ob, .2, .5, noise=s3d.waves(wavelength), direction='+Z', refine=False)
+        s3d.displace(ob, .2, .5, noise=s3d.waves(wavelength), direction='+Z', step=0)
         mesh = ob.data
         h = np.array([v.co.z for v in mesh.vertices[:n]])
         frequency = np.fft.rfftfreq(n, step)[np.argmax(abs(np.fft.rfft(h))[1:])+1]

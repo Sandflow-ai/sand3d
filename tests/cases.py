@@ -693,7 +693,7 @@ def surface_details():
     support = s3d.dome('support',40,12)
     patch = s3d.smooth(s3d.extrude('patch',s3d.rect(8,8),1))
     s3d.at(patch,z=10)
-    s3d.lay(patch,support,refine=3)
+    s3d.lay(patch,support,step=3)
     petal = s3d.loft('petal',s3d.station(0,4,2),s3d.station(12,8,2),s3d.station(20,0,0),tip='sharp',rings=2)
     s3d.material(petal,'plastic',color=lambda x,y,z,n,u: (u,0,1-u))
     return support,patch,petal
@@ -714,11 +714,3 @@ def retained_fill():
     pot = s3d.shell(s3d.box("pot", 40, 30, 30), 2, open="top")
     s3d.fill("contents", pot, 24)
     s3d.fill("sloped", pot, s3d.local(pot, z=15, ry=8), clearance=0)
-
-
-@case("detail")
-def detail_sampling():
-    s3d.detail(.5)
-    ob = s3d.sphere("detail", 20)
-    s3d.detail(1)
-    return ob

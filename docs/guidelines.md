@@ -560,8 +560,7 @@ proves a physically realistic material.
 
 Resolution costs triangles. Inspect the silhouette before increasing sampling.
 Use `displace(..., step=length)` to separate mesh cost from noise feature size;
-`bend` and `twist` accept the same `step` vocabulary. `detail(0.5)` reduces auto
-sampling; `SAND3D_DETAIL=0.5` overrides explicit resolutions too at re-export.
+`bend` and `twist` accept the same `step` vocabulary.
 Colour is per face, without UVs/textures: fine patterns also need fine mesh.
 Prefer colour for thin veins/grain to displaced relief when the relief is
 sub-millimetre at render scale. See `guides/resolution.md`.

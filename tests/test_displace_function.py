@@ -94,7 +94,7 @@ class FunctionDisplace(unittest.TestCase):
             ob = edit(ob)
             after = coordinates(ob)
             np.testing.assert_allclose(before,after[:len(before)])
-            s3d.displace(ob,.1,2,noise=lambda s,a,r:s*0,coords='path',refine=False)
+            s3d.displace(ob,.1,2,noise=lambda s,a,r:s*0,coords='path',step=0)
 
     def test_two_fresh_processes(self):
         code = """

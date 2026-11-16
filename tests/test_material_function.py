@@ -176,7 +176,7 @@ import numpy as np
 s.empty_scene(); s.facets(6)
 a=s.wire('a',s.spline([(0,-798,1197),(0,-1302,1386),(0,-1218,1722),(0,-1092,2016)]),[(0,504),(.5,273),(1,336)],rings=1)
 s.material(a,'plastic',color=lambda x,y,z,n,u: '#ff0000' if int(u*6)%2 else '#0000ff')
-b=s.dome('cap',1200,450); s.displace(b,40,300,seed=3,refine=False)
+b=s.dome('cap',1200,450); s.displace(b,40,300,seed=3,step=0)
 s.material(b,'plastic',color=lambda x,y,z,n,u: np.stack((x*0+.2,n[2]*.1+.5,u*.3),axis=-1))
 print(([tuple(v.co) for v in a.data.vertices], [tuple(f.vertices) for f in a.data.polygons], __import__('sand3d._coordinates',fromlist=['face_u']).face_u(a.data), materials.face_colors(a), materials.face_colors(b), [tuple(v.co) for v in b.data.vertices]))
 """

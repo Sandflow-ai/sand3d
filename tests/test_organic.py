@@ -350,7 +350,7 @@ class Displace(unittest.TestCase):
         with self.assertRaises(ValueError):
             s3d.displace(ball, 1, 0)
         with self.assertRaises(ValueError) as caught:
-            s3d.displace(ball, 1, 0.01)
+            s3d.displace(ball, 1, 0.01, step=.0025)
         self.assertIn("give a larger size", str(caught.exception))
 
 

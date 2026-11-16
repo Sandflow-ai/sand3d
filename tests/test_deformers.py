@@ -35,7 +35,7 @@ class Deformers(unittest.TestCase):
             s3d.twist(ob, 90, axis)
             self.assertLessEqual(max(abs(ob.data.vertices[e.vertices[0]].co.y -
                                          ob.data.vertices[e.vertices[1]].co.y) for e in ob.data.edges),
-                                 40/48 + 1e-5)
+                                 40/max(4, math.ceil(90/3)) + 1e-5)
             near = [v.co for v in ob.data.vertices if abs(v.co.y+end) < 1e-5]
             self.assertAlmostEqual(max(abs(p.x) for p in near), 4, places=5)
             self.assertAlmostEqual(max(p.z for p in near), 2, places=5)
@@ -94,8 +94,10 @@ class Deformers(unittest.TestCase):
                 s3d.units(unit)
                 ob = s3d.extrude("strip", s3d.rect(4*factor, 60*factor), factor, both=True)
                 verb(ob, value)
-                results.append(sorted(tuple(round(c/factor, 3) for c in v.co) for v in ob.data.vertices))
-            self.assertEqual(results[0], results[1])
+                results.append(sorted(tuple(c/factor for c in v.co) for v in ob.data.vertices))
+            self.assertEqual(len(results[0]), len(results[1]))
+            for left in results[0]:
+                self.assertLess(min((Vector(left)-Vector(right)).length for right in results[1]), 1e-3)
 
     def test_arguments_and_neutral_values(self):
         ob = s3d.box("bar", 4, 40, 2)

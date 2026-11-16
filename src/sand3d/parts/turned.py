@@ -47,8 +47,8 @@ def thread(name, d, length, pitch, left=False):
 
     def radius(t, z):
         return d / 2 - depth * _triangle(z / pitch - sign * t / (2 * math.pi))
-    around = _core.resolution_count(32, minimum=3)
-    along = _core.resolution_count(max(8, math.ceil(length / pitch * 8)))
+    around = 32
+    along = max(8, math.ceil(length / pitch * 8))
     return _lathe(name, radius, length, around, along)
 
 

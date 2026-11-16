@@ -13,7 +13,7 @@ def vessel(name="vessel"):
     return s3d.revolve(name, s3d.poly([(0, 0), (12, 0), (16, 30), (14, 30), (10, 3), (0, 3)]))
 
 
-def terrain(two=False, size=5):
+def terrain(two=False, size=5, step=None):
     ground = s3d.box("terrain", 100, 80, 20)
 
     def height(x, y, z):
@@ -22,7 +22,7 @@ def terrain(two=False, size=5):
             dip += np.exp(-((x + 22) ** 2 + y * y) / 180)
         return -dip * np.clip(z / 20, 0, 1)
 
-    return s3d.displace(ground, 12, size, noise=height, direction="+Z")
+    return s3d.displace(ground, 12, size, noise=height, direction="+Z", step=step)
 
 
 def volume(ob):
@@ -78,7 +78,7 @@ class Fill(unittest.TestCase):
 
     def test_dense_terrain(self):
         s3d.facets("auto")
-        ground = terrain(size=4)
+        ground = terrain(size=4, step=1)
         ground.data.calc_loop_triangles()
         self.assertGreater(len(ground.data.loop_triangles), 40000)
         self.closed(s3d.fill("pond", ground, 16))

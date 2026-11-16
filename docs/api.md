@@ -132,12 +132,12 @@ shell(ob, t, open=None)  # Hollow; open named faces, or the flat faces looking "
 ```python
 dent(ob, points, r, depth, *, coords="local")  # Press hollows at points in the mesh's local space; parent: the space the part is in
 blend(ob, *others, r, step=None)  # Fuse others in, creases filled to about radius r on voxels of r / 5; its faces are all blend
-displace(ob, amount, size, noise='perlin', octaves=1, seed=0, direction='normal', fade=None, *, faces=None, coords='local', step=None, refine=True)  # Push the surface out and in by up to amount, features size across: noise callable or perlin cells ridged turbulence; direction normal, radial or "+Z"…; fade=(z0, z1) along its own Z
+displace(ob, amount, size, noise='perlin', octaves=1, seed=0, direction='normal', fade=None, *, faces=None, coords='local', step=None)  # Push the surface out and in by up to amount, features size across: noise callable or perlin cells ridged turbulence; direction normal, radial or "+Z"…; fade=(z0, z1) along its own Z
 bend(ob, angle, axis="+Y", toward="+Z", *, step=None)  # Curl along its own axis toward a perpendicular direction; degrees, groups bend together
 twist(ob, angle, axis="+Y", *, step=None)  # Turn sections about its own axis, right handed; near end fixed, far end turned angle degrees
 taper(ob, s, axis="+Y")  # Scale across its own axis, from 1 at the near end to ratio s > 0 at the far end
 smooth(ob, angle=55)  # Shade each descendant mesh by angle; 0 flat, 180 all smooth
-lay(ob, over, refine=0, reach=None, *, step=None)  # Seat on a surface along own Z, retaining height above own Z=0
+lay(ob, over, reach=None, *, step=None)  # Seat on a surface along own Z, retaining height above own Z=0
 ```
 
 ## Frames and placement
@@ -498,7 +498,7 @@ calls a pure deterministic `f(x, y, z)` with three float64 numpy arrays in the
 part's frame and program units. Return an ndarray of the same shape, finite
 real values in [-1, 1]; invalid results raise. Values multiply amount and fade
 directly, without the named noises' area centring. Size still controls surface
-refinement (about size / 4); coordinates are not divided by size. Keep octaves=1
+refinement (max(size/4, D/128)); coordinates are not divided by size. Keep octaves=1
 and seed=0; compose seeded `s3d.noise` calls inside f for layers and domain warps.
 
 ## Displacement
@@ -514,7 +514,7 @@ strength at distance `size`, with zero slope at either end. Distance is local
 Euclidean distance to boundary segments, not distance along a folded surface.
 Open patch edges are held too; a selection without a boundary has no attenuation.
 Only selected faces are refined. Shared edges gain collinear vertices to keep
-the mesh closed, but unselected faces are not triangulated. `refine=False`
+the mesh closed, but unselected faces are not triangulated. `step=0`
 keeps existing topology. A coarse patch with no interior vertices cannot move.
 This holds a panel's rim, a relief's frame or a liquid's shore; it does not
 preserve thickness or prevent intersections at large amplitudes.
@@ -561,7 +561,7 @@ parameterized parts transfers labels on the operand surfaces, first operand at s
 intersections. Booleans with any unparameterized operand discard labels conservatively.
 Merge fills missing labels with NaN instead of inventing u. Blend/voxel remeshing
 and field reconstruction discard them. New topology with no source has no u.
-Repeated path displacement reads the same construction labels. `refine=False`
+Repeated path displacement reads the same construction labels. `step=0`
 changes existing vertices only, keeping vertex order, faces and attributes.
 
 GLB always exports callable colours on face corners (COLOR_0). `colors="vertex"`
@@ -594,7 +594,7 @@ their local program-unit meaning.
 
 `lay` moves a placed piece along its own Z onto `over`, preserving every point's
 height above its Z=0 plane. A group uses its root frame; a list seats each item.
-`refine` splits edges to at most that length before seating (0 leaves topology);
+`step` splits edges to at most that length before seating (0 leaves topology);
 `reach` bounds base-plane travel (None unbounded). Carrier tessellation uses local
 frames. It refuses self-seating and leaves vertex positions intact on reach failure.
 
@@ -606,7 +606,7 @@ This is invariant under placement and scales with the part, like segments per tu
 axis; actual equally spaced intervals can be shorter after rounding. Boundary
 closure and shared crossings are unchanged. Thin branches or cavities below this
 resolution can disappear: use a larger n to retain them. `displace` refines toward
-`max(size/4, L)`; it retains existing edges even when shorter. `hull` connects
+`max(size/4, D/128, L)`; it retains existing edges even when shorter. `hull` connects
 explicit points without subdivision or simplification, so point count still controls
 its complexity. `blend` retains its fine voxel closing and guards, then collapses
 toward `4 area / (√3 L²)` triangles (at least four), retaining the original mesh if
@@ -718,22 +718,18 @@ callback coordinates, parent-space sites and world-space positions. Choose the
 actual parent surface before snap/lay and preserve the return/prototype-consumption
 contract of at when placing a prototype on multiple frames.
 
-## Resolution density
+## Mesh resolution
 
-`detail(scale)` sets automatic sampling density (default 1); `detail()` reads it.
-`SAND3D_DETAIL` overrides the program and scales explicit resolution numbers too.
-Counts multiply by density; lengths divide by density; chord error divides by
-its square. Dimensions and noise feature sizes stay fixed.
+`displace(..., step=None)` targets max(size/4, D/128), where D is the part's
+largest local box dimension. Positive `step` sets maximum edge length directly;
+`step=0` moves existing vertices only. `bend` and `twist` use at least four
+axial segments, with at most 3 degrees per segment; positive `step` sets axial
+spacing and 0 adds no slices. Fixed `facets(n)` sets angular sampling and bounds
+automatic displacement sampling. `lay(..., step=None)` keeps existing topology;
+positive `step` subdivides before projection. `blend(..., step=None)` uses r/5
+voxel spacing; positive `step` sets it directly. `field(cell=length)` names a
+volumetric grid; `facets(n)` and `rings=n` are counts.
 
-`displace(..., step=None)` separates feature `size` from maximum edge length:
-None keeps size/4 auto refinement, a positive length sets sampling, 0 disables
-refinement (`refine=False` remains accepted). `bend(..., step=None)` and
-`twist(..., step=None)` use the same length vocabulary for axial slices; 0 adds
-no slices. `lay(..., step=length)` accepts the legacy `refine=length` alias.
-`field(cell=length)` names a volumetric grid; `facets(n)` and `rings=n` are counts.
 Resolution costs triangles. Colour is one RGB per face, with no UVs/textures:
 fine colour needs fine faces. Prefer colour to sub-millimetre displaced veins
-or grain at render scale. See [resolution](guides/resolution.md) for scope and
-re-export examples.
-`blend(..., r=radius, step=None)` likewise separates the closing radius from
-voxel sampling: None keeps r/5; a positive step sets voxel length explicitly.
+or grain at render scale. See [resolution](guides/resolution.md).

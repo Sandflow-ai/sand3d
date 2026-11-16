@@ -13,7 +13,7 @@ import sys
 
 from . import _core, _guard
 
-from .assembly import Handle, assembly, attach, empty_scene, export, group, units, facets, detail
+from .assembly import Handle, assembly, attach, empty_scene, export, group, units, facets
 from .edit import (bend, blend, chamfer, copy, cut, delete, dent, displace, fillet, hole, intersect, join, merge,
                    pocket, scale, seat, lay, shell, soften, split, taper, twist)
 from .shade import smooth
@@ -49,7 +49,7 @@ __all__ = [
     # articulation
     "joint", "pose", "seat",
     # assembly
-    "group", "assembly", "attach", "Handle", "export", "empty_scene", "units", "fingerprint", "facets", "detail",
+    "group", "assembly", "attach", "Handle", "export", "empty_scene", "units", "fingerprint", "facets",
 ]
 
 
@@ -116,7 +116,7 @@ def _placed(result, on):
 
 
 for _name in __all__:
-    if _name not in ("units", "empty_scene", "fingerprint", "facets", "detail") and not isinstance(globals()[_name], type):
+    if _name not in ("units", "empty_scene", "fingerprint", "facets") and not isinstance(globals()[_name], type):
         globals()[_name] = _verb(globals()[_name])
 del _name
 

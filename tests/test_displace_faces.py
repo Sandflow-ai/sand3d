@@ -55,7 +55,7 @@ class DisplaceFaces(unittest.TestCase):
         s3d.displace(ob, 0, 4, faces='top')
         before = [tuple(v.co) for v in ob.data.vertices]
         polygons = [tuple(p.vertices) for p in ob.data.polygons]
-        s3d.displace(ob, 2, 4, faces=['top'], refine=False,
+        s3d.displace(ob, 2, 4, faces=['top'], step=0,
                      noise=lambda x,y,z: np.ones_like(x), direction='+Z', fade=(0, 8))
         self.assertEqual(polygons, [tuple(p.vertices) for p in ob.data.polygons])
         for a, v in zip(before, ob.data.vertices):

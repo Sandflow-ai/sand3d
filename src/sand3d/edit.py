@@ -1898,7 +1898,7 @@ def blend(ob, *others, r, step=None):
     to_mm = Matrix.Scale(size, 4)
     to_local = _core.world(ob).inverted()
     r_mm = r * size
-    voxel = _core.resolution_step(r_mm / 5) if step is None else size * _core.resolution_step(_number("blend", "step", step, positive=True), explicit=True)
+    voxel = r_mm / 5 if step is None else size * _number("blend", "step", step, positive=True)
     thinnest = _thinnest([(ob, Matrix.Identity(4))] + [(o, to_local @ _core.world(o)) for o in others], size)
     if thinnest is not None and thinnest[0] < 2 * r_mm * (1 - 1e-9):
         raise ValueError(f"blend: {thinnest[1]!r} is {thinnest[0] / size:.3g} thick, under 2 r = {2 * r:g}: the "
@@ -2223,7 +2223,7 @@ def _displace_border(bm, selection, size):
             for v, w in zip(vertices, weights)}
 
 
-def displace(ob, amount, size, noise="perlin", octaves=1, seed=0, direction="normal", fade=None, *, faces=None, coords="local", refine=True, step=None):
+def displace(ob, amount, size, noise="perlin", octaves=1, seed=0, direction="normal", fade=None, *, faces=None, coords="local", step=None):
     """Push the surface out and in by up to amount, features size across: noise perlin cells ridged
     turbulence or a callable; direction normal, radial or "+Z"…; fade along own Z.
 
@@ -2262,15 +2262,14 @@ def displace(ob, amount, size, noise="perlin", octaves=1, seed=0, direction="nor
     root.
 
     step=None keeps automatic refinement; step > 0 sets the maximum edge length
-    independently of feature size; step=0 keeps existing vertices (refine=False alias).
-    detail scales automatic sampling; SAND3D_DETAIL scales explicit step too.
-    The surface is first refined so that no edge is longer than about size / 4 (past 500 000
-    faces, it raises: give a larger size), then every vertex
+    independently of feature size; step=0 keeps existing vertices.
+    Auto targets max(size / 4, D / 128), D the largest local box dimension (past 500 000
+    faces, it raises: give a larger step), then every vertex
     moves. Faces and edges keep their names, but a face it moved is flat no more: read the
     frames a part needs (`ob.face("top")`) before displacing it.
     Fixed facets(n) bounds refinement by π D / n, D the largest local box dimension;
-    existing fine edges remain. Auto refinement is unchanged.
-    refine=False moves existing vertices only, retaining their order and attributes.
+    existing fine edges remain. Explicit step takes precedence.
+    step=0 moves existing vertices only, retaining their order and attributes.
     faces=None keeps the whole-surface behavior. A name, list of names or face()
     direction restricts displacement and refinement to those faces. Their boundary
     stays fixed, with a smoothstep transition over size in local Euclidean distance.
@@ -2279,11 +2278,7 @@ def displace(ob, amount, size, noise="perlin", octaves=1, seed=0, direction="nor
         step = _number("displace", "step", step)
         if step < 0:
             raise ValueError("displace: step must be nonnegative")
-        if not refine:
-            raise ValueError("displace: use step=0 or refine=False, not both")
-        refine = step != 0
-    if not isinstance(refine, bool):
-        raise TypeError("displace: refine is True or False")
+    refine = step != 0
     _solids("displace", ob)
     amount = _number("displace", "amount", amount)
     size = _number("displace", "size", size, positive=True)
@@ -2325,8 +2320,10 @@ def displace(ob, amount, size, noise="perlin", octaves=1, seed=0, direction="nor
             f[selection] = int(f.index in picked)
     try:
         if refine:
-            refinement_size = 4 * _core.resolution_step(step, explicit=True) if step is not None else _core.resolution_step(size)
-            if _core.FACETS is not None:
+            extent = _span([c for v in bm.verts for c in v.co])
+            diameter = max(hi-lo for lo, hi in zip(*extent))
+            refinement_size = 4 * step if step is not None else max(size, 4 * diameter / 128)
+            if step is None and _core.FACETS is not None:
                 extent = _span([c for v in bm.verts for c in v.co])
                 target = _core.surface_edge([hi-lo for lo, hi in zip(*extent)])
                 refinement_size = max(refinement_size, 4 * target)
@@ -2444,9 +2441,9 @@ def _deform(ob, value, axis, verb, toward=None, step=None):
             # Cut through the faces too, not just their rims. Each new face inherits
             # its parent's names. Fixed planes make the refinement independent of units.
             bmesh.ops.triangulate(bm, faces=list(bm.faces), quad_method="FIXED", ngon_method="EAR_CLIP")
-            pieces = _core.segments(1, abs(value)) if _core.FACETS is not None else _core.resolution_count(48)
+            pieces = _core.segments(1, abs(value)) if _core.FACETS is not None else max(4, math.ceil(abs(value) / 3))
             if step is not None:
-                pieces = max(1, math.ceil(span / _core.resolution_step(step, explicit=True))) if step else 1
+                pieces = max(1, math.ceil(span / step)) if step else 1
             for i in range(1, pieces):
                 bmesh.ops.bisect_plane(bm, geom=list(bm.verts) + list(bm.edges) + list(bm.faces),
                                        dist=span * 1e-8, plane_co=a * (lo + span * i / pieces), plane_no=a)
@@ -2483,7 +2480,7 @@ def bend(ob, angle, axis="+Y", toward="+Z", *, step=None):
     by angle * u / L, where L is the axis extent. Negative u curls the other way;
     angles beyond 180 degrees are allowed. Zero leaves the mesh unchanged.
     Faces keep their maker's names, refined faces their parent's. Refinement cuts
-    through faces at intervals of L / 48 in auto mode; a fixed facet count sets
+    through faces in at least four slices, at most 3 degrees each; a fixed facet count sets
     the pieces by the bend angle. Normals are updated after the edit.
     On a group, its children bend together in its frame, with one shared extent.
     Name, placement and materials stay; read any flat face frames before bending.
@@ -2555,7 +2552,7 @@ def _drop_tessellation_duplicates(bm):
         bpy.data.meshes.remove(probe)
 
 
-def lay(ob, over, refine=0, reach=None, *, step=None):
+def lay(ob, over, reach=None, *, step=None):
     """Seat a placed part on a surface: every point keeps its height above the part's own
     Z = 0 plane, measured from the surface of `over` under it.
 
@@ -2564,7 +2561,7 @@ def lay(ob, over, refine=0, reach=None, *, step=None):
     stands as proud. Points move along the part's own Z only, so nothing folds; a face
     stays flat between its points, so give a long piece points along its length. A group
     is laid in its own frame.
-    refine subdivides faces before seating until every edge is at most that length;
+    A positive step subdivides faces before seating until every edge is at most that length;
     0 leaves the topology. reach bounds the travel from the base plane to the surface;
     None has no limit. Projection and tessellation use the parts' own frames, so a
     common translation and rotation do not change the result in the piece's frame.
@@ -2573,15 +2570,11 @@ def lay(ob, over, refine=0, reach=None, *, step=None):
     from ._surface import meshes
     if isinstance(ob, (list, tuple)):
         for item in ob:
-            lay(item, over, refine=refine, reach=reach, step=step)
+            lay(item, over, reach=reach, step=step)
         return ob
-    if step is not None:
-        if refine != 0:
-            raise ValueError("lay: use step or refine, not both")
-        refine = step
-    refine = _core.resolution_step(_number('lay', 'step', refine), explicit=True)
-    if refine < 0:
-        raise ValueError('lay: refine must be nonnegative')
+    step = 0 if step is None else _number('lay', 'step', step)
+    if step < 0:
+        raise ValueError('lay: step must be nonnegative')
     if reach is not None:
         reach = _number('lay', 'reach', reach)
         if reach < 0:
@@ -2593,7 +2586,7 @@ def lay(ob, over, refine=0, reach=None, *, step=None):
     root = ob.root if isinstance(ob, Handle) else ob
     if any(part in carriers for part, _ in parts):
         raise ValueError("lay: a part cannot be laid on itself")
-    if refine:
+    if step:
         for part, matrix in parts:
             bm = bmesh.new()
             bm.from_mesh(part.data)
@@ -2601,11 +2594,11 @@ def lay(ob, over, refine=0, reach=None, *, step=None):
                 bm.transform(matrix)
                 bmesh.ops.triangulate(bm, faces=list(bm.faces), quad_method='FIXED', ngon_method='EAR_CLIP')
                 while True:
-                    if all(e.calc_length() <= refine*(1+1e-6) for e in bm.edges):
+                    if all(e.calc_length() <= step*(1+1e-6) for e in bm.edges):
                         break
                     edges = list(bm.edges)
                     if len(bm.faces)+8*len(edges) > 500000:
-                        raise ValueError(f'lay: refine on {_core.given_name(part)!r} would exceed 500000 faces')
+                        raise ValueError(f'lay: step on {_core.given_name(part)!r} would exceed 500000 faces')
                     bmesh.ops.subdivide_edges(bm, edges=edges, cuts=1, use_grid_fill=True)
                     bmesh.ops.triangulate(bm, faces=list(bm.faces), quad_method='FIXED', ngon_method='EAR_CLIP')
                 bm.transform(matrix.inverted())

@@ -20,7 +20,7 @@
   surface under it; `snap(ground, [(x, y, above)], direction="-Z")` finds the
   ground under a chosen spot, and `Frame(hit.origin)` keeps an upright post upright.
 
-Make terrain as a supported solid and displace its top. displace accepts named or callable noise and direction="+Z"; amount is displacement, size is feature scale, refine controls added topology. noise accepts scalar or broadcastable arrays, values in [-1,1]; ridged/turbulence transform gradient noise. snap(targets, points, direction="-Z") finds contact points in their shared frame. lay(ob, over, refine=0, reach=None) seats a placed piece along its own Z while preserving height above local Z=0. Derive vegetation and rock contact from terrain rather than guessing world Z. Give composition ground enough area to support the subject; avoid hidden floating islands.
+Make terrain as a supported solid and displace its top. displace accepts named or callable noise and direction="+Z"; amount is displacement, size is feature scale, step controls added topology. noise accepts scalar or broadcastable arrays, values in [-1,1]; ridged/turbulence transform gradient noise. snap(targets, points, direction="-Z") finds contact points in their shared frame. lay(ob, over, step=0, reach=None) seats a placed piece along its own Z while preserving height above local Z=0. Derive vegetation and rock contact from terrain rather than guessing world Z. Give composition ground enough area to support the subject; avoid hidden floating islands.
 
 ## Select sites once, place through one helper
 
@@ -54,7 +54,7 @@ actual parent surface before snap/lay and preserve the return/prototype-consumpt
 contract of at when placing a prototype on multiple frames.
 
 Resolution costs triangles: use `step` to separate displacement feature size
-from mesh sampling, and `detail` for automatic density (see `resolution`).
+from mesh sampling (see `resolution`).
 Colour callbacks assign one RGB per face without UVs or textures, so fine colour
 patterns need fine faces. Prefer colour for thin veins or grain over displaced
 relief that is sub-millimetre at render scale.
