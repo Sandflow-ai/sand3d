@@ -1,5 +1,6 @@
 """The assembly layer: groups, handles and their anchors, details, export, the unit."""
 import os
+import math
 
 import bpy
 
@@ -200,6 +201,7 @@ def empty_scene():
     if built:
         _core.UNIT, _core.MM = "mm", _core.UNITS["mm"]
         _core.FACETS = None
+        _core.DETAIL = 1.0
         _core.FACET_SMOOTH = False
         _core.FACET_CONFIGURED = False
     _core.settled = False
@@ -270,7 +272,7 @@ def facets(n=None, smooth=_FACET_DEFAULT):
             return "auto" if _core.FACETS is None else _core.FACETS
         value = None
     elif isinstance(n, int) and not isinstance(n, bool) and n >= 3:
-        value = n
+        value = _core.resolution_count(n, explicit=True, minimum=3)
     else:
         raise ValueError(f'facets: {n!r} is neither a whole number from 3 nor "auto"')
     if smooth != _core.FACET_SMOOTH and _core.FACET_CONFIGURED:
@@ -282,3 +284,19 @@ def facets(n=None, smooth=_FACET_DEFAULT):
     result = _FacetAuto(n) if isinstance(n, str) else _FacetCount(n)
     result.previous = previous
     return result
+
+
+def detail(scale=None):
+    """Set automatic sampling density (1 by default); positive finite scale.
+
+    Half density doubles lengths and halves counts. SAND3D_DETAIL overrides this
+    setting and scales explicit resolution numbers too, never feature dimensions.
+    Existing meshes are unchanged. empty_scene resets this with the other settings.
+    """
+    if scale is None:
+        return _core.detail_scale()
+    value = float(scale)
+    if isinstance(scale, bool) or not math.isfinite(value) or value <= 0:
+        raise ValueError("detail: scale must be positive and finite")
+    _core.DETAIL = value
+    return _core.detail_scale()

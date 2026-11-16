@@ -1867,7 +1867,7 @@ def _thinnest(parts, size):
     return found
 
 
-def blend(ob, *others, r):
+def blend(ob, *others, r, step=None):
     """Fuse others in, creases filled to about radius r on voxels of r / 5; its faces are all blend.
 
     `ob` with `others` fused in, and the creases where surfaces meet — between the parts, or
@@ -1898,7 +1898,7 @@ def blend(ob, *others, r):
     to_mm = Matrix.Scale(size, 4)
     to_local = _core.world(ob).inverted()
     r_mm = r * size
-    voxel = r_mm / 5
+    voxel = _core.resolution_step(r_mm / 5) if step is None else size * _core.resolution_step(_number("blend", "step", step, positive=True), explicit=True)
     thinnest = _thinnest([(ob, Matrix.Identity(4))] + [(o, to_local @ _core.world(o)) for o in others], size)
     if thinnest is not None and thinnest[0] < 2 * r_mm * (1 - 1e-9):
         raise ValueError(f"blend: {thinnest[1]!r} is {thinnest[0] / size:.3g} thick, under 2 r = {2 * r:g}: the "
@@ -2223,7 +2223,7 @@ def _displace_border(bm, selection, size):
             for v, w in zip(vertices, weights)}
 
 
-def displace(ob, amount, size, noise="perlin", octaves=1, seed=0, direction="normal", fade=None, *, faces=None, coords="local", refine=True):
+def displace(ob, amount, size, noise="perlin", octaves=1, seed=0, direction="normal", fade=None, *, faces=None, coords="local", refine=True, step=None):
     """Push the surface out and in by up to amount, features size across: noise perlin cells ridged
     turbulence or a callable; direction normal, radial or "+Z"…; fade along own Z.
 
@@ -2261,6 +2261,9 @@ def displace(ob, amount, size, noise="perlin", octaves=1, seed=0, direction="nor
     between, 1 beyond z0 and 0 beyond z1, either above the other — a trunk rough above its
     root.
 
+    step=None keeps automatic refinement; step > 0 sets the maximum edge length
+    independently of feature size; step=0 keeps existing vertices (refine=False alias).
+    detail scales automatic sampling; SAND3D_DETAIL scales explicit step too.
     The surface is first refined so that no edge is longer than about size / 4 (past 500 000
     faces, it raises: give a larger size), then every vertex
     moves. Faces and edges keep their names, but a face it moved is flat no more: read the
@@ -2272,6 +2275,13 @@ def displace(ob, amount, size, noise="perlin", octaves=1, seed=0, direction="nor
     direction restricts displacement and refinement to those faces. Their boundary
     stays fixed, with a smoothstep transition over size in local Euclidean distance.
     Shared edges gain collinear vertices, but unselected faces are not triangulated."""
+    if step is not None:
+        step = _number("displace", "step", step)
+        if step < 0:
+            raise ValueError("displace: step must be nonnegative")
+        if not refine:
+            raise ValueError("displace: use step=0 or refine=False, not both")
+        refine = step != 0
     if not isinstance(refine, bool):
         raise TypeError("displace: refine is True or False")
     _solids("displace", ob)
@@ -2315,11 +2325,11 @@ def displace(ob, amount, size, noise="perlin", octaves=1, seed=0, direction="nor
             f[selection] = int(f.index in picked)
     try:
         if refine:
-            refinement_size = size
+            refinement_size = 4 * _core.resolution_step(step, explicit=True) if step is not None else _core.resolution_step(size)
             if _core.FACETS is not None:
                 extent = _span([c for v in bm.verts for c in v.co])
                 target = _core.surface_edge([hi-lo for lo, hi in zip(*extent)])
-                refinement_size = max(size, 4 * target)
+                refinement_size = max(refinement_size, 4 * target)
             _refine(bm, refinement_size, _core.given_name(ob), selection)
     except ValueError:
         bm.free()
@@ -2403,7 +2413,11 @@ def _deform_parts(ob, verb):
     return parts
 
 
-def _deform(ob, value, axis, verb, toward=None):
+def _deform(ob, value, axis, verb, toward=None, step=None):
+    if step is not None:
+        step = _number(verb, "step", step)
+        if step < 0:
+            raise ValueError(f"{verb}: step must be nonnegative")
     a = _deform_axis(verb, axis)
     b = _deform_axis(verb, toward) if verb == "bend" else None
     if b is not None and a.dot(b):
@@ -2430,7 +2444,9 @@ def _deform(ob, value, axis, verb, toward=None):
             # Cut through the faces too, not just their rims. Each new face inherits
             # its parent's names. Fixed planes make the refinement independent of units.
             bmesh.ops.triangulate(bm, faces=list(bm.faces), quad_method="FIXED", ngon_method="EAR_CLIP")
-            pieces = _core.segments(1, abs(value)) if _core.FACETS is not None else 48
+            pieces = _core.segments(1, abs(value)) if _core.FACETS is not None else _core.resolution_count(48)
+            if step is not None:
+                pieces = max(1, math.ceil(span / _core.resolution_step(step, explicit=True))) if step else 1
             for i in range(1, pieces):
                 bmesh.ops.bisect_plane(bm, geom=list(bm.verts) + list(bm.edges) + list(bm.faces),
                                        dist=span * 1e-8, plane_co=a * (lo + span * i / pieces), plane_no=a)
@@ -2460,7 +2476,7 @@ def _deform(ob, value, axis, verb, toward=None):
     return ob
 
 
-def bend(ob, angle, axis="+Y", toward="+Z"):
+def bend(ob, angle, axis="+Y", toward="+Z", *, step=None):
     """Curl along its own axis toward a perpendicular direction, angle in degrees.
 
     The neutral axis passes through the origin; a point at signed distance u turns
@@ -2472,16 +2488,16 @@ def bend(ob, angle, axis="+Y", toward="+Z"):
     On a group, its children bend together in its frame, with one shared extent.
     Name, placement and materials stay; read any flat face frames before bending.
     """
-    return _deform(ob, angle, axis, "bend", toward)
+    return _deform(ob, angle, axis, "bend", toward, step=step)
 
 
-def twist(ob, angle, axis="+Y"):
+def twist(ob, angle, axis="+Y", *, step=None):
     """Turn sections about its own axis, right handed, angle in degrees at the far end.
 
     The end at the least signed coordinate stays fixed. Faces keep their maker's
     names; refinement and groups work as in bend. Zero leaves the mesh unchanged.
     """
-    return _deform(ob, angle, axis, "twist")
+    return _deform(ob, angle, axis, "twist", step=step)
 
 
 def taper(ob, s, axis="+Y"):
@@ -2539,7 +2555,7 @@ def _drop_tessellation_duplicates(bm):
         bpy.data.meshes.remove(probe)
 
 
-def lay(ob, over, refine=0, reach=None):
+def lay(ob, over, refine=0, reach=None, *, step=None):
     """Seat a placed part on a surface: every point keeps its height above the part's own
     Z = 0 plane, measured from the surface of `over` under it.
 
@@ -2557,9 +2573,13 @@ def lay(ob, over, refine=0, reach=None):
     from ._surface import meshes
     if isinstance(ob, (list, tuple)):
         for item in ob:
-            lay(item, over, refine=refine, reach=reach)
+            lay(item, over, refine=refine, reach=reach, step=step)
         return ob
-    refine = _number('lay', 'refine', refine)
+    if step is not None:
+        if refine != 0:
+            raise ValueError("lay: use step or refine, not both")
+        refine = step
+    refine = _core.resolution_step(_number('lay', 'step', refine), explicit=True)
     if refine < 0:
         raise ValueError('lay: refine must be nonnegative')
     if reach is not None:

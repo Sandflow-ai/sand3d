@@ -714,3 +714,11 @@ def retained_fill():
     pot = s3d.shell(s3d.box("pot", 40, 30, 30), 2, open="top")
     s3d.fill("contents", pot, 24)
     s3d.fill("sloped", pot, s3d.local(pot, z=15, ry=8), clearance=0)
+
+
+@case("detail")
+def detail_sampling():
+    s3d.detail(.5)
+    ob = s3d.sphere("detail", 20)
+    s3d.detail(1)
+    return ob

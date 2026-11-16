@@ -717,3 +717,23 @@ for aligned axes. Offsets after on= run along that frame's axes. Do not mix loca
 callback coordinates, parent-space sites and world-space positions. Choose the
 actual parent surface before snap/lay and preserve the return/prototype-consumption
 contract of at when placing a prototype on multiple frames.
+
+## Resolution density
+
+`detail(scale)` sets automatic sampling density (default 1); `detail()` reads it.
+`SAND3D_DETAIL` overrides the program and scales explicit resolution numbers too.
+Counts multiply by density; lengths divide by density; chord error divides by
+its square. Dimensions and noise feature sizes stay fixed.
+
+`displace(..., step=None)` separates feature `size` from maximum edge length:
+None keeps size/4 auto refinement, a positive length sets sampling, 0 disables
+refinement (`refine=False` remains accepted). `bend(..., step=None)` and
+`twist(..., step=None)` use the same length vocabulary for axial slices; 0 adds
+no slices. `lay(..., step=length)` accepts the legacy `refine=length` alias.
+`field(cell=length)` names a volumetric grid; `facets(n)` and `rings=n` are counts.
+Resolution costs triangles. Colour is one RGB per face, with no UVs/textures:
+fine colour needs fine faces. Prefer colour to sub-millimetre displaced veins
+or grain at render scale. See [resolution](guides/resolution.md) for scope and
+re-export examples.
+`blend(..., r=radius, step=None)` likewise separates the closing radius from
+voxel sampling: None keeps r/5; a positive step sets voxel length explicitly.
