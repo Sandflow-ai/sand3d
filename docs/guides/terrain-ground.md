@@ -1,4 +1,4 @@
-# Terrain, strewn stones and leaves, contact, sand and dunes
+# Terrain, strewn stones, leaf litter, gravel, snow, contact, sand and dunes
 
 - **Terrain** is a supported solid with its top displaced, wide enough to carry the subject; no hidden
   floating islands.
@@ -20,6 +20,48 @@
   `lay(at(leaf, on=site), ground)` seats a flat piece on the surface under it;
   `snap(ground, [(x, y, above)], direction="-Z")` finds the ground under a chosen spot, and
   `Frame(hit.origin)` keeps an upright post upright.
+
+## Leaf litter, gravel and snow
+
+Covers belong to the ground: a dark ground colour under them reads as depth, so fill the view, not
+every gap.
+
+- **Leaf litter**: one-blade `tufts` laid flat, 2 triangles a leaf: width about half the length, a
+  `direction` field tangent to the ground with a random azimuth and a slight lift. Dense: a few
+  `scatter` calls of 4096 on dark soil (three gave about 5,500 leaves on 0.64 m², 14k triangles), plus a few
+  twigs at their site's height (`cylinder` turned `ry=90`). Sparse: a few dozen leaves. One mesh,
+  2–3 autumn tones by noise.
+
+  ```python
+  import numpy as np
+  def flat(x, y, z, n):                    # random azimuth on the surface, slightly lifted
+      a = 6 * np.pi * (.5 + .5 * s3d.noise(x / 9.7, y / 9.7, 0, seed=1))
+      t = np.stack([np.cos(a), np.sin(a), 0 * a], 1)
+      n = np.asarray(n).T
+      return t - np.sum(t * n, 1)[:, None] * n + .12 * n
+  sites = s3d.Frames(f for f in s3d.scatter(4096, ground, seed=10) if f.normal.z > .7)
+  leaves = s3d.tufts("leaves", sites, height=42, width=24, blades=1, lean=12, direction=flat, seed=20)
+  s3d.material(leaves, "leaf", color=lambda x, y, z, n: np.where(
+      (s3d.noise(x / 23, y / 23, 0, seed=2) > 0)[:, None], [.70, .45, .12], [.42, .20, .06]))
+  ```
+- **Gravel**: the bed is the ground with fine relief (features about three grains wide) and a dark
+  per-face speckle, plus pebbles: each a `hull` of 8 surface points (≈ 12 triangles) seated by
+  `at(p, on=site.offset(-d * .15))`, one material on their group. Pebbles under about 1/25 of the
+  patch's width vanish at render size: 450 of 30–60 mm on 800 mm cost 25k with the bed. Sparse: 20–30
+  larger pebbles on soil.
+- **Snow**: a blanket is the ground in `snow`, not a separate layer: drifts from a 0..1 callable
+  (`perlin` seldom reaches its `amount`: two features across 800 mm rose at most 10 of 45), soil
+  colour kept on the sides below the snow line, slopes tinted blue-grey by normal (flat white hides
+  relief). Snow on objects: colour by `n[2]`. A dusting is colour only: soil mixed toward white by
+  noise × `n[2]`⁴; the face size sets its grain.
+
+  ```python
+  import numpy as np
+  drift = lambda x, y, z: (.5 + .5 * s3d.noise(x / 160, y / 160, 0, seed=0)) ** 2   # 0..1 mounds
+  s3d.displace(ground, 110, 160, noise=drift, faces="top", direction="+Z", step=16)
+  s3d.material(ground, "snow", color=lambda x, y, z, n: np.where((z < 40)[:, None], [.25, .18, .11],
+               [.55, .62, .74] + np.clip(n[2], 0, 1)[:, None] ** 4 * [.35, .30, .21]))   # soil sides
+  ```
 
 ## Sand and dunes
 

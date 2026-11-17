@@ -1,4 +1,4 @@
-# Branches, foliage, crown cost, grass, lawns and fur
+# Branches, foliage, crown cost, grass, lawns, moss and fur
 
 - **Trunks and branches** are tapering `wire` or `sweep` along `branches` paths; its tips carry buds.
 - **Foliage**: vary scale, orientation and clusters with derived seeds. Prefer simple broad leaves
@@ -6,7 +6,7 @@
 - **Crown cost** = leaf count × faces per leaf, plus twigs: thousands of finely tessellated leaves
   dominate the budget.
 
-## Grass, lawns and fur
+## Grass, lawns, moss and fur
 
 A lawn is a supported ground with green per-face colour, plus `tufts` for its silhouette. Sample the
 ground, keep upward sites, pass those Frames to `tufts`. Start at 500–2,000 tufts/m², 3–5 blades a
@@ -21,6 +21,24 @@ s3d.material(ground, "grass", color="#1f3d0a")
 sites = s3d.Frames(f for f in s3d.scatter(3500, ground, seed=7) if f.normal.z > .9)[:1000]
 grass = s3d.tufts("grass", sites, height=45, width=3, blades=5, lean=25, seed=8)
 s3d.material(grass, "grass", color="#2e590d")
+```
+
+Moss carpets the ground itself: cushions a few mm high from `displace` with features about a tenth
+of the patch, two greens by noise, and a short pile (`tufts` height ≈ 7 mm, 3 blades, lean 45) for its
+fuzzy edge: 4096 sites on 0.64 m² cost about 25k triangles. Patches: one 0..1 noise mask drives the
+cushions, the colour and which sites keep pile, soil between them; a full carpet drops the mask.
+
+```python
+import numpy as np
+patch = lambda x, y: np.clip((s3d.noise(x / 160, y / 160, 0, seed=5) - .2) * 4, 0, 1)   # 0..1 mask
+s3d.displace(ground, 10, 60, faces="top", direction="+Z", step=14,
+             noise=lambda x, y, z: patch(x, y) * (.6 + .4 * s3d.noise(x / 30, y / 30, 0, seed=6)))
+s3d.material(ground, "soil", color=lambda x, y, z, n:
+             np.where((patch(x, y) > .3)[:, None], [.26, .40, .08], [.22, .16, .10]))
+keep = lambda f: f.normal.z > .85 and patch(f.origin.x, f.origin.y) > .3
+pile = s3d.tufts("moss", s3d.Frames(f for f in s3d.scatter(4096, ground, seed=3) if keep(f)),
+                 height=7, width=3, blades=3, lean=45, seed=4)
+s3d.material(pile, "moss", color="#5a6e1c")
 ```
 
 Textile nap: scatter on the fabric carrier, keep its visible side, then short wide cones for clumps or
