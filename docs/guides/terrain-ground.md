@@ -58,3 +58,32 @@ from mesh sampling (see `resolution`).
 Colour callbacks assign one RGB per face without UVs or textures, so fine colour
 patterns need fine faces. Prefer colour for thin veins or grain over displaced
 relief that is sub-millimetre at render scale.
+
+## Sand and dunes
+
+Start with a supported solid. Displace top faces with low-frequency noise for
+broad relief; keep the underside flat. Wind makes asymmetric dunes: a long gentle
+windward slope and a short slip face near 32° (rise / run ≈ 0.625). A symmetric
+sine gives ripples, not that dune profile. Keep small ripple relief separate from
+the large dune field. `waves()` is a general XY height field, not water-only:
+pass it as `noise` to `displace(..., faces="top", direction="+Z")`.
+
+```python
+import numpy as np
+sand = s3d.box("sand", 3000, 2000, 100)
+s3d.displace(sand, 15, 500, seed=4, faces="top", direction="+Z", step=80)
+def dune(x, y, z):
+    q = ((x + 800) % 1600) / 1600
+    return np.where(q < .8, q / .8, (1-q) / .2)
+s3d.displace(sand, 200, 80, noise=dune, faces="top", direction="+Z", step=80)
+s3d.displace(sand, 3, 120, noise=s3d.waves(120, direction=0),
+             faces="top", direction="+Z", step=40)
+s3d.material(sand, "sand", color=lambda x,y,z,n:
+             (.82,.68,.43) if n[2] > .95 and z > 220 else (.64,.49,.28))
+```
+
+The 200-high dune's 320-long slip face gives about 32° before noise and ripples;
+selected-face boundaries taper displacement to zero. Normal-based colour marks
+flatter crests versus slopes; combine normal and height rather than colouring
+all upward faces as crests. `sand` supplies the rough material response; avoid
+modelling individual grains. Budget ripple sampling across the whole ground.

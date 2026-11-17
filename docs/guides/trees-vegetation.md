@@ -40,3 +40,35 @@ from mesh sampling (see `resolution`).
 Colour callbacks assign one RGB per face without UVs or textures, so fine colour
 patterns need fine faces. Prefer colour for thin veins or grain over displaced
 relief that is sub-millimetre at render scale.
+
+## Grass, lawns and fur
+
+A lawn is a supported ground with green per-face colour, plus `tufts` for its
+silhouette. Do not build one object per tuft. Sample the ground, keep upward sites,
+and pass those Frames directly to `tufts`; every blade roots at its site.
+Start at 500–2,000 tufts/m², 3–5 blades/tuft; count the accepted sites. With mm
+units, area in m² is area_mm² / 1,000,000. Use green ground for distant coverage,
+not enough blades to hide every gap. `scatter` returns at most 4096 candidate
+sites per call; filter before building and use grid + snap for larger lawns.
+
+Triangles = sites × blades × 2 (`shape="blade"`), or × 6 (`"cone"`). A 10 m² lawn
+at 1,000 tufts/m² and 5 blades costs 100,000 triangles before ground and props;
+reserve those in a 150k–300k whole-asset budget. Cones cost three times as much.
+Neither shape needs a subdivision step. Width is widest at mid-height, tips and
+roots are pointed. All roots coincide at each site; no random root offsets can
+float above a curved carrier. Height, width and lean callbacks vary by site;
+`direction(x,y,z,n)` combs in the sites' space, including tangent to the carrier.
+
+```python
+ground = s3d.box("ground", 1000, 1000, 50)
+s3d.material(ground, "grass", color=lambda x,y,z,n: (.12,.24,.04))
+sites = s3d.Frames(f for f in s3d.scatter(3500, ground, seed=7) if f.normal.z > .9)[:1000]
+grass = s3d.tufts("grass", sites, height=45, width=3, blades=5, lean=25, seed=8)
+s3d.material(grass, "grass", color=lambda x,y,z,n: (.18,.35,.05))
+```
+
+For textile nap, scatter on the fabric carrier, filter its visible side, then
+use short wide cones for clumps or thin blades for bristles. Root them on the
+carrier and keep it visible between clumps. Use a tangent `direction` field to
+comb fur; the default site normal gives standing pile. Add the carrier and tufts
+to one group after querying: their frames must share a parent space.
