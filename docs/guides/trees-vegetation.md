@@ -29,3 +29,14 @@ the default site normal gives standing pile. Animal fur: dense short thin blades
 along the body on a matte material (`plastic`, roughness ≈ .85); cones read as scales, and `fabric`'s
 white sheen greys dark fur. Group carrier and tufts after querying: their frames share
 one parent space.
+
+```python
+import numpy as np
+def comb(x, y, z, n):                    # toward -X, laid on the surface, slightly lifted
+    n = np.asarray(n).T                  # (N, 3)
+    t = np.array([-1.0, 0, -.25])
+    return t - (n @ t)[:, None] * n + .3 * n
+sites = s3d.Frames(f for f in s3d.scatter(4096, body, seed=2) if f.normal.z > -.5)
+fur = s3d.tufts("fur", sites, height=34, width=6, blades=7, lean=14, direction=comb, seed=6)
+s3d.material(fur, "plastic", color="#6b4423", roughness=.85)
+```
