@@ -231,7 +231,11 @@ def _material(tag, made):
     rgba = _linear(v["color"])
     for socket, value in (("Base Color", rgba), ("Roughness", v["roughness"]), ("Metallic", v["metallic"]),
                           ("IOR", v["ior"]), ("Alpha", v["opacity"]), ("Transmission Weight", v["transmission"]),
-                          ("Coat Weight", v["coat"]), ("Sheen Weight", v["sheen"]),
+                          ("Coat Weight", v["coat"]),
+                          # Cycles scales the sheen by weight times tint; glTF's exporter writes the
+                          # tint alone as KHR_materials_sheen's colour. The strength goes in the tint,
+                          # or a 0.6 fabric would leave as a full white sheen over its colour.
+                          ("Sheen Weight", 1.0 if v["sheen"] else 0.0), ("Sheen Tint", (v["sheen"],) * 3 + (1.0,)),
                           ("Emission Color", rgba), ("Emission Strength", v["emission"])):
         bsdf.inputs[socket].default_value = value
     medium = v["absorb_distance"] > 0 or v["scatter_distance"] > 0

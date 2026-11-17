@@ -68,6 +68,23 @@ class Presets(unittest.TestCase):
         listed = first.split(":", 1)[1].split(";")[0].split()
         self.assertEqual(listed, list(materials.PRESETS))
 
+    def test_sheen_leaves_with_its_strength(self):
+        """A fabric's 0.6 sheen reaches the GLB as 0.6, not as the exporter's full white sheen."""
+        for kind in ("fabric", "velvet"):
+            with self.subTest(kind=kind):
+                s3d.empty_scene()
+                cloth = s3d.material(s3d.box("cloth", 10, 10, 2), kind, color="#81452e")
+                strength = materials.look(cloth[materials.TAG])["sheen"]
+                inputs = bsdf(cloth)
+                self.assertAlmostEqual(inputs["Sheen Weight"].default_value * inputs["Sheen Tint"].default_value[0],
+                                       strength)
+                sheen = export(cloth)[0]["materials"][0]["extensions"]["KHR_materials_sheen"]
+                for c in sheen["sheenColorFactor"]:
+                    self.assertAlmostEqual(c, strength, places=6)
+        s3d.empty_scene()
+        bare = s3d.material(s3d.box("bare", 10, 10, 2), "plastic")
+        self.assertNotIn("KHR_materials_sheen", export(bare)[0]["materials"][0].get("extensions", {}))
+
     def test_every_preset_builds(self):
         for i, kind in enumerate(materials.PRESETS):
             s3d.material(s3d.at(s3d.box(kind, 5, 5, 5), x=10 * i), kind)
