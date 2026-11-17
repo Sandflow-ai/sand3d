@@ -774,3 +774,10 @@ returning (N,) for lengths/lean, (N,3) for directions. Use pure callbacks.
 6. Total = len(sites) × blades × (2 or 6), independent of facets. Each piece has
 a root vertex on the site, including tangent growth; keep sites on the carrier.
 Material and per-face colour work on the result. Empty sites give an empty mesh.
+
+Surface queries accept groups: `snap(group, probes)` and `scatter(n, group)`
+read all mesh descendants in the group's parent space, including nested placements.
+Lists keep each operand's parent space: operands must share a coordinate space.
+Overlapping parts retain interior surfaces; join first to sample a union.
+Empty groups raise a named error. `group.face(...)` raises: use
+`bbox(group, "+Z")` for an envelope frame, or a part's `.face(...)`.

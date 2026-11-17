@@ -201,6 +201,9 @@ def face(ob, which):
     largest flat group of faces with that name — or, given a direction ("+Z", "-X"),
     of the face furthest that way. Its origin is the parent's origin projected onto
     the face's plane, as CadQuery places a workplane."""
+    if ob.type != "MESH":
+        raise ValueError(f"face: {_core.given_name(ob)!r} is a group, not a solid: "
+                         'use bbox(group, "+Z") or a part face')
     me = ob.data
     polys = list(me.polygons)
     d = _DIRECTION.match(which)
@@ -950,21 +953,40 @@ def along(path, pitch=None, count=None, spin=0, span=(0, 1)):
     return out
 
 
+def _surface_parts(targets, verb):
+    """Meshes keep their parent space; groups use the group's parent space."""
+    from .assembly import Handle
+    from ._surface import meshes
+    roots = targets if isinstance(targets, (list, tuple)) else [targets]
+    out = []
+    for root in roots:
+        if isinstance(root, Handle):
+            root = root.root
+        if not isinstance(root, bpy.types.Object):
+            raise ValueError(f"{verb}: give a mesh part, group or list of them")
+        if root.type == 'MESH':
+            out.append((root, root.matrix_basis))
+        else:
+            parent = _core.world(root.parent) if root.parent else Matrix.Identity(4)
+            out.extend((ob, parent.inverted() @ _core.world(ob)) for ob in meshes(root))
+    if not out:
+        raise ValueError(f"{verb}: group or list has no mesh descendants with surface area")
+    return out
+
+
 def _surface_candidates(parts, rng):
     """Area-weighted triangles in each mesh's parent space, as with snap."""
     triangles, cumulative, area = [], [], 0.0
-    for ob in parts:
-        if not isinstance(ob, bpy.types.Object) or ob.type != "MESH":
-            raise ValueError("scatter: give a mesh part or a list of mesh parts")
+    for ob, matrix in _surface_parts(parts, "scatter"):
         bm = bmesh.new()
         try:
             bm.from_mesh(ob.data)
-            bm.transform(ob.matrix_basis)
+            bm.transform(matrix)
             if not bm.faces or any(not e.is_manifold for e in bm.edges):
                 raise ValueError("scatter: surface parts must be closed manifold meshes")
             # Preserve the solid's winding (including cavity walls); a reflected
             # placement reverses handedness, so reverse its faces once.
-            if ob.matrix_basis.to_3x3().determinant() < 0:
+            if matrix.to_3x3().determinant() < 0:
                 bmesh.ops.reverse_faces(bm, faces=list(bm.faces))
             # Equal quad diagonals must not choose a different split when the
             # program changes units and float32 rounding breaks the tie.
@@ -1082,7 +1104,7 @@ def snap(targets, points, direction=None):
     points out of it. Points a line misses are dropped."""
     ray = None if direction is None else _ray(direction)
     size = _core.in_mm(1.0)   # Blender's BVH pads its boxes in its own units, which breaks ties: search in mm
-    trees = [_core.mm_tree(ob, ob.matrix_basis) for ob in (targets if isinstance(targets, (list, tuple)) else [targets])]
+    trees = [_core.mm_tree(ob, matrix) for ob, matrix in _surface_parts(targets, "snap")]
     out = []
     for p in points:
         p = Vector(p.origin if isinstance(p, Frame) else p) * size

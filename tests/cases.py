@@ -721,3 +721,10 @@ def rooted_tufts():
     sites = s3d.grid(3, 2, 10, 10)
     s3d.tufts("grass", sites, 8, 1, seed=7)
     return s3d.tufts("fur", sites.move(z=12), 5, 2, direction=(1, 0, .2), shape="cone", seed=3)
+
+
+@case("snap", "scatter")
+def grouped_surfaces():
+    child = s3d.at(s3d.group("child", s3d.box("pad", 12, 10, 3)), x=15)
+    root = s3d.at(s3d.group("root", child), rz=35, x=8)
+    return [s3d.scatter(12, root, seed=9), s3d.snap(root, [(20, 10, 30)], direction="-Z")]

@@ -78,6 +78,7 @@
   "program:chair.chair": "c85b1f4ccb835a3a",
   "program:gate.gate": "876579fdcab50a89",
   "program:pond.pond": "1d2b46b1f7fe6fb6",
-  "case:rooted_tufts": "96e5600b4f06ceae"
+  "case:rooted_tufts": "96e5600b4f06ceae",
+  "case:grouped_surfaces": "ee266d5220e16c27"
  }
 }
