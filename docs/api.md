@@ -107,6 +107,12 @@ torus(name, d, d_wire)  # Ring about Z, on Z = 0
 dome(name, d, h)  # Cap on Z = 0
 ```
 
+`poly` and `spline(points, closed=True)` make planar profiles, not 3D paths.
+`wire` takes 3D points or a path: `spline(points)` (open),
+`spline(points, loop=True)` (closed). Build the spline and wire inside the same
+`facets(...)` context. More rings cannot repair self-crossing: reduce diameter
+or soften curvature. Sweep and loft caps are named `start`/`end`, not `bottom`/`top`.
+
 ## Boolean and mesh edits
 
 ```python
@@ -142,6 +148,10 @@ lay(ob, over, reach=None, *, step=None)  # Seat on a surface along own Z, retain
 
 ## Frames and placement
 
+`Frame.point(x,y,z)` returns a Vector: no `.origin` or `.turn`.
+`Frame.move(x,y,z)` returns a Frame.
+
+
 ```python
 # frames, placement
 Frame(origin=(0, 0, 0), normal=(0, 0, 1), up=None)  # A place to build on
@@ -166,7 +176,7 @@ branches(length, d, levels=3, children=3, attach=(0.45, 0.9), angle=45, azimuth=
 Frames.jitter(rx=0, ry=0, rz=0, x=0, y=0, z=0, seed=0)  # Random turns and moves along own axes, bounded and bell-shaped
 vary(value, spread, n, seed=0)  # Values within spread of value, most near it
 scatter(n, size, seed=0, surface=False, on=None)  # size: ellipsoid diameters, or a mesh part / list of mesh parts for its surface
-snap(targets, points, direction=None)  # On a surface: nearest, or along direction "-Z", "+X"… or (x, y, z)
+snap(targets, points, direction=None)  # Target first, probe points/frames second; nearest or ray direction "-Z", "+X"… or (x,y,z)
 ```
 
 ## Mechanical parts
@@ -325,7 +335,8 @@ section offsets use shape-preserving cubics between the original stations. The r
 confined to the end interval; its slope does not make the body overshoot neighbouring sections.
 
 Branch levels count generations after the root (level 0); `.parent` is the parent axis, or
-`None` for the root. `.tips` holds leaf axes only. A child's diameter is relative to its parent's
+`None` for the root. `.tips` is a `Frames` of terminal frames, one per leaf axis.
+Get leaf axes with `[a for a in axes if not any(b.parent is a for b in axes)]`. A child's diameter is relative to its parent's
 base diameter, not the diameter at attachment; azimuth restarts at each parent. `.path` and
 `.tips` are already in the frame carrying `on`: build `wire(axis.name, axis.path, axis.d)` without
 applying `on` again. At most 4096 axes and 128 generations are allowed.
@@ -774,6 +785,9 @@ returning (N,) for lengths/lean, (N,3) for directions. Use pure callbacks.
 6. Total = len(sites) × blades × (2 or 6), independent of facets. Each piece has
 a root vertex on the site, including tangent growth; keep sites on the carrier.
 Material and per-face colour work on the result. Empty sites give an empty mesh.
+
+`snap(target, probes, direction=...)` drops ray misses; its result may be empty.
+Test `if hits:` before indexing `hits[0]`.
 
 Surface queries accept groups: `snap(group, probes)` and `scatter(n, group)`
 read all mesh descendants in the group's parent space, including nested placements.

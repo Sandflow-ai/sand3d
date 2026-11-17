@@ -1,6 +1,9 @@
 # Mesh resolution and triangle cost
 
-Spend faces on visible shape. Increase `step` to reduce added topology without
+Budget the sum over all copies before detailing a prototype. Start coarse with
+`facets(n)` and explicit `step`; build and run the coarse whole first. Use
+`lay(..., step=0)` unless the carrier's curvature needs subdivision. Copies and
+instances both multiply visible triangles. Spend faces on visible shape. Increase `step` to reduce added topology without
 changing the noise feature size. Inspect the silhouette at the final render size.
 
 | Operation | Automatic sampling (`step=None`) | Explicit sampling |
@@ -44,3 +47,6 @@ rings. Copies multiply the whole part's triangle cost; instancing does not reduc
 that visible total. Smaller editing `step`, more cross-section facets and more
 path rings all spend triangles. Per-face colour also spends faces when a pattern
 must remain visible; choose the coarsest mesh that preserves it.
+
+Build a spline and its `wire` inside the same `facets(...)` context. More rings
+do not repair a self-crossing path: reduce diameter or soften curvature.
