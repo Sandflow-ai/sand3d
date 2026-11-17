@@ -714,3 +714,10 @@ def retained_fill():
     pot = s3d.shell(s3d.box("pot", 40, 30, 30), 2, open="top")
     s3d.fill("contents", pot, 24)
     s3d.fill("sloped", pot, s3d.local(pot, z=15, ry=8), clearance=0)
+
+
+@case("tufts")
+def rooted_tufts():
+    sites = s3d.grid(3, 2, 10, 10)
+    s3d.tufts("grass", sites, 8, 1, seed=7)
+    return s3d.tufts("fur", sites.move(z=12), 5, 2, direction=(1, 0, .2), shape="cone", seed=3)

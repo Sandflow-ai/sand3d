@@ -19,6 +19,7 @@ from .edit import (bend, blend, chamfer, copy, cut, delete, dent, displace, fill
 from .shade import smooth
 from .implicit import field, noise, waves
 from .filling import fill
+from .tufts import tufts
 from .parts import gear, knurl, thread
 from .frames import Frame, Frames, along, at, bbox, grid, local, ring, phyllotaxis, branches, vary, scatter, snap, transform
 from .materials import material, resolve as _resolve
@@ -43,7 +44,7 @@ __all__ = [
     # frames, placement
     "Frame", "Frames", "bbox", "local", "at", "transform", "grid", "ring", "along", "phyllotaxis", "branches", "vary", "scatter", "snap",
     # parts
-    "gear", "knurl", "thread",
+    "gear", "knurl", "thread", "tufts",
     # materials
     "material", "smooth",
     # articulation

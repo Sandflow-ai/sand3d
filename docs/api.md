@@ -756,3 +756,21 @@ For outlines, use `arc(r=r)` for a circle. For an irregular planar outline:
 `poly([tuple(f.origin)[:2] for f in ring(n, r).jitter(x=j, y=j, seed=3)])`.
 For an organic blob, extrude or loft `superellipse(w, d, n=2)` sections, then
 `displace` the solid at the outline scale before adding fine grain.
+
+### Rooted thin pieces
+
+`tufts(name, sites, height, width, blades=5, lean=20, direction=None, shape="blade", seed=0)`
+builds one mesh, never an object per tuft. `sites` is a Frame or Frames from grid,
+scatter, phyllotaxis, along or a face, all in one shared parent space. Each site
+roots `blades` pieces exactly at its origin; default growth follows its Z.
+`height` and `width` are positive lengths; `lean` is maximum random deviation in
+degrees [0,85]. Each accepts a number or `(x,y,z,n)` callback evaluated per site.
+`direction` is a nonzero vector in the sites' space or the same callback returning
+a vector: use a tangent field to comb fur along a body. Scalar callbacks receive
+normal `n` as a tuple; vectorized callbacks receive x/y/z arrays (N,) and n (3,N),
+returning (N,) for lengths/lean, (N,3) for directions. Use pure callbacks.
+`seed` is a nonnegative integer. `shape="blade"` is a pointed flat ribbon, exactly
+2 triangles per blade; `shape="cone"` is a pointed triangular double cone, exactly
+6. Total = len(sites) × blades × (2 or 6), independent of facets. Each piece has
+a root vertex on the site, including tangent growth; keep sites on the carrier.
+Material and per-face colour work on the result. Empty sites give an empty mesh.

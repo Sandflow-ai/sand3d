@@ -48,6 +48,8 @@ LENGTHS = {
     "wrap": {"profiles": "P"},
     "mirror": {"p": "-", "flip": "-"},
     # solids, paths
+    "tufts": {"name": "-", "sites": "-", "height": "L", "width": "L", "blades": "-",
+              "lean": "-", "direction": "-", "shape": "-", "seed": "-"},
     "fill": {"name": "-", "container": "-", "level": "P", "clearance": "L"},
     "field": {"name": "-", "size": "P", "density": "density", "cell": "L", "level": "-", "min_component_cells": "-"},
     "waves": {"wavelength": "L", "direction": "-", "centers": "P", "sharpness": "-",
