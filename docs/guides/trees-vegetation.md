@@ -25,5 +25,7 @@ s3d.material(grass, "grass", color="#2e590d")
 
 Textile nap: scatter on the fabric carrier, keep its visible side, then short wide cones for clumps or
 thin blades for bristles, the carrier visible between clumps. A tangent `direction` field combs fur;
-the default site normal gives standing pile. Group carrier and tufts after querying: their frames share
+the default site normal gives standing pile. Animal fur: dense short thin blades combed
+along the body on a matte material (`plastic`, roughness ≈ .85); cones read as scales, and `fabric`'s
+white sheen greys dark fur. Group carrier and tufts after querying: their frames share
 one parent space.
