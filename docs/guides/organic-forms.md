@@ -1,54 +1,11 @@
-# Outline, hull rocks, holes, folds, brain coral and scalar fields.
+# Faceted rock, holes, folds, coral and fungi
 
-- **Outline first, surface second.** A natural form reads as irregular by its
-  silhouette and proportions before its skin. Small noise on a symmetric base gives
-  a rough skin on a regular shape. Break the outline first (uneven points for
-  `hull`, uneven lengths with `vary`, a lean with `bend`, `twist` or `taper`, a
-  `displace` whose features are about as large as the part), then add grain:
-
-  ```python
-  form = s3d.hull("form", sites.jitter(x=lean, y=lean, seed=seed))   # uneven proportions
-  s3d.bend(form, tilt)                                               # the whole form leans
-  s3d.displace(form, swell, size=width, seed=seed + 1)              # the outline moves
-  s3d.displace(form, grain, size=grain_size, seed=seed + 2)         # then the skin
-  ```
-
-- **Faceted rock.** `BoulderFactory.py:stone` builds `hull` from seeded
-  `scatter(..., surface=True).jitter(...)` points. Hull point count sets the
-  large facets; broad displacement breaks convexity, fine displacement adds grain.
-
-- **Holes and folds.** The field examples `field/BrainCoralFactory.py`,
-  `field/DiffGrowthBaseCoralFactory.py` and
-  `field/ReactionDiffusionBaseCoralFactory.py` define volumes with `field` and
-  seeded `noise`. Use density for cavities, tunnels and folded sheets; use
-  `displace` for relief on an existing surface. Keep callbacks deterministic,
-  vectorize with numpy, leave one cell of boundary margin and choose a cell
-  small enough for the narrowest feature. Start coarse to fit the build budget.
-
-field(name, size, density, cell=..., level=0) makes a closed isosurface of density(x,y,z)<level, centered XY with Z=0..h. Use pure numpy array callbacks for the fast path. Cell controls smallest feature and cost; halving it roughly quadruples surface faces. Combine smooth density fields with noise or waves for brain-coral ridges, fungal lobes and rock masses. waves supplies periodic/radial scalar patterns, not only water. blend(ob,*others,r=...) fuses on voxels of r/5; displace adds relief, dent makes local depressions, hull wraps convex masses and loses concavities. Choose the verb matching structure before adding noise. Preserve attached coral branches, fungal stems and meaningful rock silhouettes; avoid fine fields merely to add colour.
-
-## Parameter tables for repeated organic layers
-
-Use one construction loop over a parameter table instead of copying each stage.
-Keep table order, random-draw order and fusion order stable when refactoring.
-Derive one seed per item and pass it to that item's helper; do not restart every
-item at the same seed. The helper below is a program-local function you define,
-not an extra library verb. The same pattern covers leaf tiers, flame layers,
-smoke columns and layered fungi.
-
-```python
-layers = [(0, 1.0, 0), (80, .75, 23), (140, .45, -17)]
-parts = []
-for i, (height, scale, turn) in enumerate(layers):
-    part = make_layer(scale=scale, seed=seed + 100 + i)
-    parts.append(s3d.at(part, z=height, rz=turn))
-```
-
-Keep the brief's requested facets level, including smooth=False for flat faces.
-A face budget is a ceiling, not a target: break the outline before adding detail.
-
-Resolution costs triangles: use `step` to separate displacement feature size
-from mesh sampling (see `resolution`).
-Colour callbacks assign one RGB per face without UVs or textures, so fine colour
-patterns need fine faces. Prefer colour for thin veins or grain over displaced
-relief that is sub-millimetre at render scale.
+- **Faceted rock**: `hull` over seeded `scatter(..., surface=True).jitter(...)` points. The point count
+  sets the large facets; broad displacement breaks convexity, fine displacement adds grain.
+- **Holes and folds**: `field` density, with seeded `noise` or `waves`, for cavities, tunnels, folded
+  sheets, brain-coral ridges, fungal lobes and rock masses; `displace` for relief on an existing
+  surface. Start coarse to fit the build budget.
+- **Choose the verb by structure before adding noise**: `blend` fuses masses, `displace` adds relief,
+  `dent` makes local hollows, `hull` wraps a convex mass and loses concavities.
+- Keep attached coral branches, fungal stems and meaningful rock silhouettes; never refine a field only
+  to carry colour.

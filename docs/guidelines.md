@@ -1,9 +1,7 @@
 # Writing an assembly program
 
-Eight rules for any program that builds a multi-part object in sand3d, by hand or by model. They were
-drawn from a review of generated asset and articulated programs, and have not been tested as a prompt.
-Every example is a real program, run under 1.4.0, when sand3d was still named sky3d. A fault is followed by how it should have been
-written: `# ←` comments are added to the original, and rewrites keep the original's shape.
+Eight rules for a program that builds a multi-part object. Examples are real programs: `# ←` marks a
+fault, and each rewrite builds the same shape.
 
 1. **The head is the table of contents.** First function, named after the object, no geometry.
 2. **One function per distinct part.** Built about its own origin; returns one object.
@@ -54,8 +52,7 @@ def open_shade(d=330.3, top_d=320, h=273, bottom_wall=6, top_wall=13):
 
 The first function is named after the object. It builds no geometry: it calls the parts, places them
 and returns `s3d.assembly`. Runners call the first function, so the head comes first. Nothing at module
-level but the import. A detail that should stay deletable can hang on the assembly with `attach`, as in
-[examples/chair.py](examples/chair.py); none of the 1 089 programs needed it.
+level but the import. A detail that should stay deletable can hang on the assembly with `attach`.
 
 **Right**: a picnic table.
 
@@ -82,9 +79,9 @@ def industrial_turnstile_gate():
     s3d.joint("frame_to_rotor", rotor, f, kind="revolute", axis="+Z", range=(-120, 120))
 ```
 
-The head is building a floor plate and a shaft. A reader must go through solids to find the plan, and no part can be reused or removed.
+The head builds solids: the plan is buried, and no part can be reused or removed.
 
-**How it should read**: one line per part in the head. Same shape (F 1.000 against the original).
+**How it should read**: one line per part in the head.
 
 ```python
 def industrial_turnstile_gate():
@@ -154,9 +151,9 @@ def opposite_crossrail(width=325, d=31, height=182, stem_d=29):  # ← the same 
     return s3d.group('opposite_crossrail', solid)
 ```
 
-Nothing here crashes. These are one function under two names: a change has to be made twice, and a reader has to compare them line by line to learn they are the same.
+One function under two names: every change is made twice.
 
-**How it should read**: one function, the other side mirrored (rule 5). Same shape (F 1.000 against the original).
+**How it should read**: one function, the other side mirrored (rule 5).
 
 ```python
     end = s3d.at(end_crossrail(), y=-1143, z=134)
@@ -176,12 +173,11 @@ Main dimensions are keyword arguments in millimetres. A value measured on the ta
 value that follows from another is written as an expression of it.
 
 - **Count the numbers.** Target 15 per part, ceiling 40. A number is any numeric literal, keyword defaults
-  included, except 0, 0.5, 1, 2, 45, 90, 180, 270 and 360. Clean programs have a median of 15, programs
-  that fought the library 53.
-- **Read every argument.** 31.0 % of the programs declare a dimension they never read.
+  included, except 0, 0.5, 1, 2, 45, 90, 180, 270 and 360.
+- **Read every argument you declare.**
 - **No `if x == 28`, no unexplained fraction.** They hold only while the numbers around them stay put.
-- **Expect to lose a little fidelity.** Fewer numbers means a coarser match to a target. It is a trade.
-- **Copying a value from a source is allowed, once.** A joint origin copied from a URDF is a measurement.
+- **Fewer numbers may match a target a little less closely.** Accept it.
+- **A value copied from a source appears once.** A joint origin copied from a URDF is a measurement.
 
 **Right**: each point an expression of the arguments.
 
@@ -207,9 +203,9 @@ def cabinet_part(width=1500, depth=800, height=940):
     s3d.cut(shell, tool2)
 ```
 
-It runs and matches its target. But 475, 1440, 720, 740, 910 and 930 all follow from `width`, `depth` and `height`: change the height and the cabinet breaks.
+475, 1440, 720, 740, 910 and 930 all follow from `width`, `depth` and `height`: change the height and the cabinet breaks.
 
-**How it should read**: three named dimensions, the rest derived. Same shape (F 1.000 against the original).
+**How it should read**: the dimensions named, the rest derived.
 
 ```python
 def cabinet_part(width=1500, depth=800, height=940, wall=50, lip=30, slot=20):
@@ -237,12 +233,9 @@ def cabinet_part(width=1500, depth=800, height=940, wall=50, lip=30, slot=20):
 ## 4. Place each part once, in its parent's frame
 
 The head places the top-level parts with `at`, in the object's frame. Each part places its own children.
-A placement that follows from a dimension is written from it. The fault is a part built at its world
-position, then shifted back.
-
-- Prefer a frame when the relation is the point: `on=ob.face("+Z")`, `bbox`, `local`.
-- Every solid starts at z = 0, centred in x and y; `extrude(both=True)` centres it on its plane.
-- `at` sets the values it is given and keeps the others. `transform` moves by.
+A placement that follows from a dimension is written from it; when the relation is the point, use a
+frame: `on=ob.face("+Z")`, `bbox`, `local`. The fault is a part built at its world position, then
+shifted back.
 
 **Right**: the bowl sits at the stem’s height.
 
@@ -263,9 +256,9 @@ def temple_arm(w=3, length=119.2, base=37.5, origin_y=-14.6, origin_x=64.5):
     path = s3d.spline([(62-origin_x,-72-origin_y,55-base),(63-origin_x,-45-origin_y,54-base),(66-origin_x,0-origin_y,54-base),(66-origin_x,20-origin_y,53-base),(65-origin_x,32-origin_y,46-base),(65-origin_x,44-origin_y,40-base)])
 ```
 
-The head places the arm at (64.5, -14.6, 37.5), and the part takes those same numbers off every point. Each coordinate is written in the world, then undone.
+The part takes the head's (64.5, -14.6, 37.5) off every point: each coordinate written in the world, then undone.
 
-**How it should read**: the spline in the arm’s own frame. Same shape (F 1.000 against the original).
+**How it should read**: the spline in the arm’s own frame.
 
 ```python
     arm = s3d.at(temple_arm(), x=64.5, y=-14.6, z=37.5)
@@ -303,9 +296,9 @@ cos and sin in a loop.
         solids.append(s3d.at(s3d.box("return_post", w=rail, d=rail, h=h-rail), x=w/2-rail/2, y=y))
 ```
 
-Three posts at an even pitch of 93. A list of three positions hides that they are evenly spaced.
+Three positions hide an even pitch of 93.
 
-**How it should read**: the pitch named, the grid says the rest. Same shape (F 1.000 against the original).
+**How it should read**: the pitch named, the grid says the rest.
 
 ```python
     solids += s3d.at(s3d.box("return_post", w=rail, d=rail, h=h-rail), on=s3d.grid(nx=1, ny=3, py=post_pitch), x=w/2-rail/2, y=-140)
@@ -313,9 +306,8 @@ Three posts at an even pitch of 93. A list of three positions hides that they ar
 
 ## 6. Say each shape with the verb that names it
 
-A shape sand3d says in one verb is not written as a table of points. `bpy` and `bmesh` are forbidden: if
-sand3d cannot say a shape, open an issue for the missing verb. Free forms still resist: until sand3d has
-their verbs, a table may match a target better.
+A shape sand3d says in one verb is not written as a table of points. `bpy` and `bmesh` are forbidden.
+A free form with no verb may still need a table.
 
 | the shape | the verb |
 |---|---|
@@ -337,13 +329,6 @@ def shaft(length=97.6, base_w=5.8, tip_w=4.0, base_h=6.5, tip_h=2.6, mid_w=4.7, 
     solid = s3d.loft("shaft", s3d.station(z=0, w=base_w, d=base_h, y=-base_h/2, n=4), s3d.station(z=length/2, w=mid_w, d=mid_h, x=drift, y=-mid_h/2, n=4), s3d.station(z=length, w=tip_w, d=tip_h, y=-tip_h/2-rise, n=4))
 ```
 
-**Right**: a lamp shade, a revolve of four points.
-
-```python
-def open_shade(d=330.3, top_d=320, h=273, bottom_wall=6, top_wall=13):
-    wall = s3d.revolve("shade_wall", s3d.poly([(d/2,0),(top_d/2,h),(top_d/2-top_wall,h),(d/2-bottom_wall,0)]))
-```
-
 **Right**: a tray in one verb.
 
 ```python
@@ -357,9 +342,9 @@ def bowl_body(r=60, h=66.18, t=1):
     profile = s3d.poly([(0, 0), s3d.spline([(0, 0), (21, 4), (42, 19), (56, 43), (r, h)], tangents=((1, 0), (0, 1))), (r-t, h), s3d.spline([(r-t, h), (54, 41), (41, 19), (21, 5), (0, t)], tangents=((0, -1), (-1, 0)))])
 ```
 
-The inner wall is typed by hand, point by point, beside the outer one. `shell` says it in one word, and keeps the wall even.
+The inner wall is typed point by point; `shell` says it in one word and keeps the wall even.
 
-**How it should read**: the outside only, then shell. Same shape (F 1.000 against the original).
+**How it should read**: the outside only, then shell.
 
 ```python
 def bowl_body(r=60, h=66.18, t=1):
@@ -374,8 +359,6 @@ once, before it is repeated. On shape-only data, such as CAD pieces, it is optio
 
 - On a group, `material` reaches every part with no material of its own. The nearest call wins.
 - `join` keeps the first object's material, `group` keeps each part's. Join only what is one colour.
-- Smoke, fog, steam, murky water: one closed envelope (a `field`, say) with `smoke`, `fog` or
-  `scatter_distance`, not stacked alpha shells. GLB has no scattering and shows it dark.
 
 **Right**: dressed before the grid.
 
@@ -392,12 +375,12 @@ and to `s3d.joint(name, child, f, …)`.
 
 - **Every joint sits in the head**, frame, part and joint side by side, so a part comes off with its own lines.
 - **`local` reads the parent's own space**, however deep the chain. No coordinate is composed into the world.
-- **`axis` is a direction** in the space the parent lives in: `"+X"`. A source's axis is turned by its `rpy` first.
-- **The sign of the axis decides which way it opens.** A positive value turns by the right hand about the
-  axis. Of 23 drafts where a small edit made the joints right, 8 changed that sign and nothing else.
+- **A source's axis is turned by its `rpy` first.**
+- **The sign of the axis decides which way it opens** (right hand): the most frequent joint fault.
 - **What does not move has no joint.** Place it and put it in its parent's group before the joint is
   declared, or it stays behind when the parent moves.
-- **Build at rest.** Every joint at 0, no `s3d.pose` in the program.
+- **Build at rest.** A program returns its mechanism with every joint at 0, no `pose`; the gate
+  example poses its leaf only to show the swing. A part without a joint has nothing to pose.
 
 **Right**: two slides and a hatch hinged on a sliding lid.
 
@@ -421,7 +404,7 @@ and to `s3d.joint(name, child, f, …)`.
     s3d.joint("body_to_spindle", spindle, f, kind="continuous", axis="+X")
 ```
 
-**Fixed by the model in its next draft**: one frame for both, 1 of 1.
+**Fixed**: one frame for both, 1 of 1.
 
 ```python
     f = s3d.local(body, 0, 0, 0)
@@ -435,85 +418,26 @@ and to `s3d.joint(name, child, f, …)`.
     s3d.joint("door_hinge", door, f, kind="revolute", axis="+Z", range=(0, 114.59))
 ```
 
-**Fixed by the model in its next draft**: one sign changed, 1 of 1.
+**Fixed**: one sign changed, 1 of 1.
 
 ```python
     s3d.joint("door_hinge", door, f, kind="revolute", axis="-Z", range=(0, 114.59))
 ```
 
 
-## Lateral organs on a curved stem
-
-`along` faces Z along the stem tangent; cylindrical `phyllotaxis` faces Z radially.
-For leaves, fronds or branches, spin around the tangent **before** leaning away:
-`turn(ry=60)` sets the departure angle to 60° from the tangent. Build each organ
-from its base at the origin along its own +Z. Angular jitter keeps that base attached;
-position jitter would detach it. `vary(24, 5, ...)` gives lengths in [19, 29], with an
-**absolute** spread of 5 program units.
-
-The complete renderable recipe is [examples/curved_stem.py](examples/curved_stem.py):
-
-```python
-frames = s3d.along(path, count=13, spin=137.508, span=(.12, .92))
-frames = frames.turn(ry=60).jitter(rx=5, ry=8, rz=12, seed=2)
-lengths = s3d.vary(24, 5, len(frames), seed=3)
-leaves = [s3d.at(leaf_part(f"leaf{k}", length), on=frame)
-          for k, (frame, length) in enumerate(zip(frames, lengths))]
-```
-
-Here `leaf_part` sweeps an ellipse along local +Z, with a scale law
-`[(0, 0), (.35, 1), (1, 0)]`: the first pole is exactly the attachment point.
-
-### Array densities
-
-Programs may import numpy, shipped with bpy. For the fast path, `field` calls the
-same deterministic density with three float64 arrays of identical shape, in the
-part frame and program units; return an ndarray of that shape. Use `np.sqrt`,
-`np.sin`, `np.minimum` and `np.maximum` instead of scalar math and Python min/max.
-A small trial call selects this path. TypeError, ValueError or a non-array result
-selects scalar evaluation for plain Python callbacks. Callbacks must be pure:
-trial calls and sampling order are not part of the contract.
-
-`s3d.noise` accepts scalars and broadcastable arrays and returns a float or a
-float64 array of the broadcast shape. Its seeded gradient noise and
-nearest-cell noise stay in [-1,1], reproducible across runs and platforms.
-Ridged and turbulence transform gradient noise. Coordinates are dimensionless,
-finite and within 2**50. This realization differs from `displace`, which retains
-its existing noise to preserve existing geometry.
-
-### Choosing `cell`
-
-`cell` is the finest detail a field can show, and its cost: the triangle count, and
-the time, grow as the surface area divided by `cell`². Choose it from the smallest
-feature the asset must keep, not from its overall size: about half the thinnest wall
-(a leaf, a frond, a shell), about two thirds of the smallest relief that must read
-(grain, pits, ridges). Finer than that costs time and file size without a visible
-gain: halving `cell` quadruples both. Coarser, thin walls tear and relief smooths
-away. As an order of magnitude, a closed surface 1.5 m across at a 7 mm cell
-already holds about two million triangles.
-
-`field` drops disconnected components whose longest bounding-box extent is less
-than `min_component_cells * cell` (default 3). The largest component is always
-kept; `min_component_cells=0` keeps every component. The filter removes complete
-closed shells, never individual faces. Thin connected features remain.
-
 ## Natural forms
 
-- **Seeds: one per call.** The same seed replays the same stream in every verb:
-  two `vary(..., seed=seed)` calls are 100 % correlated (the longest leaf is
-  always the widest). Give each call its own derived seed (`seed`, `seed + 1`,
-  `seed + 2`…, or `seed * 100 + k` for part k). Use `vary(mean, spread, n, seed=…)`
-  for n values of one quantity; its spread is absolute, in the value's units
-  (`.2` means ±.2, not ±20 %). For case-by-case draws inside a loop (rejections,
-  choices, colours), open one `rng = random.Random(seed + k)` per part and draw
-  from it. `Frames.jitter` and `scatter` take their own derived seeds too;
-  `FruitStrawberryFactory.py:achenes` projects scattered sites onto flesh.
+- **One seed per call.** The same seed replays the same stream in every verb: two
+  `vary(..., seed=seed)` calls are fully correlated (the longest leaf is always the widest). Derive
+  one per call (`seed + 1`, `seed + 2`…, or `seed * 100 + k` for part k), `jitter` and `scatter`
+  included; for case-by-case draws in a loop (rejections, choices, colours), one
+  `rng = random.Random(seed + k)` per part. Keep the draw order stable. Use a seed parameter or leave
+  it unused, never `_ = seed`. The root's `seed=0` is the reproducible build.
 
-- **Outline first, surface second.** A natural form reads as irregular by its
-  silhouette and proportions before its skin. Small noise on a symmetric base gives
-  a rough skin on a regular shape. Break the outline first (uneven points for
-  `hull`, uneven lengths with `vary`, a lean with `bend`, `twist` or `taper`, a
-  `displace` whose features are about as large as the part), then add grain:
+- **Outline first, surface second.** A natural form reads as irregular by its silhouette and
+  proportions before its skin; small noise on a symmetric base gives a rough skin on a regular shape.
+  Break the outline first (uneven points for `hull`, uneven lengths with `vary`, a lean with `bend`,
+  `twist` or `taper`, a `displace` whose features are about as large as the part), then add grain:
 
   ```python
   form = s3d.hull("form", sites.jitter(x=lean, y=lean, seed=seed))   # uneven proportions
@@ -522,71 +446,50 @@ closed shells, never individual faces. Thin connected features remain.
   s3d.displace(form, grain, size=grain_size, seed=seed + 2)         # then the skin
   ```
 
-- **Attach to the actual parent.** Strawberry's crown reads a surface frame with
-  `snap`; its achenes snap again after denting. `LeafMapleFactory.py:petiole`
-  returns the path end from `along(path, count=2)[-1]` for the blade.
-  `KelpMonocotFactory.py:fronds` and `TreeFactory.py:structure` place children
-  using `along(..., spin=137.508, span=(...))`. Derive placement from geometry,
-  not offsets measured on a render. A child's anchor must follow seed changes.
+- **Lateral organs on a curved stem.** `along` faces Z along the stem's tangent; cylindrical
+  `phyllotaxis` faces Z radially. Spin about the tangent **before** leaning away: `turn(ry=60)`
+  departs 60° from the tangent. Build each organ from its base at the origin along its own +Z (a sweep
+  with scale law `[(0, 0), (.35, 1), (1, 0)]` puts its first pole on the attachment). Angular jitter
+  keeps the base attached; position jitter detaches it.
 
-- **Materials are mandatory.** Dress every visible component:
-  Strawberry separates flesh, stalk and achenes; Maple separates blade and veins;
-  Boulder uses a height-dependent colour. Use the nature presets `bark`,
-  `leaf`, `moss`, `grass`, `rock`, `soil`, `sand`, `water`, `snow`, `foam`, `smoke`, `fog` where appropriate,
-  with explicit colour overrides for the requested mood. The examples predate these
-  presets: adapt generic wood examples to `oak`, and coral to coloured `rock`
-  or `ceramic`. Only use the listed kinds.
+  ```python
+  frames = s3d.along(path, count=13, spin=137.508, span=(.12, .92))
+  frames = frames.turn(ry=60).jitter(rx=5, ry=8, rz=12, seed=2)
+  lengths = s3d.vary(24, 5, len(frames), seed=3)
+  leaves = [s3d.at(leaf_part(f"leaf{k}", length), on=frame)
+            for k, (frame, length) in enumerate(zip(frames, lengths))]
+  ```
 
-- **Low-poly.** Use `facets(n, smooth=False)` for the requested flat style,
-  including organic field/displace/blend surfaces. Hull still follows its input
-  points. The bench's polygonal coral tubes and Tree fans show deliberate angular
-  silhouettes; avoid smoothing them away. Increase resolution when a low count
-  loses a branch or hole. `facets("auto")` restores normal adaptive resolution.
+- **Attach to the actual parent.** Derive a child's place from geometry (`snap`, a face,
+  `along(path, count=2)[-1]` for a path's end), never from offsets measured on a render: it must
+  follow seed changes. Compose frames with `on=`, never by adding translations across rotated parents;
+  keep callback coordinates (local), sampled sites (the sampled mesh's parent space) and world
+  positions apart.
 
-## Frames, facets, seeds and lighting
+- **Select sites once.** Filter sampled frames with one predicate, place every kept site through one
+  helper (shared by every population: stones, plants), and use the count that remains, not the count
+  asked for:
 
-Honour the requested facets(n, smooth=...) level; low-poly does not mean adding
-noise at a finer resolution to paint detail. Local callback coordinates describe
-the part before placement; sampled sites live in their documented parent frame.
-Compose frames with on= rather than manually adding translations across rotated
-parents. Derive deterministic per-item seeds from the root seed and keep draw
-order stable. Do not hide unused seed parameters with `_ = seed`: use the seed
-for the intended variation or leave the parameter honestly unused. Root seed=0
-remains the reproducibility contract. Surface colour describes reflectance or
-an authored surface property, not a painted light/shadow field. Review shading
-uses fixed illumination and approximate emission/media; Cycles uses scene lights
-and actual shader nodes. Their images need not match, and neither automatically
-proves a physically realistic material.
+  ```python
+  sites = s3d.scatter(120, terrain, seed=seed + 1)
+  kept = [f for f in sites if f.origin.z > 5 and f.origin.x ** 2 + f.origin.y ** 2 > 400]
+  stones = [s3d.at(make_stone(seed=seed + 100 + i), on=f) for i, f in enumerate(kept)]
+  ```
 
-Resolution costs triangles. Inspect the silhouette before increasing sampling.
-Use `displace(..., step=length)` to separate mesh cost from noise feature size;
-`bend` and `twist` accept the same `step` vocabulary.
-Colour is per face, without UVs/textures: fine patterns also need fine mesh.
-Prefer colour for thin veins/grain to displaced relief when the relief is
-sub-millimetre at render scale. See `guides/resolution.md`.
+- **Repeated stages from a table.** Leaf tiers, flame layers, smoke columns, layered fungi: one loop
+  over a parameter table, one derived seed per item. Refactoring keeps table, draw and fusion order.
 
-## Placement with size variation
+  ```python
+  layers = [(0, 1.0, 0), (80, .75, 23), (140, .45, -17)]
+  parts = [s3d.at(make_layer(scale=scale, seed=seed + 100 + i), z=height, rz=turn)
+           for i, (height, scale, turn) in enumerate(layers)]
+  ```
 
-Replace copy → scale → place → delete-prototype loops with:
+- **Materials are mandatory.** Dress every visible component (flesh, stalk and seeds apart; blade and
+  veins apart), with the natural presets and explicit colours for the requested mood.
 
-```python
-sites = s3d.ring(12, 80)
-flowers = s3d.at(flower_part(), on=sites, scale=s3d.vary(1.0, .2, len(sites), seed=3))
-```
-
-A solid's scale is a number or (sx, sy, sz); a group/assembly takes one positive
-factor. In batch placement, use a numeric axis tuple for one common per-axis
-scale, a list for per-copy values of exactly len(sites). Scaling is about the
-object's own origin before placement; placement anchors are read afterwards.
-Read geometry frames and rebuild named anchors after scaling, as with scale().
-Access an assembly's named anchors as attributes:
-`pot = s3d.assembly("pot", body, handle, rim=body.face("top"))`, then
-`s3d.at(flower, on=pot.rim)`.
-
-`join` returns the fused first solid and consumes the others (first material wins).
-`merge` returns one mesh without boolean and consumes the other inputs.
-Always use their return value; keep separate materials with group().
-
-For a circle use arc(), not trigonometry. For irregular outlines use
-`poly([tuple(f.origin)[:2] for f in ring(n, r).jitter(x=j, y=j, seed=seed)])`.
-For organic blobs, extrude/loft superellipse() sections, then displace() the solid.
+- **Honour the requested facets.** `facets(n, smooth=False)` for a low-poly style reaches field,
+  displace and blend surfaces too (hull follows its points); low-poly is not noise painted at a finer
+  resolution. Keep deliberate angular silhouettes; raise n when a branch or hole is lost;
+  `facets("auto")` restores adaptive resolution. A face budget is a ceiling, not a target: break the
+  outline, check the silhouette, then add sampling.

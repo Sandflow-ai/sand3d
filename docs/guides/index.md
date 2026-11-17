@@ -1,9 +1,8 @@
-- water: Water, foam, absorption, fill, waves, falls and banks.
-- fire-smoke: Emission, smoke/fog media and review rendering versus Cycles.
-- trees-vegetation: Curved branches, parent attachment, foliage, grass, lawns and textile fur.
-- terrain-ground: Strewn stones and leaves, contact, sand, asymmetric dunes and wind ripples.
-- organic-forms: Outline, hull rocks, holes, folds, brain coral and scalar fields.
-- surface-colour-weathering: Per-face colour, broad weathering and geometry cost.
+- water: Fill, depth tint, waves on the surface, falls, foam, banks.
+- fire-smoke: Flames and emission, smoke and fog media, review renderer versus Cycles.
+- trees-vegetation: Branches, foliage, crown cost, grass, lawns and textile fur.
+- terrain-ground: Terrain, strewn stones and leaves, contact, sand, dunes and wind ripples.
+- organic-forms: Faceted rock, field holes and folds, coral, fungi, verb choice.
+- surface-colour-weathering: Per-face colour, broad weathering, a vectorized example.
 - glass-ice-crystals: Transmission, IOR, absorption, thickness and closed crystals.
-
-- resolution: Mesh triangle cost and step sampling.
+- resolution: Triangle budgets and cost.

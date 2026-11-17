@@ -1,62 +1,31 @@
-# Emission, smoke/fog media and review rendering versus Cycles.
+# Emission, smoke and fog media, review rendering versus Cycles
 
-Use material(flame, "light", color="#ff7b20", emission=4) on actual tapered flame geometry. Layer warm irregular tongues around visible fuel, with bright cores and dark char. Emission adds linear colour to the review image; it does not illuminate nearby geometry, cast volumetric shadows or create bloom. Smoke and fog presets are invisible boundaries containing scattering media: build closed plume volumes. material(plume, "smoke", scatter="#b3aea8", scatter_distance=600) controls scattering per unit; fog is lighter by preset. Zero scatter_distance disables scattering. The raster review approximates opacity by 1-exp(-sigma_s*path_length), tinted per channel; anisotropy and multiple scattering are not simulated. Use readable plume shape and density, not opaque grey balls.
+## Flames
 
+`material(flame, "light", color="#ff7b20", emission=4)` on actual tapered flame geometry: warm irregular
+tongues around visible fuel, bright cores, dark char. Keep flames emissive and plume boundaries not.
+Emission multiplies the **linear** base colour, near-linearly in strength: start at 0.3–1 for dim
+embers, 2–4 for flame tongues, 8–12 for small hot cores. A black base emits nothing at any strength; a
+saturated orange keeps its ratios until the display clips; a pale core needs a lighter base colour,
+not only more strength.
 
-## Emission scale
+## Smoke and fog
 
-Emission multiplies the material's **linear base colour**, not its displayed sRGB
-numbers. Start at 0.3–1 for dim embers, 2–4 for bright flame tongues, and 8–12
-for small hot cores. These are starting ranges, not physical temperatures:
-black base colour emits nothing at any strength; a saturated orange keeps its
-orange ratios until the display clips or tone maps the bright channels.
-Use a lighter base colour for a pale core rather than only increasing strength.
+Build closed plume volumes with readable shape and density, not opaque grey balls:
+`material(plume, "smoke", scatter="#b3aea8", scatter_distance=600)`; `fog` is lighter. A finely folded
+`field` is still one uniform density, not filaments.
 
-A local Cycles CPU check (16×16 pixels, four samples, black world, no lights,
-orange #ff7b20 surface) measured linear centre RGB approximately
-(0.30, 0.060, 0.0043), (1.00, 0.199, 0.0144), (4.01, 0.793, 0.0575) and
-(12.03, 2.376, 0.175) at strengths 0.3, 1, 4 and 12. The near-linear increase
-matches the review shader's additive emission. Review emission does not light
-neighbours or bloom; Cycles emission can light nearby surfaces. Exposure,
-lighting and view transform change perceived brightness, so inspect both.
+## Review renderer versus Cycles
 
-Use one closed smoke envelope with one medium, not nested alpha shells.
+The review renderer adds emission to the surface colour (it lights no neighbour, casts no volumetric
+shadow, has no bloom) and shows a medium as tinted opacity `1 - exp(-sigma_s * path_length)` along its
+ray path, combined with absorption, without anisotropy, indirect light or multiple scattering.
 
-At sand3d 3ca794c, smoke/fog set transmission=1, ior=1 and roughness=0 to expose
-their volume. Smoke presets scatter_distance=625 mm, scatter_anisotropy=.3,
-absorb="#d6d6d6" at 1000 mm; fog scatters at 10000 mm. Explicit distances use
-program units. sigma_s[c]=linear(scatter)[c]/scatter_distance; absorption adds
-extinction independently. Black smoke can absorb without scattering. The density
-is constant within each envelope: a finely folded field is not filamentary density.
-Keep flames emissive and plume boundaries non-emissive.
-
-Review renderer versus Cycles: skyscene adds emission to the surface colour and
-approximates a medium as tinted opacity 1-exp(-sigma_s*l) along its peeled ray
-path, combined with absorption. It has no volumetric shadow, anisotropy, indirect
-lighting or multiple scattering. Cycles receives actual Volume Scatter and
-Absorption nodes. For a clear non-emissive smoke/fog boundary sand3d substitutes
-a colour-tinted transparent surface in Cycles, allowing direct light and volume
-shadows; GLB/EEVEE keep Principled. Each boundary crossing spends a transparent
-bounce (Cycles default 8): folded envelopes can show black edge cracks; raise
-transparent_max_bounces if needed. volume_bounces defaults to 0, so multiple
-scattering needs an explicit scene setting. sand3d does not change render settings.
-
-## Parameter tables for repeated flame layers and smoke columns
-
-Use one construction loop over a parameter table instead of copying each stage.
-Keep table order, random-draw order and fusion order stable when refactoring.
-Derive one seed per item and pass it to that item's helper; do not restart every
-item at the same seed. The helper below is a program-local function you define,
-not an extra library verb. The same pattern covers leaf tiers, flame layers,
-smoke columns and layered fungi.
-
-```python
-layers = [(0, 1.0, 0), (80, .75, 23), (140, .45, -17)]
-parts = []
-for i, (height, scale, turn) in enumerate(layers):
-    part = make_layer(scale=scale, seed=seed + 100 + i)
-    parts.append(s3d.at(part, z=height, rz=turn))
-```
-
-Keep the brief's requested facets level, including smooth=False for flat faces.
-A face budget is a ceiling, not a target: break the outline before adding detail.
+Cycles gets real Volume Scatter and Absorption nodes, and emission lights nearby surfaces. It stops
+shadow rays at any refracting surface, IOR 1 included, so a clear non-emissive boundary around a medium
+(no metallic, coat, sheen or emission) reaches Cycles as a transparent surface tinted by `color`: the
+medium gets direct light and casts its shadow; GLB and EEVEE keep the Principled BSDF. Each boundary
+crossing spends one transparent bounce (`scene.cycles.transparent_max_bounces`, default 8): a folded
+envelope or noisy `field` can show black cracks along its outline; raise the limit.
+`scene.cycles.volume_bounces` defaults to 0 (single scattering). sand3d changes no render setting;
+exposure, lights and view transform change perceived brightness, so check both renderers.

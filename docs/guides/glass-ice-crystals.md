@@ -1,3 +1,8 @@
-# Transmission, IOR, absorption, thickness and closed crystals.
+# Transmission, IOR, absorption, thickness and closed crystals
 
-Use glass or water presets, with transmission, ior and roughness overrides only when needed. Give ice/crystals closed thickness, recognisable facets and a background/bank to see through. absorb is the sRGB colour white light becomes after absorb_distance program units; transmittance at length x is linear(absorb)**(x/absorb_distance). Zero distance disables absorption. thickness="auto" lets the shader measure crossings; an explicit nonnegative length is a thin-wall export hint. Review raster approximates refraction, Fresnel reflection and absorption; it is not a path tracer. Avoid stacking many coincident transparent shells. Colour, opacity and transmission have distinct roles: alpha is not physical absorption.
+Start from `glass` or `water`; override `transmission`, `ior` or `roughness` only when needed. Give ice
+and crystals closed thickness, recognisable facets and a background or bank to see through. Tint with
+`absorb`, not opacity: alpha is not absorption, and colour, opacity and transmission are separate.
+`thickness` only informs glTF raster viewers (`"auto"`: 2 × volume / area at export); Cycles follows the
+real mesh. Avoid stacked coincident transparent shells. The review renderer approximates refraction,
+Fresnel reflection and absorption; it is not a path tracer.
