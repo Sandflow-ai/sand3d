@@ -73,16 +73,18 @@ import numpy as np
 sand = s3d.box("sand", 3000, 2000, 100)
 s3d.displace(sand, 15, 500, seed=4, faces="top", direction="+Z", step=80)
 def dune(x, y, z):
-    q = ((x + 800) % 1600) / 1600
+    q = ((x + 180 * np.sin(y / 420) + 800) % 1600) / 1600   # sinuous crest
     return np.where(q < .8, q / .8, (1-q) / .2)
-s3d.displace(sand, 200, 80, noise=dune, faces="top", direction="+Z", step=80)
-s3d.displace(sand, 3, 120, noise=s3d.waves(120, direction=0),
-             faces="top", direction="+Z", step=40)
+s3d.displace(sand, 200, 80, noise=dune, faces="top", direction="+Z", step=60)
+s3d.displace(sand, 8, 120, noise=s3d.waves(110, direction=10),
+             faces="top", direction="+Z", step=30)
 s3d.material(sand, "sand", color=lambda x,y,z,n:
              (.82,.68,.43) if n[2] > .95 and z > 220 else (.64,.49,.28))
 ```
 
-The 200-high dune's 320-long slip face gives about 32° before noise and ripples;
+About 35k triangles. A straight crest reads as a ramp: bend it (the sine on x). Ripple
+relief under ~1/400 of the scene's width vanishes at render size (3 mm on 3 m did). The 200-high dune's 320-long
+slip face gives about 32° before noise and ripples;
 selected-face boundaries taper displacement to zero. Normal-based colour marks
 flatter crests versus slopes; combine normal and height rather than colouring
 all upward faces as crests. `sand` supplies the rough material response; avoid
