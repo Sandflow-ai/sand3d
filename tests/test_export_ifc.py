@@ -85,7 +85,7 @@ class Ifc:
     """A parsed IFC file: its entities by reference, and the parts with their geometry."""
 
     def __init__(self, path):
-        self.text = Path(path).read_text()
+        self.text = Path(path).read_text(encoding="utf-8")
         self.head, _, body = self.text.partition("DATA;")
         self.by_ref, self.of_kind = {}, {}
         for ref, kind, args in ENTITY.findall(body):
@@ -386,7 +386,7 @@ class ExportIfc(unittest.TestCase):
             root, cab, *_ = machine()
             s3d.material(cab, "brass")
             s3d.export(root, self.tmp / f"again_{run}.ifc")
-            written.append((self.tmp / f"again_{run}.ifc").read_text().replace(f"again_{run}", "again"))
+            written.append((self.tmp / f"again_{run}.ifc").read_text(encoding="utf-8").replace(f"again_{run}", "again"))
         self.assertEqual(written[0], written[1])
 
     def test_a_name_in_any_script_survives(self):
