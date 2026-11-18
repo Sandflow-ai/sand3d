@@ -51,7 +51,7 @@ def write_obj(root, path):
         lines += ["v " + " ".join(_num(c) for c in v) for v in verts]
         lines += ["f " + " ".join(str(base + i) for i in t) for t in tris]
         base += len(verts)
-    with open(os.fspath(path), "w", newline="\n") as f:
+    with _core.text_file(path) as f:
         f.write("\n".join(lines) + "\n")
 
 

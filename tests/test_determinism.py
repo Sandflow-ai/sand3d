@@ -29,7 +29,7 @@ def run_cases(*args, seed="0", **extra_env):
 
 def public_verbs():
     """`__all__` of the package, read from its source."""
-    tree = ast.parse((ROOT / "src/sand3d/__init__.py").read_text())
+    tree = ast.parse((ROOT / "src/sand3d/__init__.py").read_text(encoding="utf-8"))
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "__all__" for t in node.targets):
             return set(ast.literal_eval(node.value))
@@ -38,7 +38,7 @@ def public_verbs():
 
 def registered_verbs():
     """The verbs the cases declare they exercise, read from their decorators."""
-    tree = ast.parse((HERE / "cases.py").read_text())
+    tree = ast.parse((HERE / "cases.py").read_text(encoding="utf-8"))
     verbs = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef):

@@ -5,6 +5,7 @@ selection; the scene collection is the only context a verb touches.
 """
 import hashlib
 import math
+import os
 
 import bpy  # before bmesh, which the bpy module only provides once loaded
 import bmesh
@@ -39,6 +40,11 @@ def mm2(x):
     global settled
     settled = True
     return x / (MM * MM)
+
+
+def text_file(path):
+    """A text file opened for writing: UTF-8 and \\n line ends, whatever the platform's locale."""
+    return open(os.fspath(path), "w", encoding="utf-8", newline="\n")
 
 
 def in_mm(x):

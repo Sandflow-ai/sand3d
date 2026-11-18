@@ -31,7 +31,7 @@ class Golden(unittest.TestCase):
         golden = Path(run["golden"])
         self.assertTrue(golden.is_file(), f"no golden digests for this bpy: run tests/run_golden.py --write "
                                           f"to create {golden.name}")
-        recorded = json.loads(golden.read_text())["digests"]
+        recorded = json.loads(golden.read_text(encoding="utf-8"))["digests"]
         built = run["digests"]
         errors = sorted(k for k, v in built.items() if v.startswith("error"))
         self.assertEqual(errors, [], "pieces that raised")

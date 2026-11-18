@@ -275,6 +275,6 @@ def write_ifc(root, path):
         "ENDSEC;",
         "DATA;",
     ]
-    with open(path, "w", newline="\n") as f:
+    with _core.text_file(path) as f:
         f.write("\n".join(head + step.lines + ["ENDSEC;", "END-ISO-10303-21;"]) + "\n")
     return path
