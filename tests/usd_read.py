@@ -10,7 +10,7 @@ validator USD registers. Matrices are 4×4 rows acting on columns; quaternions (
 import json
 import sys
 
-from pxr import Usd, UsdGeom, UsdPhysics, UsdShade, UsdValidation
+from pxr import Usd, UsdGeom, UsdLux, UsdPhysics, UsdShade, UsdValidation
 
 
 def rows(m):
@@ -30,7 +30,7 @@ def main(path):
     errors = [f"{e.GetName()}: {e.GetMessage()}" for e in UsdValidation.ValidationContext(validators).Validate(stage)]
     out = {"defaultPrim": stage.GetDefaultPrim().GetName(), "upAxis": UsdGeom.GetStageUpAxis(stage),
            "metersPerUnit": UsdGeom.GetStageMetersPerUnit(stage), "errors": errors,
-           "articulations": [], "bodies": {}, "joints": {}, "meshes": {}, "materials": {}}
+           "articulations": [], "bodies": {}, "joints": {}, "meshes": {}, "materials": {}, "lights": {}}
     parsed = UsdPhysics.UsdPhysicsLoadStageFromPrimRange(stage, ["/"])
     for kind, (paths, descs) in parsed.items():
         for p, d in zip(paths, descs):
@@ -69,6 +69,13 @@ def main(path):
                 "normals": [list(n) for n in normals.Get()], "interpolation": mesh.GetNormalsInterpolation(),
                 "subdivision": mesh.GetSubdivisionSchemeAttr().Get(),
                 "material": str(bound.GetPath()) if bound else None}
+        elif prim.HasAPI(UsdLux.LightAPI):
+            out["lights"][str(prim.GetPath())] = {
+                "type": prim.GetTypeName(), "world": rows(cache.GetLocalToWorldTransform(prim)),
+                "schemas": [s for s in prim.GetAppliedSchemas() if s != "LightAPI"],
+                **{a.GetName(): (list(v) if hasattr(v, "__len__") else v)
+                   for a in prim.GetAuthoredAttributes() if not a.GetName().startswith("xformOp")
+                   for v in [a.Get()]}}
         elif prim.IsA(UsdShade.Shader):
             shader = UsdShade.Shader(prim)
             out["materials"][str(prim.GetParent().GetPath())] = {

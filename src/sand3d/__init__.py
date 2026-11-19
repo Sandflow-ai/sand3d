@@ -19,6 +19,7 @@ from .edit import (chamfer, copy, cut, delete, dent, fillet, hole, intersect, jo
 from .parts import gear, knurl, thread
 from .frames import Frame, along, at, bbox, grid, local, ring, snap, transform
 from .materials import material, resolve as _resolve
+from .lights import light
 from .joints import joint, placed_again as _placed_again, placed_on as _placed_on, pose
 from .profile import Path as _Path, Placed as _Placed, arc, circle, ellipse, mirror, offset, poly, polygon, rect, slot, spline, station, stroke, superellipse, tangent_arc, text, wrap
 from .solids import body, box, cone, cylinder, dome, extrude, helix, loft, revolve, sphere, sweep, torus, tube, wedge, wire
@@ -41,8 +42,8 @@ __all__ = [
     "Frame", "bbox", "local", "at", "transform", "grid", "ring", "along", "snap",
     # parts
     "gear", "knurl", "thread",
-    # materials
-    "material",
+    # materials, lights
+    "material", "light",
     # articulation
     "joint", "pose", "seat",
     # assembly

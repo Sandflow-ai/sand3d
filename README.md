@@ -66,10 +66,10 @@ s3d.export(machine, "washer.glb")    # or .urdf, .usda, .ifc, .obj, .stl
 
 | format | what it carries | for |
 |---|---|---|
-| **GLB** | meshes, materials, the joints in each node's extras, at the current pose | the web, viewers, game engines |
+| **GLB** | meshes, materials, the joints in each node's extras, at the current pose; points, spots and suns, their size in extras | the web, viewers, game engines |
 | **URDF** | a link per moving part, its joints and their limits, at rest; OBJ meshes beside it | ROS, PyBullet, MuJoCo, Isaac |
-| **USDA** | the same tree in OpenUSD (UsdGeom, UsdPhysics), with the materials | Omniverse, Isaac Sim, USD pipelines |
-| **IFC** | the part tree as an IFC4 project — assemblies, a proxy per part, triangulated face sets, the materials | Revit, ArchiCAD, Tekla, BIM |
+| **USDA** | the same tree in OpenUSD (UsdGeom, UsdPhysics), with the materials and every light (UsdLux) | Omniverse, Isaac Sim, USD pipelines |
+| **IFC** | the part tree as an IFC4 project — assemblies, a proxy per part, triangulated face sets, the materials, a light fixture per point or spot | Revit, ArchiCAD, Tekla, BIM |
 | **OBJ**, **STL** | the meshes alone, at the current pose: OBJ Y up, binary STL Z up | any 3D tool, slicers |
 
 `.usd`, `.usdc` and `.usdz` come from the `.usda` through USD's own tools (`usdcat`,
@@ -131,7 +131,7 @@ Everything on one flat `s3d.<verb>` surface:
 | frames and placement | `Frame` `face` `edge` `bbox` `local` `at` `transform` `grid` `ring` `along` `snap` |
 | articulation | `joint` `pose` `seat` |
 | assembly | `group` `assembly` `attach` `export` `units` `fingerprint` … (8) |
-| parts and materials | `gear` `knurl` `thread` `material` |
+| parts, materials and lights | `gear` `knurl` `thread` `material` `light` |
 
 No category verbs (`chair()`, `table()`): a category is a program written *in* sand3d.
 
