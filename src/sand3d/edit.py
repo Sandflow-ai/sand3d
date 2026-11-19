@@ -15,6 +15,7 @@ coplanar faces loses its names.
 """
 import bisect
 import contextlib
+import contextvars
 import math
 import os
 import sys
@@ -265,27 +266,29 @@ class _Shape:
 
 
 class NothingCut(ValueError):
-    """A cut, a hole or a pocket whose tools all miss the part, or only touch it. `part`
-    and `tools` are their boxes, ((x, y, z), (x, y, z)) in the part's parent's frame."""
+    """A cut, a hole or a pocket whose tools all miss the part, or only touch it."""
 
-    def __init__(self, message, name=None, part=None, tools=None):
-        super().__init__(message)
-        self.name, self.part, self.tools = name, part, tools
+
+def _nothing_cut(message, name, part, tools):
+    """NothingCut, keeping for a pocket pattern the part's name and the boxes, in the scene's frame."""
+    error = NothingCut(message)
+    error._missed = (name, part, tools)
+    return error
 
 
 class MissedCut(UserWarning):
     """The warning a missed cut, hole or pocket gives outside strict mode: the part is left as it was."""
 
 
-_STRICT = None      # None: the SAND3D_STRICT environment variable decides
+_STRICT = contextvars.ContextVar("sand3d_strict", default=None)   # None: SAND3D_STRICT decides
 
 
 _YES, _NO = ("1", "true", "yes", "on"), ("", "0", "false", "no", "off")
 
 
 def _is_strict():
-    if _STRICT is not None:
-        return _STRICT
+    if _STRICT.get() is not None:
+        return _STRICT.get()
     value = os.environ.get("SAND3D_STRICT", "")
     if value.strip().lower() in _YES:
         return True
@@ -305,22 +308,23 @@ def strict(on=True):
     Blender or in a CAD kernel; any other value is an error. Strict mode is for checking
     programs, a dataset's for instance: a tool in the wrong place is the
     commonest silent mistake, and a warning lets the program go on to a wrong object."""
-    global _STRICT
-    before, _STRICT = _STRICT, on
+    token = _STRICT.set(on)     # a context variable: blocks interleaved by asyncio each keep their own
     try:
         yield
     finally:
-        _STRICT = before
+        _STRICT.reset(token)
 
 
-_LIBRARY = os.path.dirname(os.path.abspath(__file__)) + os.sep
+def _in_library(frame):
+    name = frame.f_globals.get("__name__") or ""
+    return name == "sand3d" or name.startswith("sand3d.")
 
 
 def _warn(message, category):
     """Warn at the program's line: the first caller outside the library, however deep
-    the verb that warns is called within it."""
+    the verb that warns is called within it — told by its module, not its file."""
     frame, level = sys._getframe(1), 2
-    while frame.f_back is not None and os.path.abspath(frame.f_code.co_filename).startswith(_LIBRARY):
+    while frame.f_back is not None and _in_library(frame):
         frame, level = frame.f_back, level + 1
     warnings.warn(message, category, stacklevel=level)
 
@@ -332,8 +336,8 @@ def _missed(error):
     _warn(str(error), MissedCut)
 
 
-def _box_in_parent(ob, box):
-    """`box`, in `ob`'s frame, as the box it fills in `ob`'s parent's frame — where the program placed it."""
+def _box_in_scene(ob, box):
+    """`box`, in `ob`'s frame, as the box it fills in the scene — where the program placed it."""
     m = _core.world(ob)
     lo, hi = box
     corners = [m @ Vector((x, y, z)) for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])]
@@ -345,8 +349,8 @@ def _box_text(box):
 
 
 def _boxes(ob, operands):
-    """The part's box and the tools', as text, in its parent's frame."""
-    return [_box_text(_box_in_parent(ob, box)) for box in (operands.box, operands.tools_box)]
+    """The part's box and the tools', as text, in the scene."""
+    return [_box_text(_box_in_scene(ob, box)) for box in (operands.box, operands.tools_box)]
 
 
 def _boolean(ob, tools, operation, strip, self_intersect=False, verb="boolean", aimed=False):
@@ -398,8 +402,8 @@ def _boolean(ob, tools, operation, strip, self_intersect=False, verb="boolean", 
                 for tool in consumed:
                     delete(tool)
                 if aimed:   # a tool in the wrong place is the commonest silent mistake: say so
-                    part, tools_at = (_box_in_parent(ob, box) for box in (operands.box, operands.tools_box))
-                    _missed(NothingCut(f"{verb}: no tool cuts into {name!r} — they miss it, or only touch it (its "
+                    part, tools_at = (_box_in_scene(ob, box) for box in (operands.box, operands.tools_box))
+                    _missed(_nothing_cut(f"{verb}: no tool cuts into {name!r} — they miss it, or only touch it (its "
                                        f"box {_box_text(part)}; the tools' {_box_text(tools_at)})",
                                        name, part, tools_at))
                 return ob
@@ -778,12 +782,12 @@ def pocket(ob, profile, depth=None, on=None):
             if len(frames) == 1:
                 _missed(missed[0])
             else:
-                first = missed[0]
-                tools = (tuple(min(e.tools[0][k] for e in missed) for k in range(3)),
-                         tuple(max(e.tools[1][k] for e in missed) for k in range(3)))
-                _missed(NothingCut(f"pocket: none of the {len(frames)} frames cuts into {first.name!r} — the "
-                                   f"pockets miss it, or only touch it (its box {_box_text(first.part)}; the "
-                                   f"pockets' {_box_text(tools)})", first.name, first.part, tools))
+                name, part, _ = missed[0]._missed
+                tools = (tuple(min(e._missed[2][0][k] for e in missed) for k in range(3)),
+                         tuple(max(e._missed[2][1][k] for e in missed) for k in range(3)))
+                _missed(_nothing_cut(f"pocket: none of the {len(frames)} frames cuts into {name!r} — the pockets "
+                                     f"miss it, or only touch it (its box {_box_text(part)}; the pockets' "
+                                     f"{_box_text(tools)})", name, part, tools))
         return ob
     profile = _drawing(profile, "pocket: the profile is placed out of the face's plane: draw it in its plane — "
                                 "x, y and rz only — and give the face or frames with on=: s3d.pocket(ob, profile, "

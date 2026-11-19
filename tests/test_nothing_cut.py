@@ -150,6 +150,46 @@ class MissedCutWarns(unittest.TestCase):
         finally:
             del os.environ["SAND3D_STRICT"]
 
+    def test_the_warning_points_at_a_program_run_from_a_string(self):
+        """Whatever the current directory, even the library's own."""
+        here = os.getcwd()
+        self.addCleanup(os.chdir, here)
+        os.chdir(os.path.dirname(s3d.__file__))
+        program = "plate = s3d.box('plate', 60, 40, 8)\ns3d.hole(plate, 5, on=s3d.Frame((100, 0, 0)))\n"
+        with self.assertWarns(MissedCut) as caught:
+            exec(compile(program, "<string>", "exec"), {"s3d": s3d})
+        self.assertEqual((caught.filename, caught.lineno), ("<string>", 2))
+
+    def test_strict_blocks_interleaved_by_asyncio_keep_their_own_mode(self):
+        import asyncio
+        plate = s3d.box("plate", 60, 40, 8)
+        steps = []
+
+        async def block(on, wait_before, wait_after):
+            with strict(on):
+                await wait_before.wait()
+                try:
+                    s3d.hole(plate, 5, on=s3d.Frame((100, 0, 0)))
+                    steps.append((on, "warned"))
+                except NothingCutError:
+                    steps.append((on, "raised"))
+                wait_after.set()
+
+        async def main():
+            a, b = asyncio.Event(), asyncio.Event()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", MissedCut)
+                await asyncio.gather(block(True, a, b), block(False, b, asyncio.Event()), self._go(a))
+
+        asyncio.run(main())
+        self.assertEqual(sorted(steps), [(False, "warned"), (True, "raised")])
+        with self.assertWarns(MissedCut):          # and out of both blocks, the default again
+            s3d.hole(plate, 5, on=s3d.Frame((100, 0, 0)))
+
+    @staticmethod
+    async def _go(event):
+        event.set()
+
     def test_the_environment_says_yes_or_no(self):
         for value, strict_mode in (("1", True), ("true", True), ("YES", True), ("on", True),
                                    ("0", False), ("false", False), ("no", False), ("off", False), ("", False)):
