@@ -1,16 +1,27 @@
-"""cut, hole and pocket raise when no tool cuts into the part."""
+"""cut, hole and pocket: when no tool cuts into the part, they raise in strict mode
+(SAND3D_STRICT=1, or `with strict()`), and otherwise warn and leave the part as it was."""
+import os
 import unittest
+import warnings
+from unittest import mock
 
 import bpy
 
 import sand3d as s3d
+from sand3d.edit import MissedCut, NothingCut as NothingCutError, strict
 from test_solids import closed_volume
 
 
 class NothingCut(unittest.TestCase):
+    """Strict mode: the behaviour of every release up to 1.6.3."""
 
     def setUp(self):
         s3d.empty_scene()
+        self._strict = strict()
+        self._strict.__enter__()
+
+    def tearDown(self):
+        self._strict.__exit__(None, None, None)
 
     def test_a_cut_that_misses_raises_and_leaves_the_part(self):
         plate = s3d.box("plate", 60, 40, 8)
@@ -46,7 +57,7 @@ class NothingCut(unittest.TestCase):
         plate = s3d.box("plate", 60, 40, 8)
         s3d.pocket(plate, s3d.circle(8), depth=2, on=[s3d.Frame((0, 0, 8)), s3d.Frame((100, 0, 8))])
         self.assertLess(closed_volume(plate)[1], 60 * 40 * 8)
-        with self.assertRaisesRegex(ValueError, r"^pocket: no tool cuts into 'plate'"):
+        with self.assertRaisesRegex(ValueError, r"^pocket: none of the 2 frames cuts into 'plate'"):
             s3d.pocket(plate, s3d.circle(8), depth=2, on=[s3d.Frame((100, 0, 8)), s3d.Frame((-100, 0, 8))])
 
     def test_a_tool_that_takes_everything_says_so(self):
@@ -62,6 +73,152 @@ class NothingCut(unittest.TestCase):
             s3d.cut(plate, s3d.at(s3d.cylinder("pin", 10, 20), x=180))
         self.assertIn("(its box (70, -20, 0) .. (130, 20, 8); the tools' (175, -5, 0) .. (185, 5, 20))",
                       str(caught.exception))
+
+
+class MissedCutWarns(unittest.TestCase):
+    """By default a missed cut warns, as a boolean that misses does in Blender or in a CAD kernel."""
+
+    def setUp(self):
+        s3d.empty_scene()
+        environ = mock.patch.dict(os.environ)     # put back as it was, SAND3D_STRICT included
+        environ.start()
+        self.addCleanup(environ.stop)
+        os.environ.pop("SAND3D_STRICT", None)
+
+    def test_a_cut_that_misses_warns_and_leaves_the_part(self):
+        plate = s3d.box("plate", 60, 40, 8)
+        before = len(plate.data.vertices)
+        with self.assertWarns(MissedCut) as caught:
+            out = s3d.cut(plate, s3d.at(s3d.cylinder("pin", 10, 20), x=80))
+        self.assertIs(out, plate)
+        self.assertEqual(str(caught.warning),
+                         "cut: no tool cuts into 'plate' — they miss it, or only touch it (its box (-30, -20, 0) .. "
+                         "(30, 20, 8); the tools' (75, -5, 0) .. (85, 5, 20))")
+        self.assertEqual(len(plate.data.vertices), before)
+        self.assertEqual([o.get("s3d_name") for o in bpy.data.objects], ["plate"], "the tool is used up")
+
+    def test_the_program_goes_on(self):
+        plate = s3d.box("plate", 60, 40, 8)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", MissedCut)
+            s3d.hole(plate, 5, on=s3d.Frame((100, 0, 0)))
+        s3d.hole(plate, 5)
+        self.assertTrue(closed_volume(plate)[0])
+        self.assertLess(closed_volume(plate)[1], 60 * 40 * 8)
+
+    def test_hole_and_pocket_warn_too(self):
+        plate = s3d.box("plate", 60, 40, 8)
+        with self.assertWarnsRegex(MissedCut, r"^hole: no tool cuts into 'plate'"):
+            s3d.hole(plate, 5, on=s3d.Frame((100, 0, 0)))
+        with self.assertWarnsRegex(MissedCut, r"^pocket: no tool cuts into 'plate'"):
+            s3d.pocket(plate, s3d.circle(8), depth=2, on=s3d.Frame((100, 0, 8)))
+        self.assertAlmostEqual(closed_volume(plate)[1], 60 * 40 * 8, places=3)
+
+    def test_a_pocket_pattern_all_off_the_part_warns_once(self):
+        plate = s3d.box("plate", 60, 40, 8)
+        with warnings.catch_warnings(record=True) as seen:
+            warnings.simplefilter("always")
+            s3d.pocket(plate, s3d.circle(8), depth=2, on=[s3d.Frame((100, 0, 8)), s3d.Frame((-100, 0, 8))])
+        self.assertEqual([type(w.message) for w in seen if issubclass(w.category, MissedCut)], [MissedCut])
+
+    def test_a_pocket_pattern_all_off_the_part_names_every_frame(self):
+        plate = s3d.box("plate", 60, 40, 8)
+        with self.assertWarns(MissedCut) as caught:
+            s3d.pocket(plate, s3d.circle(8), depth=2, on=[s3d.Frame((100, 0, 8)), s3d.Frame((-100, 0, 8))])
+        self.assertEqual(str(caught.warning),
+                         "pocket: none of the 2 frames cuts into 'plate' — the pockets miss it, or only touch it "
+                         "(its box (-30, -20, 0) .. (30, 20, 8); the pockets' (-104, -4, 6) .. (104, 4, 8.01))")
+
+    def test_the_warning_points_at_the_program(self):
+        """At the program's line, whatever the verb's depth in the library."""
+        plate = s3d.box("plate", 60, 40, 8)
+        calls = [lambda: s3d.cut(plate, s3d.at(s3d.cylinder("pin", 10, 20), x=80)),
+                 lambda: s3d.hole(plate, 5, on=s3d.Frame((100, 0, 0))),
+                 lambda: s3d.pocket(plate, s3d.circle(8), depth=2, on=s3d.Frame((100, 0, 8))),
+                 lambda: s3d.pocket(plate, s3d.circle(8), depth=2, on=[s3d.Frame((100, 0, 8))])]
+        for call in calls:
+            with self.subTest(line=call.__code__.co_firstlineno), self.assertWarns(MissedCut) as caught:
+                call()
+            self.assertEqual((caught.filename, caught.lineno), (__file__, call.__code__.co_firstlineno))
+
+    def test_the_environment_makes_it_strict(self):
+        plate = s3d.box("plate", 60, 40, 8)
+        os.environ["SAND3D_STRICT"] = "1"
+        try:
+            with self.assertRaises(NothingCutError):
+                s3d.cut(plate, s3d.at(s3d.cylinder("pin", 10, 20), x=80))
+        finally:
+            del os.environ["SAND3D_STRICT"]
+
+    def test_the_warning_points_at_a_program_run_from_a_string(self):
+        """Whatever the current directory, even the library's own."""
+        here = os.getcwd()
+        self.addCleanup(os.chdir, here)
+        os.chdir(os.path.dirname(s3d.__file__))
+        program = "plate = s3d.box('plate', 60, 40, 8)\ns3d.hole(plate, 5, on=s3d.Frame((100, 0, 0)))\n"
+        with self.assertWarns(MissedCut) as caught:
+            exec(compile(program, "<string>", "exec"), {"s3d": s3d})
+        self.assertEqual((caught.filename, caught.lineno), ("<string>", 2))
+
+    def test_strict_blocks_interleaved_by_asyncio_keep_their_own_mode(self):
+        import asyncio
+        plate = s3d.box("plate", 60, 40, 8)
+        steps = []
+
+        async def block(on, wait_before, wait_after):
+            with strict(on):
+                await wait_before.wait()
+                try:
+                    s3d.hole(plate, 5, on=s3d.Frame((100, 0, 0)))
+                    steps.append((on, "warned"))
+                except NothingCutError:
+                    steps.append((on, "raised"))
+                wait_after.set()
+
+        async def main():
+            a, b = asyncio.Event(), asyncio.Event()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", MissedCut)
+                await asyncio.gather(block(True, a, b), block(False, b, asyncio.Event()), self._go(a))
+
+        asyncio.run(main())
+        self.assertEqual(sorted(steps), [(False, "warned"), (True, "raised")])
+        with self.assertWarns(MissedCut):          # and out of both blocks, the default again
+            s3d.hole(plate, 5, on=s3d.Frame((100, 0, 0)))
+
+    @staticmethod
+    async def _go(event):
+        event.set()
+
+    def test_the_environment_says_yes_or_no(self):
+        for value, strict_mode in (("1", True), ("true", True), ("YES", True), ("on", True),
+                                   ("0", False), ("false", False), ("no", False), ("off", False), ("", False)):
+            with self.subTest(value=value):
+                os.environ["SAND3D_STRICT"] = value
+                plate = s3d.box("plate", 60, 40, 8)
+                tool = s3d.at(s3d.cylinder("pin", 10, 20), x=80)
+                if strict_mode:
+                    with self.assertRaises(NothingCutError):
+                        s3d.cut(plate, tool)
+                else:
+                    with self.assertWarns(MissedCut):
+                        s3d.cut(plate, tool)
+                s3d.empty_scene()
+
+    def test_any_other_value_in_the_environment_raises(self):
+        os.environ["SAND3D_STRICT"] = "maybe"
+        plate = s3d.box("plate", 60, 40, 8)
+        with self.assertRaisesRegex(ValueError, r"^SAND3D_STRICT='maybe': give 1, true, yes or on"):
+            s3d.cut(plate, s3d.at(s3d.cylinder("pin", 10, 20), x=80))
+
+    def test_strict_off_overrides_the_environment(self):
+        plate = s3d.box("plate", 60, 40, 8)
+        os.environ["SAND3D_STRICT"] = "1"
+        try:
+            with strict(False), self.assertWarns(MissedCut):
+                s3d.cut(plate, s3d.at(s3d.cylinder("pin", 10, 20), x=80))
+        finally:
+            del os.environ["SAND3D_STRICT"]
 
 
 if __name__ == "__main__":

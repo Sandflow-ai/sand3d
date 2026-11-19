@@ -14,9 +14,13 @@ qualified ones (`slot.side`) are kept. An edge left lying flat between two
 coplanar faces loses its names.
 """
 import bisect
+import contextlib
+import contextvars
 import math
 import numbers
+import os
 import random
+import sys
 import warnings
 from copy import deepcopy
 
@@ -273,15 +277,88 @@ class NothingCut(ValueError):
     """A cut, a hole or a pocket whose tools all miss the part, or only touch it."""
 
 
-def _boxes(ob, operands):
-    """The part's box and the tools', in its parent's frame — where the program placed them."""
+def _nothing_cut(message, name, part, tools):
+    """NothingCut, keeping for a pocket pattern the part's name and the boxes, in the scene's frame."""
+    error = NothingCut(message)
+    error._missed = (name, part, tools)
+    return error
+
+
+class MissedCut(UserWarning):
+    """The warning a missed cut, hole or pocket gives outside strict mode: the part is left as it was."""
+
+
+_STRICT = contextvars.ContextVar("sand3d_strict", default=None)   # None: SAND3D_STRICT decides
+
+
+_YES, _NO = ("1", "true", "yes", "on"), ("", "0", "false", "no", "off")
+
+
+def _is_strict():
+    if _STRICT.get() is not None:
+        return _STRICT.get()
+    value = os.environ.get("SAND3D_STRICT", "")
+    if value.strip().lower() in _YES:
+        return True
+    if value.strip().lower() in _NO:
+        return False
+    raise ValueError(f"SAND3D_STRICT={value!r}: give 1, true, yes or on for strict mode; 0, false, no, off or "
+                     f"nothing for warnings")
+
+
+@contextlib.contextmanager
+def strict(on=True):
+    """Within the block, a cut, a hole or a pocket whose tools all miss the part raises
+    NothingCut (on) or warns with MissedCut and leaves the part as it was (off).
+
+    Outside any block, SAND3D_STRICT in the environment decides: 1, true, yes or on make
+    it raise; 0, false, no, off or nothing make it warn, as a boolean that misses does in
+    Blender or in a CAD kernel; any other value is an error. Strict mode is for checking
+    programs, a dataset's for instance: a tool in the wrong place is the
+    commonest silent mistake, and a warning lets the program go on to a wrong object."""
+    token = _STRICT.set(on)     # a context variable: blocks interleaved by asyncio each keep their own
+    try:
+        yield
+    finally:
+        _STRICT.reset(token)
+
+
+def _in_library(frame):
+    name = frame.f_globals.get("__name__") or ""
+    return name == "sand3d" or name.startswith("sand3d.")
+
+
+def _warn(message, category):
+    """Warn at the program's line: the first caller outside the library, however deep
+    the verb that warns is called within it — told by its module, not its file."""
+    frame, level = sys._getframe(1), 2
+    while frame.f_back is not None and _in_library(frame):
+        frame, level = frame.f_back, level + 1
+    warnings.warn(message, category, stacklevel=level)
+
+
+def _missed(error):
+    """A missed cut: raise it in strict mode, else warn and let the program go on."""
+    if _is_strict():
+        raise error
+    _warn(str(error), MissedCut)
+
+
+def _box_in_scene(ob, box):
+    """`box`, in `ob`'s frame, as the box it fills in the scene — where the program placed it."""
     m = _core.world(ob)
-    out = []
-    for lo, hi in (operands.box, operands.tools_box):
-        corners = [m @ Vector((x, y, z)) for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])]
-        out.append("(" + ", ".join(f"{min(c[k] for c in corners):.6g}" for k in range(3)) + ") .. ("
-                   + ", ".join(f"{max(c[k] for c in corners):.6g}" for k in range(3)) + ")")
-    return out
+    lo, hi = box
+    corners = [m @ Vector((x, y, z)) for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])]
+    return tuple(min(c[k] for c in corners) for k in range(3)), tuple(max(c[k] for c in corners) for k in range(3))
+
+
+def _box_text(box):
+    return "(" + ", ".join(f"{v:.6g}" for v in box[0]) + ") .. (" + ", ".join(f"{v:.6g}" for v in box[1]) + ")"
+
+
+def _boxes(ob, operands):
+    """The part's box and the tools', as text, in the scene."""
+    return [_box_text(_box_in_scene(ob, box)) for box in (operands.box, operands.tools_box)]
 
 
 def _boolean(ob, tools, operation, strip, self_intersect=False, verb="boolean", aimed=False):
@@ -333,9 +410,10 @@ def _boolean(ob, tools, operation, strip, self_intersect=False, verb="boolean", 
                 for tool in consumed:
                     delete(tool)
                 if aimed:   # a tool in the wrong place is the commonest silent mistake: say so
-                    part, tools_at = _boxes(ob, operands)
-                    raise NothingCut(f"{verb}: no tool cuts into {name!r} — they miss it, or only touch it (its box "
-                                     f"{part}; the tools' {tools_at})")
+                    part, tools_at = (_box_in_scene(ob, box) for box in (operands.box, operands.tools_box))
+                    _missed(_nothing_cut(f"{verb}: no tool cuts into {name!r} — they miss it, or only touch it (its "
+                                       f"box {_box_text(part)}; the tools' {_box_text(tools_at)})",
+                                       name, part, tools_at))
                 return ob
             operands = _Operands(ob, tools, operation, strip)
             bm = _solve(operands.base, operands.tools, operation, self_intersect)
@@ -514,7 +592,8 @@ def seat(host, part):
         tool.matrix_basis = _core.snapped(to_host @ k.rest_world(ob))
         tools.append(tool)
     try:
-        return _boolean(host, tools, "DIFFERENCE", strip=True, verb="seat", aimed=True)
+        with strict():      # a part that shares no volume with its host has nothing to seat: always an error
+            return _boolean(host, tools, "DIFFERENCE", strip=True, verb="seat", aimed=True)
     except NothingCut:
         raise ValueError(f"seat: {_core.given_name(root)!r} shares no volume with {_core.given_name(host)!r} at "
                          f"rest — they miss each other, or only touch: there is nothing to seat") from None
@@ -732,14 +811,23 @@ def pocket(ob, profile, depth=None, on=None):
     if isinstance(profile, (list, tuple)) and any(isinstance(p, (Profile, Placed)) for p in profile):
         raise TypeError("pocket: one profile per pocket; to repeat it, give on=[frames]")
     if isinstance(on, (list, tuple)):
-        missed = []
-        for f in frames_of(on, "pocket"):     # one after the other, as the loop it replaces
+        frames, missed = frames_of(on, "pocket"), []
+        for f in frames:                      # one after the other, as the loop it replaces
             try:
-                pocket(ob, profile, depth, f)
+                with strict():
+                    pocket(ob, profile, depth, f)
             except NothingCut as error:       # one frame off an irregular part: dropped, as a hole's
                 missed.append(error)
-        if len(missed) == len(on):
-            raise missed[0]
+        if len(missed) == len(frames):
+            if len(frames) == 1:
+                _missed(missed[0])
+            else:
+                name, part, _ = missed[0]._missed
+                tools = (tuple(min(e._missed[2][0][k] for e in missed) for k in range(3)),
+                         tuple(max(e._missed[2][1][k] for e in missed) for k in range(3)))
+                _missed(_nothing_cut(f"pocket: none of the {len(frames)} frames cuts into {name!r} — the pockets "
+                                     f"miss it, or only touch it (its box {_box_text(part)}; the pockets' "
+                                     f"{_box_text(tools)})", name, part, tools))
         return ob
     profile = _drawing(profile, "pocket: the profile is placed out of the face's plane: draw it in its plane — "
                                 "x, y and rz only — and give the face or frames with on=: s3d.pocket(ob, profile, "
