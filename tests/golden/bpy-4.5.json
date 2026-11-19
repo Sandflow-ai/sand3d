@@ -1,5 +1,5 @@
 {
- "bpy": "4.5.13 LTS",
+ "bpy": "4.5.16 LTS",
  "digests": {
   "case:profile_shapes": "f7ec6b11db40c9d6",
   "case:stations": "5e4438297c70327f",
@@ -43,6 +43,7 @@
   "case:export_meshes": "49d47323e897e4ac",
   "case:materials": "4c37230ee2cc72ee",
   "case:metre_bracket": "d74bcd7810be67be",
+  "case:low_poly_turnings": "858aefafacf0f0da",
   "case:spline_loop": "b3077adc87cddc16",
   "case:shell_open_by_direction": "848deea81f1e8e43",
   "case:egg_stations": "feb186439211779b",
@@ -65,6 +66,8 @@
   "case:surface_details": "295fbb8c7af6c31d",
   "case:wave_surfaces": "0818cd7d9c155dd7",
   "case:retained_fill": "bf6b65d48d4f04a8",
+  "case:rooted_tufts": "96e5600b4f06ceae",
+  "case:grouped_surfaces": "ee266d5220e16c27",
   "program:weight_stack.weight_stack": "c47479f9c8875e3c",
   "program:tufted_chair.tufted_chair": "ecdfaf895171a615",
   "program:cutlery.spoon": "11febab11b1d4994",
@@ -77,8 +80,6 @@
   "program:rack.rack": "eb509aa649af09c0",
   "program:chair.chair": "c85b1f4ccb835a3a",
   "program:gate.gate": "876579fdcab50a89",
-  "program:pond.pond": "3d207cfeea5ed35b",
-  "case:rooted_tufts": "96e5600b4f06ceae",
-  "case:grouped_surfaces": "ee266d5220e16c27"
+  "program:pond.pond": "3d207cfeea5ed35b"
  }
 }
