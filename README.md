@@ -9,11 +9,11 @@
 **3D modeling in Python, built for LLMs.**
 
 sand3d is a Python library for writing 3D objects as short programs: profiles, solids,
-edits, frames, joints and assemblies, over Blender's `bpy`. A program says *how* a shape
-is made, part by part and in its own words, so a model writes it in a few hundred tokens
-and a person can read it.
+edits, frames, joints and assemblies, and the forms of nature (grass, moss, trees, water,
+rock), over Blender's `bpy`. A program says *how* a shape is made, part by part and in its
+own words, so a model writes it in a few hundred tokens and a person can read it.
 
-<p align="center"><img src="https://raw.githubusercontent.com/Sandflow-ai/sand3d/main/docs/readme/hero.png" alt="Objects written in sand3d" width="830"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/Sandflow-ai/sand3d/main/docs/readme/cover.jpg" alt="A washing machine overgrown with moss, a fern and a flowering vine, on a riverbank at sunset, next to a jetty and a tree, written in sand3d" width="830"></p>
 
 <p align="center">
   <a href="https://sandflow.ai/sand3d/"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Sandflow-ai/sand3d/main/docs/readme/sandflow-symbol-white.svg"><img src="https://raw.githubusercontent.com/Sandflow-ai/sand3d/main/docs/readme/sandflow-symbol-black.svg" alt="" height="16" align="absmiddle"></picture>&nbsp;Website</a> ·
@@ -35,7 +35,7 @@ and a person can read it.
 <a href="https://sand3d.sandflow.ai/tokens.html">How it is measured, part by part</a></p>
 
 - **Short.** A part takes 2 to 6× fewer tokens than the same part in Blender Python, CadQuery or FeatureScript ([details](https://sand3d.sandflow.ai/tokens.html)).
-- **The whole API fits in a prompt**, about 3,600 tokens ([the API](https://sand3d.sandflow.ai/api.html)).
+- **One file to prompt.** Every signature, one line each, in [the API](https://sand3d.sandflow.ai/api.html); a short guide per technique (water, trees, terrain…) is read only when a task needs it.
 - **Named, not computed.** Parts, edges and faces are reached by name, never by hand-computed coordinates.
 - **Deterministic.** The same program builds the same mesh, bit for bit.
 
@@ -116,8 +116,8 @@ The programs themselves: [docs/examples/](https://github.com/Sandflow-ai/sand3d/
 ## Give it to your LLM
 
 Put [docs/api.md](https://github.com/Sandflow-ai/sand3d/blob/main/docs/api.md) in the system prompt: the rules of the vocabulary, every
-signature, and worked examples, in about 3 600 tokens; [llms.txt](https://github.com/Sandflow-ai/sand3d/blob/main/llms.txt) points a
-model at it. For objects of several parts, [the guidelines](https://sand3d.sandflow.ai/guidelines.html) give
+signature, and worked examples; [llms.txt](https://github.com/Sandflow-ai/sand3d/blob/main/llms.txt) points a
+model at it, and at the task guides it reads on demand. For objects of several parts, [the guidelines](https://sand3d.sandflow.ai/guidelines.html) give
 the eight rules of an assembly program: the plan first, then the details, then the parts.
 
 ## What is in it
@@ -127,9 +127,10 @@ Everything on one flat `s3d.<verb>` surface:
 | family | verbs |
 |---|---|
 | profiles | `rect` `circle` `slot` `polygon` `poly` `arc` `spline` `superellipse` `text` `offset` `stroke` … (16) |
-| solids and paths | `extrude` `revolve` `sweep` `loft` `wire` `helix` `box` `cylinder` `tube` `sphere` `torus` `dome` … (15) |
-| edits | `cut` `join` `intersect` `split` `hole` `pocket` `fillet` `chamfer` `shell` `dent` … (15) |
-| frames and placement | `Frame` `face` `edge` `bbox` `local` `at` `transform` `grid` `ring` `along` `snap` |
+| solids and paths | `extrude` `revolve` `sweep` `loft` `wire` `helix` `box` `cylinder` `tube` `sphere` `torus` `dome` `hull` `field` `fill` `waves` … (19) |
+| edits | `cut` `join` `intersect` `split` `hole` `pocket` `fillet` `chamfer` `shell` `dent` `bend` `twist` `taper` `displace` `smooth` `blend` … (21) |
+| frames and placement | `Frame` `face` `edge` `bbox` `local` `at` `transform` `grid` `ring` `along` `snap` `lay` |
+| distributions | `Frames` `scatter` `tufts` `branches` `phyllotaxis` `spiral` `vary` `noise` (8) |
 | articulation | `joint` `pose` `seat` |
 | assembly | `group` `assembly` `attach` `export` `units` `fingerprint` … (8) |
 | parts and materials | `gear` `knurl` `thread` `material` |
@@ -139,6 +140,8 @@ No category verbs (`chair()`, `table()`): a category is a program written *in* s
 ## Datasets
 
 sand3d programs for five sources of 3D objects, on Hugging Face under CC BY 4.0.
+
+<p align="center"><img src="https://raw.githubusercontent.com/Sandflow-ai/sand3d/main/docs/readme/hero.png" alt="Objects written in sand3d" width="830"></p>
 
 <table>
   <tr>
