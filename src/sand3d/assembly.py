@@ -64,7 +64,8 @@ def export(root, path):
     """root and what hangs on it by its joints, in metres: .glb at the current pose, joints
     in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's
     tree as OpenUSD text, with the materials; .ifc the part tree as IFC4, the open standard
-    Revit opens and links (.rvt only Revit writes); .obj and .stl its meshes at the current pose.
+    Revit opens and links (.rvt only Revit writes); .obj and .stl its meshes at the current pose;
+    the lights where the format has words for them.
 
     The program's unit to metres, then one file, its extension the format: a GLB — with
     the materials the program set, if it set any; nested by the joints, each in its
@@ -75,8 +76,14 @@ def export(root, path):
     tree as an IfcProject of assemblies and proxies, every mesh a triangulated face set at
     the current pose, with materials but no joints; GlobalIds are not stable across edits or
     unique across models — or the meshes alone, as OBJ (Y up) or binary STL (Z up), at the current pose.
-    Limits only: masses, frictions, efforts and drives are dynamics, which sand3d does not say."""
-    from . import ifcfile, meshfile, urdf, usd
+    Limits only: masses, frictions, efforts and drives are dynamics, which sand3d does not say.
+
+    The lights of the tree (`light`), in the words each format has for them: the GLB a point
+    or a spot in candela and a sun in lux (KHR_lights_punctual), and in each light's extras
+    (`s3d_light`) what glTF has no word for, its size and its shadow; the USDA all four, in UsdLux;
+    the IFC a point or a spot as an `IfcLightFixture`, in lumens. The URDF, the OBJ and the STL
+    have none. A light a format has no word for is left out, with a warning."""
+    from . import ifcfile, lights, meshfile, urdf, usd
     from .assembly import Handle
     root = root.root if isinstance(root, Handle) else root
     suffix = os.path.splitext(str(path))[1].lower()
@@ -92,24 +99,32 @@ def export(root, path):
         raise ValueError(f"export: {suffix or 'a path with no extension'} is not a format sand3d writes: "
                          f"name the file .glb, .ifc, .obj, .stl, .urdf or .usda")
     if suffix in (".obj", ".stl"):
+        lights.left_out(lights.lights([root, *root.children_recursive]), path, "an OBJ or an STL holds meshes only")
         (meshfile.write_obj if suffix == ".obj" else meshfile.write_stl)(root, path)
         return
     materials.resolve()
     if suffix == ".ifc":
+        lights.left_out([ob for ob in lights.lights([root, *root.children_recursive])
+                         if lights.kind(ob) in ("sun", "ambient")], path,
+                        "IFC gives a sun or the sky only a share of 0..1, not lux")
         ifcfile.write_ifc(root, path)
         return
     if suffix == ".urdf":
+        lights.left_out(urdf.Mechanism(root).lights(), path, "a URDF has no light")
         urdf.write_urdf(root, path)
         return
     if suffix == ".usda":
         usd.write_usda(root, path)
         return
+    lights.left_out([ob for ob in urdf.Mechanism(root).lights() if lights.kind(ob) == "ambient"], path,
+                    "glTF has no ambient light")
     lent = _lend_meshes()
     try:
         name = root.name                                   # the GLB's scene: the exporter names it after coll
         coll = bpy.data.collections.new("s3d~export")      # the exporter writes this, not the whole scene
         bpy.context.scene.collection.children.link(coll)
         state = urdf.glb_tree(root, coll)
+        lit = [ob for ob in coll.objects if ob.type == "LIGHT"]
         dressed = materials.dressed()           # asked before the tags come off: it reads them
         tags = {m: m.pop(materials.TAG) for m in bpy.data.materials if materials.TAG in m}   # extras: joints only
         clash = bpy.data.collections.get(name)  # a collection of the program's, lent its name meanwhile
@@ -118,7 +133,7 @@ def export(root, path):
                 clash.name = "s3d~export~lent"
             coll.name = name
             bpy.ops.export_scene.gltf(filepath=str(path), export_format="GLB", collection=coll.name,
-                                      export_extras=True,
+                                      export_extras=True, export_lights=bool(lit),
                                       export_materials="EXPORT" if dressed else "NONE")
         finally:
             coll.name = "s3d~export"

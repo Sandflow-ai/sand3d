@@ -107,6 +107,8 @@ LENGTHS = {
     "pose": {"ob": "-", "value": "-", "joint": "-"},
     "seat": {"host": "-", "part": "-"},
     # assembly
+    "light": {"name": "-", "kind": "-", "lm": "-", "lux": "-", "color": "-", "angle": "-", "blend": "-",
+              "shadow": "-", "size": "L"},
     "material": {"ob": "-", "kind": "-", "color": "-", "roughness": "-", "metallic": "-", "opacity": "-",
                  "emission": "-"},
     "group": {"name": "-", "children": "-"},
