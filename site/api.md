@@ -73,7 +73,7 @@ join(ob, *others)  # Fuse others in; ob's material wins: group keeps each its ow
 intersect(ob, tool)  # Keep the common part
 split(ob, frame, keep='above')  # By a frame's plane
 delete(ob)  # Remove it
-copy(ob)  # An independent copy, its joints with it
+copy(ob, name=None)  # An independent copy, its joints with it; name names it, or {old: new} what it holds
 hole(ob, d, on=(0, 0), depth=None, cbore=None, csk=None)  # On frames or points: through, or depth deep
 pocket(ob, profile, depth=None, on=None)  # Profile cut in from a face
 merge(*obs)  # No boolean

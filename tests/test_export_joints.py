@@ -113,7 +113,7 @@ def urdf_fk(path, values):
 
 
 def obj_points(path):
-    return [[float(v) for v in line.split()[1:]] for line in Path(path).read_text().splitlines()
+    return [[float(v) for v in line.split()[1:]] for line in Path(path).read_text(encoding="utf-8").splitlines()
             if line.startswith("v ")]
 
 
@@ -203,16 +203,16 @@ class Urdf(unittest.TestCase):
                 s3d.pose(p["cap"], 0, joint="cap_turn")
 
     def test_the_urdf_is_the_rest_whatever_the_pose(self):
-        first = self.export("a.urdf").read_text()
+        first = self.export("a.urdf").read_text(encoding="utf-8")
         s3d.pose(self.parts["door"], 90)
         s3d.pose(self.parts["drawer"], 100)
-        self.assertEqual(self.export("b.urdf").read_text().replace("b_meshes", "a_meshes"), first)
-        self.assertEqual((self.tmp / "a_meshes/door.obj").read_text(), (self.tmp / "b_meshes/door.obj").read_text())
+        self.assertEqual(self.export("b.urdf").read_text(encoding="utf-8").replace("b_meshes", "a_meshes"), first)
+        self.assertEqual((self.tmp / "a_meshes/door.obj").read_text(encoding="utf-8"), (self.tmp / "b_meshes/door.obj").read_text(encoding="utf-8"))
 
     def test_a_mirror_image_is_baked_into_its_link(self):
         self.export()
-        door = (self.tmp / "washer_meshes/door.obj").read_text().splitlines()
-        twin = (self.tmp / "washer_meshes/door_2.obj").read_text().splitlines()
+        door = (self.tmp / "washer_meshes/door.obj").read_text(encoding="utf-8").splitlines()
+        twin = (self.tmp / "washer_meshes/door_2.obj").read_text(encoding="utf-8").splitlines()
         faces = [l for l in door if l.startswith("f ")]
         flipped = [l for l in twin if l.startswith("f ")]
         self.assertEqual(flipped[0].split()[1:], faces[0].split()[1:][::-1])
@@ -353,10 +353,10 @@ class Glb(unittest.TestCase):
         self.assertLess(rgba[0], rgba[2])
         urdf = self.path.with_suffix(".urdf")
         s3d.export(self.root, urdf)
-        self.assertIn("<material", urdf.read_text())
+        self.assertIn("<material", urdf.read_text(encoding="utf-8"))
         usda = self.path.with_suffix(".usda")
         s3d.export(self.root, usda)
-        self.assertIn("UsdPreviewSurface", usda.read_text())
+        self.assertIn("UsdPreviewSurface", usda.read_text(encoding="utf-8"))
         for m in bpy.data.materials:                     # the scene keeps its tags
             self.assertIn("s3d_material", m)
 

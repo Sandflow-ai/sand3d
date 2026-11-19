@@ -167,7 +167,7 @@ class Usd(unittest.TestCase):
     def test_the_meshes_are_the_objs(self):
         for p, m in self.stage["meshes"].items():
             with self.subTest(mesh=p):
-                obj = Path(self.tmp / "washer_meshes" / f"{self.name(p)}.obj").read_text().splitlines()
+                obj = Path(self.tmp / "washer_meshes" / f"{self.name(p)}.obj").read_text(encoding="utf-8").splitlines()
                 pts = obj_points(self.tmp / "washer_meshes" / f"{self.name(p)}.obj")
                 self.assertTrue(close(m["points"], pts, 1e-7))
                 faces = [int(v) - 1 for line in obj if line.startswith("f ") for v in line.split()[1:]]
@@ -279,7 +279,7 @@ class Text(unittest.TestCase):
         for lid in lids:
             s3d.joint("hinge #1", lid, s3d.bbox(base, "+X+Z"), axis="+Y", range=(0, 90))
         s3d.export(s3d.group("box café", base, *lids), self.tmp / "b.usda")
-        text = (self.tmp / "b.usda").read_text()
+        text = (self.tmp / "b.usda").read_text(encoding="utf-8")
         self.assertIn('defaultPrim = "box_caf_"', text)
         for prim in ('Xform "box_caf_"', 'Mesh "_2_base"', 'Xform "lid_a"', 'Mesh "lid_a_2"',
                      'RevoluteJoint "hinge__1"', 'RevoluteJoint "hinge__1_2"', '</box_caf_/Geometry/lid_a_2>'):
@@ -289,7 +289,7 @@ class Text(unittest.TestCase):
     def test_an_object_with_no_joint_is_one_rigid_body(self):
         root = s3d.group("thing", s3d.box("b", 10, 10, 10), s3d.at(s3d.cylinder("c", 4, 20), x=20))
         s3d.export(root, self.tmp / "thing.usda")
-        text = (self.tmp / "thing.usda").read_text()
+        text = (self.tmp / "thing.usda").read_text(encoding="utf-8")
         self.assertNotIn("Articulation", text)
         self.assertNotIn("Joints", text)
         self.assertNotIn("Looks", text)
@@ -302,7 +302,7 @@ class Text(unittest.TestCase):
         door = s3d.at(s3d.box("door", 2, 56, 80), x=31, z=2.5)
         s3d.joint("slide", door, s3d.bbox(cab, "+X"), kind="prismatic", axis="+X", range=(0, 20))
         s3d.export(s3d.group("w", cab, door), self.tmp / "cm.usda")
-        text = (self.tmp / "cm.usda").read_text()
+        text = (self.tmp / "cm.usda").read_text(encoding="utf-8")
         self.assertIn("point3f physics:localPos0 = (0.3, 0, 0.425)", text)
         self.assertIn("float physics:upperLimit = 0.2", text)
         self.assertIn("float3[] extent = [(-0.3, -0.3, 0), (0.3, 0.3, 0.85)]", text)
@@ -314,7 +314,7 @@ class Text(unittest.TestCase):
         s3d.joint("b", gears[1], base.face("top"), follows="a", ratio=-2)
         s3d.joint("c", gears[2], base.face("top").move(x=100), follows="b", ratio=-0.25)
         s3d.export(s3d.group("train", base, *gears), self.tmp / "t.usda")
-        text = (self.tmp / "t.usda").read_text()
+        text = (self.tmp / "t.usda").read_text(encoding="utf-8")
         self.assertEqual(re.findall(r"newton:mimicJoint = <([^>]+)>\n.*\n.*newton:mimicCoef1 = (\S+)", text),
                          [("/train/Joints/a", "-2"), ("/train/Joints/a", "0.5")])
 

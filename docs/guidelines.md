@@ -271,7 +271,9 @@ def temple_arm(w=3, d=5):
 
 Copies go through `on=s3d.grid(…)`, `ring(…)` or `along(…)`. The other side of a pair is
 `s3d.transform(s3d.copy(placed), mirror="x")`. `at` is for a place, `transform` for a mirror image. Never
-cos and sin in a loop.
+cos and sin in a loop. A jointed part's image takes its names with the copy,
+`s3d.copy(door, name={"door": "left_door", "hinge": "left_hinge"})`, so that its link and its joint export
+under them, not as `door_2` and `hinge_2`.
 
 **Right**: a ring of rods.
 

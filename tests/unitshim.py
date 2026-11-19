@@ -79,7 +79,7 @@ LENGTHS = {
     "intersect": {"ob": "-", "tool": "-"},
     "split": {"ob": "-", "frame": "-", "keep": "-"},
     "delete": {"ob": "-"},
-    "copy": {"ob": "-"},
+    "copy": {"ob": "-", "name": "-"},
     "hole": {"ob": "-", "d": "L", "on": "P", "depth": "L", "cbore": "P", "csk": "csk"},
     "pocket": {"ob": "-", "profile": "P", "depth": "L", "on": "-"},
     "merge": {"obs": "-"},

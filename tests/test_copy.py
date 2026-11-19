@@ -5,6 +5,7 @@ import bpy
 
 import sand3d as s3d
 from harness import world
+from sand3d.joints import joints_of
 from test_solids import closed_volume, edges
 
 
@@ -126,6 +127,24 @@ class Copy(unittest.TestCase):
         self.assertIs(parent_of(arm), base, "the originals are untouched")
         self.assertEqual(s3d.copy([]), [])
 
+    def test_list_name_dict_spans_roots_and_joints(self):
+        from sand3d.joints import parent_of
+        base = s3d.box("base", 20, 20, 5)
+        arm = s3d.box("arm", 5, 5, 20)
+        s3d.joint("hinge", arm, base.face("top"), axis="+X", range=(0, 90))
+        old_mesh_name = base.data.name
+        twin, lever = s3d.copy([base, arm], name={"base": "foot", "arm": "lever", "hinge": "pivot"})
+        self.assertEqual([twin.name, lever.name], ["foot", "lever"])
+        self.assertIs(parent_of(lever), twin)
+        self.assertEqual([j["name"] for j in joints_of(lever)], ["pivot"])
+        self.assertEqual(base.data.name, old_mesh_name)
+        count = len(bpy.data.objects)
+        with self.assertRaisesRegex(TypeError, "dict"):
+            s3d.copy([base], name="foot")
+        with self.assertRaisesRegex(ValueError, "holds no part"):
+            s3d.copy([base, arm], name={"base": "foot", "absent": "new"})
+        self.assertEqual(len(bpy.data.objects), count)
+
     def test_same_mesh_names_and_placement(self):
         plate = s3d.at(s3d.extrude("plate", s3d.rect(40, 20, r=3), 5), x=10, z=4, rz=30)
         s3d.hole(plate, 4, on=(5, 0))
@@ -232,6 +251,51 @@ class Copy(unittest.TestCase):
         s3d.hole(twin, 3, on=(0, 0))
         self.assertTrue(closed_volume(twin)[0])
         self.assertAlmostEqual(closed_volume(twin)[1], 15 * 10 * 10 - 3.14 * 1.5 ** 2 * 10, delta=2)
+
+    def test_a_copy_named(self):
+        plate = s3d.extrude("plate", s3d.rect(40, 20), 5)
+        twin = s3d.copy(plate, name="plate_2")
+        self.assertEqual((twin["s3d_name"], twin.name, twin.data.name), ("plate_2", "plate_2", "plate_2"))
+        self.assertEqual((plate["s3d_name"], plate.name), ("plate", "plate"), "the original keeps its name")
+        self.assertEqual(mesh_of(twin), mesh_of(plate))
+        handle = s3d.copy(s3d.assembly("pair", plate, twin), name="pairs")
+        self.assertEqual(handle.root["s3d_name"], "pairs")
+
+    def test_a_copy_names_what_it_holds_and_its_joints_export_under_those_names(self):
+        """A door on its hinge, its mirror image the other door: the group, its panel and
+        its joint named through the copy, the URDF exports two links, two joints and two
+        visuals under those names — an unnamed copy exports `right_door_2`, `right_hinge_2`."""
+        import tempfile
+        import xml.etree.ElementTree as ET
+        from pathlib import Path
+        cab = s3d.box("cab", 600, 600, 850)
+        panel = s3d.transform(s3d.box("panel", 30, 290, 800), x=15, y=-145)
+        door = s3d.at(s3d.group("right_door", panel), on=s3d.local(cab, 300, 300, 25))
+        s3d.joint("right_hinge", door, s3d.local(cab, 300, 300, 25), axis="+Z", range=(0, 90))
+        left = s3d.transform(s3d.copy(door, name={"right_door": "left_door", "panel": "left_panel",
+                                                  "right_hinge": "left_hinge"}), mirror="y")
+        self.assertEqual((left["s3d_name"], left.name), ("left_door", "left_door"))
+        self.assertEqual([(c["s3d_name"], c.data.name) for c in left.children], [("left_panel", "left_panel")])
+        self.assertEqual([j["name"] for j in joints_of(left)], ["left_hinge"])
+        self.assertEqual([j["name"] for j in joints_of(door)], ["right_hinge"], "the original's joint keeps its name")
+        root = s3d.group("cabinet", cab, door, left)
+        with tempfile.TemporaryDirectory() as tmp:
+            s3d.export(root, Path(tmp) / "cabinet.urdf")
+            robot = ET.parse(Path(tmp) / "cabinet.urdf").getroot()
+        self.assertEqual({link.get("name") for link in robot.findall("link")}, {"cabinet", "right_door", "left_door"})
+        self.assertEqual({j.get("name") for j in robot.findall("joint")}, {"right_hinge", "left_hinge"})
+        visuals = {v.get("name") for link in robot.findall("link") for v in link.findall("visual")}
+        self.assertTrue({"panel", "left_panel"} <= visuals, visuals)
+
+    def test_a_name_the_copy_holds_nothing_of_is_refused(self):
+        box = s3d.box("box", 10, 10, 10)
+        with self.assertRaisesRegex(ValueError, "holds no part, group or joint"):
+            s3d.copy(box, name={"box": "crate", "lid": "cover"})
+        with self.assertRaisesRegex(TypeError, "a string, or"):
+            s3d.copy(box, name=3)
+        with self.assertRaisesRegex(TypeError, "a name is a string"):
+            s3d.copy(box, name={"box": None})
+        self.assertEqual(len(bpy.data.objects), 1, "a refused name makes no copy")
 
 
 if __name__ == "__main__":

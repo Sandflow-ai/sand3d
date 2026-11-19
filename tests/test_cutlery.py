@@ -42,7 +42,7 @@ class Cutlery(unittest.TestCase):
             bm.free()
 
     def test_no_category_verb_and_no_escape(self):
-        source = PROGRAM.read_text()
+        source = PROGRAM.read_text(encoding="utf-8")
         self.assertNotIn("s3d.spoon", source)
         self.assertNotIn("s3d.fork", source)
         self.assertNotIn("import bpy", source)

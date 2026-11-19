@@ -17,7 +17,7 @@ def _definitions(path, package, memo=None):
     if path in memo or not path.is_file():
         return memo.get(path, {})
     defs = memo[path] = {}
-    for node in ast.parse(path.read_text()).body:
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
         if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
             defs[node.name] = node
         elif isinstance(node, ast.ImportFrom) and node.level >= 1:
@@ -33,7 +33,7 @@ def _definitions(path, package, memo=None):
 
 
 def public_names(package):
-    for node in ast.parse((package / "__init__.py").read_text()).body:
+    for node in ast.parse((package / "__init__.py").read_text(encoding="utf-8")).body:
         if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "__all__" for t in node.targets):
             return list(ast.literal_eval(node.value))
     return []

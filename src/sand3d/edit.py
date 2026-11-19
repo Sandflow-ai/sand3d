@@ -206,7 +206,7 @@ class _Operands:
     def __init__(self, ob, tools, operation, strip):
         self.base, meshes, self.operation = *_operands(ob, tools, strip), operation
         self.box = _extent([self.base] + (meshes if operation == "UNION" else []))
-        self.tools_box = _extent(meshes) if operation == "DIFFERENCE" else None
+        self.tools_box = _extent(meshes) if operation in {"DIFFERENCE", "INTERSECT"} else None
         self.tools, self.same, kept = [], {}, {}
         for k, (tool, me) in enumerate(zip(tools, meshes), 1):
             shape = _Shape(me)
@@ -313,6 +313,12 @@ def _boolean(ob, tools, operation, strip, self_intersect=False, verb="boolean", 
         for tool in consumed:
             delete(tool)
         raise ValueError(f"{verb}: the tools take all of {name!r} away — nothing would be left")
+    empty_intersection = None
+    if operation == "INTERSECT" and not bm.faces:
+        names = ", ".join(repr(_core.given_name(t)) for t in tools)
+        part, tools_at = _boxes(ob, operands)
+        empty_intersection = (f"{verb}: {name!r} and {names} share nothing — they miss each other, or only touch "
+                              f"(their boxes {part}; {tools_at}); returning an empty mesh")
     if operation == "DIFFERENCE":
         # a tool that leaves no face took no volume out: it only touched, and printed its
         # footprint on the face it stands on, in slivers a later bevel clamps to nothing
@@ -386,6 +392,8 @@ def _boolean(ob, tools, operation, strip, self_intersect=False, verb="boolean", 
         del ob[MERGED]
     for tool in consumed:
         delete(tool)
+    if empty_intersection is not None:
+        warnings.warn(empty_intersection, stacklevel=4)
     return ob
 
 
@@ -468,7 +476,8 @@ def _materials_lost(ob, others, verb="join"):
 def intersect(ob, tool):
     """Keep the common part.
 
-    What `ob` and `tool` share. The tool is used up."""
+    What `ob` and `tool` share. If they share nothing, `ob` becomes an empty mesh
+    and a warning identifies both objects. The tool is used up."""
     _solids("intersect", ob, tool)
     refuse_using_up([tool], "intersect")
     _guard.using_up([tool], ob)
@@ -1256,40 +1265,104 @@ def _eigen3(a):
 
 # ---------------------------------------------------------------- whole objects
 
-def copy(ob):
-    """An independent copy, its joints with it; a list, the list of copies.
+def copy(ob, name=None):
+    """Copy with joints. A string names a single object. Lists copy in order and accept only a dict to rename parts and joints.
 
-    An independent copy of `ob`: the same mesh, edge and face names, name and
-    placement — a group or an assembly with its children, a handle with its anchors;
-    a jointed part with its joints, hanging on the same parent (on the copy of its
-    parent, when the copy holds both). A list is worth its elements: the list of their
-    copies, in order, a joint between two of them kept between their copies.
-    `ob` is untouched; to keep a tool a verb uses up, give it the copy."""
-    if not isinstance(ob, (list, tuple)):
-        return _copy(ob)
-    from .joints import remap
-    children, twins = _children(), {}
-    copies = [_copy(o, children, twins) for o in _flat(ob)]
-    remap(twins)                         # a joint from one element to another hangs on the other's copy
-    return copies
-
-
-def _copy(ob, children=None, seen=None):
-    """`copy`, given the scene's {parent: children} if it is known already; `seen`, if
-    given, gathers {original: copy} of every object copied."""
+    A {old: new} dict applies across all copied trees. Every key must match.
+    A joint between list elements connects their copies in the result."""
     from .assembly import Handle
-    if not isinstance(ob, Handle):
-        twins = _copy_tree(ob, children)
-        if seen is not None:
-            seen.update(twins)
-        return twins[ob]
-    twins = _copy_tree(ob.root, children)
+    from .joints import remap
+    if isinstance(ob, (list, tuple)):
+        if isinstance(name, str):
+            raise TypeError("copy: use a name dict for a list of parts")
+        roots = _flat(ob)
+        children, twins = _children(), {}
+        names = _names_held(roots, children, name) if name is not None else None
+        copies = [_copy(root, children, twins, names) for root in roots]
+        remap(twins)
+        return copies
+    if name is None:
+        return _copy(ob)
+    root = ob.root if isinstance(ob, Handle) else ob
+    children = _children() if root.children else {}
+    return _copy(ob, children, names=_names_held([root], children, name))
+
+
+def _copy(ob, children=None, seen=None, names=None):
+    """Copy one tree and collect its objects for joint remapping across roots."""
+    from .assembly import Handle
+    root = ob.root if isinstance(ob, Handle) else ob
+    twins = _copy_tree(root, children)
+    if names is not None:
+        _renamed(twins, *names)
     if seen is not None:
         seen.update(twins)
+    if not isinstance(ob, Handle):
+        return twins[root]
     memo = {id(o): twins.get(o, o) for o in _ids(vars(ob))}   # an object anchor becomes its twin
     handle = object.__new__(type(ob))
     handle.__dict__.update(deepcopy(vars(ob), memo))
     return handle
+
+
+def _names_held(roots, children, name):
+    """`copy`'s `name`, read against the roots before it is copied: ({original: its
+    copy's name}, {joint name: its copy's}) — a string names the root; a dict names every
+    object whose given name is a key, and every joint named so. A name held by nothing,
+    or one that is no string, is refused, and no copy is made."""
+    from . import joints
+    if isinstance(name, str):
+        return {roots[0]: _checked_name(name)}, {}
+    if not isinstance(name, dict):
+        raise TypeError(f"copy: name is the copy's name, a string, or {{old: new}} for what it holds, "
+                        f"not {name!r}")
+    objects, named_joints, taken = {}, {}, set()
+    tree = list(roots)
+    for ob in tree:
+        tree += children.get(ob, [])
+        given = _core.given_name(ob)
+        if given in name:
+            objects[ob] = _checked_name(name[given])
+            taken.add(given)
+        for j in joints.joints_of(ob):
+            if j["name"] in name:
+                named_joints[j["name"]] = _checked_name(name[j["name"]])
+                taken.add(j["name"])
+    left = [k for k in name if k not in taken]
+    if left:
+        held = ", ".join(repr(k) for k in left)
+        raise ValueError(f"copy: name {held}: the copy holds no part, group or joint so named")
+    return objects, named_joints
+
+
+def _renamed(twins, objects, named_joints):
+    """The copies ({original: twin}) named as `_names_held` read it."""
+    from . import joints
+    for original, twin in twins.items():
+        if original in objects:
+            _rename(twin, objects[original])
+    if named_joints:
+        for twin in twins.values():
+            js = joints.joints_of(twin)
+            if any(j["name"] in named_joints for j in js):
+                for j in js:
+                    j["name"] = named_joints.get(j["name"], j["name"])
+                joints._write(twin, js)
+
+
+def _checked_name(new):
+    if not isinstance(new, str) or not new:
+        raise TypeError(f"copy: a name is a string, not {new!r}")
+    return new
+
+
+def _rename(ob, new):
+    """`ob` named `new`: its given name, and Blender's, which the GLB's nodes carry; its
+    mesh too, which the GLB's meshes carry."""
+    ob[_core.NAME] = _checked_name(new)
+    ob.name = new
+    if ob.data is not None:
+        _core.own_mesh(ob).name = new
 
 
 def _twin(ob):

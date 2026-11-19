@@ -109,7 +109,7 @@ def main(argv):
         except Exception:
             out[name] = {"error": traceback.format_exc(limit=-3).strip().splitlines()[-1]}
             traceback.print_exc()
-    target.write_text(json.dumps({"unit": unit, "bpy": bpy.app.version_string, "pieces": out}))
+    target.write_text(json.dumps({"unit": unit, "bpy": bpy.app.version_string, "pieces": out}), encoding="utf-8")
     print(MARK + str(target), flush=True)
 
 

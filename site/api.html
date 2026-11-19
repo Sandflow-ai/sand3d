@@ -52,7 +52,7 @@ join(ob, *others)  <span class="c"># Fuse others in; ob&#x27;s material wins: gr
 intersect(ob, tool)  <span class="c"># Keep the common part</span>
 split(ob, frame, keep=<span class="s">&#x27;above&#x27;</span>)  <span class="c"># By a frame&#x27;s plane</span>
 delete(ob)  <span class="c"># Remove it</span>
-copy(ob)  <span class="c"># An independent copy, its joints with it</span>
+copy(ob, name=<span class="k">None</span>)  <span class="c"># An independent copy, its joints with it; name names it, or {old: new} what it holds</span>
 hole(ob, d, on=(<span class="n">0</span>, <span class="n">0</span>), depth=<span class="k">None</span>, cbore=<span class="k">None</span>, csk=<span class="k">None</span>)  <span class="c"># On frames or points: through, or depth deep</span>
 pocket(ob, profile, depth=<span class="k">None</span>, on=<span class="k">None</span>)  <span class="c"># Profile cut in from a face</span>
 merge(*obs)  <span class="c"># No boolean</span>
@@ -198,7 +198,7 @@ join(ob, *others)  # Fuse others in; ob&#x27;s material wins: group keeps each i
 intersect(ob, tool)  # Keep the common part
 split(ob, frame, keep=&#x27;above&#x27;)  # By a frame&#x27;s plane
 delete(ob)  # Remove it
-copy(ob)  # An independent copy, its joints with it
+copy(ob, name=None)  # An independent copy, its joints with it; name names it, or {old: new} what it holds
 hole(ob, d, on=(0, 0), depth=None, cbore=None, csk=None)  # On frames or points: through, or depth deep
 pocket(ob, profile, depth=None, on=None)  # Profile cut in from a face
 merge(*obs)  # No boolean

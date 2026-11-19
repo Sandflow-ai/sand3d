@@ -4,7 +4,7 @@
 
 One flat surface: every verb is `s3d.<verb>`. Millimetres, unless the program
 sets another unit with `s3d.units`; `export` scales to metres. A program records
-`s3d.__version__`, `s3d.fingerprint()` and `s3d.units()` with what it built.
+`s3d.__version__`, `s3d.fingerprint()`, `s3d.units()` and `s3d.facets()` with what it built.
 """
 import functools
 import hashlib

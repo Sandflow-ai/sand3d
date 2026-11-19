@@ -98,7 +98,7 @@ join(ob, *others)  # Return fused ob, consume others; use the return value. ob's
 intersect(ob, tool)  # Keep the common part
 split(ob, frame, keep='above')  # By a frame's plane
 delete(ob)  # Remove it
-copy(ob)  # An independent copy, its joints with it; a list, the list of copies
+copy(ob, name=None)  # Copy with joints. A string names a single object. Lists copy in order and accept only a dict to rename parts and joints
 hole(ob, d, on=(0, 0), depth=None, cbore=None, csk=None)  # On frames or points: through, or depth deep
 pocket(ob, profile, depth=None, on=None)  # Profile cut in from a face
 merge(*obs)  # Return one mesh without boolean, consume other inputs; use the return value
