@@ -51,7 +51,7 @@ fine-tuning a small model (LayoutVLM: 39.5 vs 6.8).
 ## Runtime
 
 Blender as a Python module: `bpy` 5.2 on Python 3.13, and 4.5 LTS on Python 3.11. The
-library imports only `bpy`, `bmesh`, `mathutils` and the standard library, and uses no
+library imports only `bpy`, `bmesh`, `mathutils`, `numpy` (shipped with bpy) and the standard library, and uses no
 5.x-only feature.
 
 ## Versioning

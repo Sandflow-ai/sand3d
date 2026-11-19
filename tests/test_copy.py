@@ -20,6 +20,131 @@ class Copy(unittest.TestCase):
     def setUp(self):
         s3d.empty_scene()
 
+    def test_shared_mesh_detaches_on_edits(self):
+        operations = [lambda o: s3d.scale(o, 2),
+                      lambda o: s3d.dent(o, [(0, 0, 10)], 4, 1),
+                      lambda o: s3d.bend(o, 15),
+                      lambda o: s3d.twist(o, 15),
+                      lambda o: s3d.taper(o, .7),
+                      lambda o: s3d.displace(o, .2, 5),
+                      lambda o: s3d.smooth(o, 30)]
+        for operation in operations:
+            with self.subTest(operation=operation):
+                s3d.empty_scene()
+                original = s3d.box("part", 10, 10, 10)
+                twin = s3d.copy(original)
+                before = mesh_of(original)
+                operation(twin)
+                self.assertEqual(mesh_of(original), before)
+                self.assertIsNot(original.data, twin.data)
+
+    def test_inherited_materials_detach(self):
+        original = s3d.box("part", 10, 10, 10)
+        twin = s3d.copy(original)
+        a = s3d.group("a", original)
+        b = s3d.group("b", twin)
+        s3d.material(a, "oak")
+        s3d.material(b, "steel")
+        self.assertIsNot(original.data, twin.data)
+        self.assertNotEqual(original.data.materials[0], twin.data.materials[0])
+
+    def test_shared_colour_export_restores_data(self):
+        from sand3d import materials
+        original = s3d.box("part", 10, 10, 10)
+        s3d.material(original, "plastic", color=lambda x, y, z: (abs(x)/10, .2, .3))
+        twin = s3d.copy(original)
+        root = s3d.group("pair", original, twin)
+        mesh = original.data
+        count = len(bpy.data.meshes)
+        with self.assertRaisesRegex(RuntimeError, "test"):
+            with materials.exporting(root):
+                self.assertIs(original.data, twin.data)
+                self.assertIsNot(original.data, mesh)
+                raise RuntimeError("test")
+        self.assertIs(original.data, mesh)
+        self.assertIs(twin.data, mesh)
+        self.assertEqual(len(bpy.data.meshes), count)
+
+    def test_common_parent_material_keeps_sharing(self):
+        original = s3d.box("part", 10, 10, 10)
+        twin = s3d.copy(original)
+        root = s3d.group("pair", original, twin)
+        s3d.material(root, "oak")
+        self.assertIs(original.data, twin.data)
+        s3d.material(root, "steel")
+        self.assertIs(original.data, twin.data)
+
+    def test_glb_instances_and_repeated_export(self):
+        import json
+        import struct
+        import tempfile
+        from pathlib import Path
+        for mode in ("material", "vertex"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                s3d.empty_scene()
+                original = s3d.box("part", 10, 10, 10)
+                s3d.material(original, "plastic", color=lambda x, y, z: (.2, .4, abs(z)/10))
+                twin = s3d.at(s3d.copy(original), x=20, rz=30)
+                root = s3d.group("pair", original, twin)
+                mesh = original.data
+                count = len(bpy.data.meshes)
+                path = Path(directory) / "part.glb"
+                s3d.export(root, path, colors=mode)
+                first = path.read_bytes()
+                size = struct.unpack_from("<I", first, 12)[0]
+                doc = json.loads(first[20:20+size])
+                self.assertEqual(len(doc["meshes"]), 1)
+                self.assertEqual(sum("mesh" in n for n in doc["nodes"]), 2)
+                s3d.export(root, path, colors=mode)
+                self.assertEqual(path.read_bytes(), first)
+                self.assertIs(original.data, mesh)
+                self.assertIs(twin.data, mesh)
+                self.assertEqual(len(bpy.data.meshes), count)
+
+    def test_lay_detaches_before_refinement_and_placement(self):
+        for refine in (0, 8):
+            with self.subTest(step=refine):
+                s3d.empty_scene()
+                original = s3d.box("part", 10, 10, 2)
+                twin = s3d.copy(original)
+                before = mesh_of(original)
+                carrier = s3d.box("carrier", 40, 40, 5)
+                s3d.lay(twin, carrier, step=refine)
+                self.assertEqual(mesh_of(original), before)
+                self.assertIsNot(original.data, twin.data)
+
+    def test_a_list_is_copied_element_by_element(self):
+        """A list is worth its elements: `copy([a, b])` raised AttributeError on the list."""
+        base = s3d.box("base", 40, 40, 10)
+        arm = s3d.at(s3d.box("arm", 10, 10, 30), z=10)
+        s3d.joint("hinge", arm, base.face("top"), axis="+X", range=(0, 90))
+        copies = s3d.copy([base, [arm]])
+        self.assertEqual([c["s3d_name"] for c in copies], ["base", "arm"])
+        self.assertTrue(all(c is not o for c, o in zip(copies, (base, arm))))
+        self.assertEqual([mesh_of(c) for c in copies], [mesh_of(base), mesh_of(arm)])
+        from sand3d.joints import parent_of
+        self.assertIs(parent_of(copies[1]), copies[0], "the arm's copy hangs on the base's copy")
+        self.assertIs(parent_of(arm), base, "the originals are untouched")
+        self.assertEqual(s3d.copy([]), [])
+
+    def test_list_name_dict_spans_roots_and_joints(self):
+        from sand3d.joints import parent_of
+        base = s3d.box("base", 20, 20, 5)
+        arm = s3d.box("arm", 5, 5, 20)
+        s3d.joint("hinge", arm, base.face("top"), axis="+X", range=(0, 90))
+        old_mesh_name = base.data.name
+        twin, lever = s3d.copy([base, arm], name={"base": "foot", "arm": "lever", "hinge": "pivot"})
+        self.assertEqual([twin.name, lever.name], ["foot", "lever"])
+        self.assertIs(parent_of(lever), twin)
+        self.assertEqual([j["name"] for j in joints_of(lever)], ["pivot"])
+        self.assertEqual(base.data.name, old_mesh_name)
+        count = len(bpy.data.objects)
+        with self.assertRaisesRegex(TypeError, "dict"):
+            s3d.copy([base], name="foot")
+        with self.assertRaisesRegex(ValueError, "holds no part"):
+            s3d.copy([base, arm], name={"base": "foot", "absent": "new"})
+        self.assertEqual(len(bpy.data.objects), count)
+
     def test_same_mesh_names_and_placement(self):
         plate = s3d.at(s3d.extrude("plate", s3d.rect(40, 20, r=3), 5), x=10, z=4, rz=30)
         s3d.hole(plate, 4, on=(5, 0))
@@ -28,7 +153,7 @@ class Copy(unittest.TestCase):
         self.assertEqual(mesh_of(twin), mesh_of(plate))
         self.assertEqual(twin["s3d_name"], "plate")
         self.assertEqual(world(twin), world(plate))
-        self.assertIsNot(twin.data, plate.data)
+        self.assertIs(twin.data, plate.data)
 
     def test_the_original_is_untouched_and_independent(self):
         lid = s3d.extrude("lid", s3d.rect(40, 30, r=4), 3)
@@ -75,7 +200,7 @@ class Copy(unittest.TestCase):
         pairs = sorted(((c["s3d_name"], tuple(map(tuple, world(c)))) for c in twin.children))
         originals = sorted(((c["s3d_name"], tuple(map(tuple, world(c)))) for c in g.children))
         self.assertEqual(pairs, originals)
-        self.assertFalse({c.data for c in twin.children} & {c.data for c in g.children})
+        self.assertEqual({c.data for c in twin.children}, {c.data for c in g.children})
         s3d.at(twin, x=100)
         moved = sorted(((c["s3d_name"], tuple(map(tuple, world(c)))) for c in g.children))
         self.assertEqual(moved, originals, "moving the copy leaves the original where it was")

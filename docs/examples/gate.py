@@ -10,5 +10,5 @@ def gate(w=750, h=1200, post=100):
     s3d.joint("hinge", leaf, s3d.bbox(l_post, "+X+Y"), axis="+Z", range=(0, 90))   # the post's edge it opens toward: +X turns toward +Y
     twin = s3d.transform(s3d.copy(leaf), mirror="x")                               # its image, hinged at x = +w: opens toward +Y too
     gate = s3d.assembly("gate", l_post, r_post, leaf, twin)
-    s3d.pose(leaf, 60)
+    s3d.pose(leaf, 60)   # shows the swing; a program returns at rest
     return gate

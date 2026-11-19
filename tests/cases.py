@@ -199,6 +199,27 @@ def dented_cushion():
     return [f.matrix for f in spots]
 
 
+@case("blend")
+def blended_parts():
+    """Two balls and a stem fused, the creases filled, read in the first ball's frame; a part's own crease."""
+    head = s3d.at(s3d.sphere("head", 20), x=5)
+    cheek = s3d.at(s3d.sphere("cheek", 14), x=17, z=4)
+    stem = s3d.at(s3d.cylinder("stem", 6, 16), x=5, z=14)
+    s3d.blend(head, cheek, stem, r=2)
+    step = s3d.at(s3d.extrude("step", s3d.poly([(0, 0), (20, 0), (20, 8), (8, 8), (8, 20), (0, 20)]), 6), x=40)
+    s3d.blend(step, r=3)
+
+
+@case("displace")
+def displaced_surfaces():
+    """Every noise, along the normals, from the origin, along an axis; octaves, seeds and a fade."""
+    s3d.displace(s3d.sphere("perlin", 20), 1, 6, octaves=2)
+    s3d.displace(s3d.at(s3d.sphere("cells", 20), x=30), 1, 6, noise="cells", seed=7, direction="radial")
+    s3d.displace(s3d.at(s3d.cylinder("ridged", 16, 20), x=60), 0.8, 5, noise="ridged", octaves=3, fade=(20, 5))
+    s3d.displace(s3d.at(s3d.box("turbulence", 20, 20, 10), x=90), 1, 8, noise="turbulence", octaves=2,
+                 direction=(0, 0, 1), fade=(0, 10))
+
+
 @case("snap", "along")
 def snap_along():
     body = s3d.box("body", 100, 50, 50)
@@ -579,3 +600,143 @@ def environment():
     """What the run depended on — printed beside the digests, not hashed."""
     import bpy
     return {"bpy": bpy.app.version_string, "pid": os.getpid()}
+
+
+@case("wire", "sweep", "loft")
+def path_laws():
+    s3d.wire("stem", [(0, 0, 0), (0, 0, 40)], [(0, 0), (0.25, 8), (0.75, 8), (1, 0)])
+    s3d.sweep("blade", s3d.ellipse(8, 3), [(20, 0, 0), (20, 0, 40)],
+              scale=[(0, (1, 1)), (0.5, (2, 1)), (1, (0, 0))], twist=[(0, 0), (0.5, 20), (1, 90)])
+    s3d.loft("bud", s3d.station(0, 0, 0), s3d.station(10, 12, 8), s3d.station(25, 0, 0))
+    s3d.loft("curved", s3d.at(s3d.circle(0), ry=65), s3d.station(10, 8, 6, x=1),
+              s3d.station(25, 18, 10, x=2.5), s3d.station(40, 12, 8, x=4), follow=True)
+    s3d.sweep("offset", s3d.at(s3d.ellipse(4, 2), x=0.3, y=0.15), [(0, 20, 0), (0, 20, 20)],
+              scale=[(0, (0, 0)), (0.3, (1, 1)), (1, (2, 1.4))])
+
+
+@case("phyllotaxis", "branches")
+def growth_frames():
+    axes = s3d.branches(40, 6, levels=2, children=2, jitter=0.2, seed=42)
+    for axis in axes:
+        s3d.wire(axis.name, axis.path, axis.d)
+    return [s3d.phyllotaxis(13, 30), s3d.phyllotaxis(8, 20, h=40), axes.tips,
+            [(a.name, a.level, a.parent.name if a.parent else None) for a in axes]]
+
+
+@case("bend", "twist", "taper")
+def own_frame_deformers():
+    blade = s3d.extrude("blade", s3d.rect(8, 60), 0.8, both=True)
+    vein = s3d.at(s3d.box("vein", 1, 60, 1), z=0.4)
+    leaf = s3d.at(s3d.group("leaf", blade, vein), x=40, ry=35)
+    s3d.bend(leaf, 220)
+    s3d.twist(s3d.box("twisted", 8, 40, 3), 90, axis="-Y")
+    s3d.taper(s3d.box("tapered", 8, 40, 3), 0.5)
+    return leaf
+
+
+@case("spiral")
+def spiral_paths():
+    path = s3d.spiral(20, 80, 2)
+    return [path.points, s3d.sweep("coil", s3d.circle(2), path,
+                                 scale=[(0, 1), (0.5, 1.4), (1, 0.5)]),
+            s3d.wire("descending", s3d.spiral(20, 40, 1.5, h=-30, left=True), 1)]
+
+
+@case("wire", "loft")
+def law_path_sampling():
+    s3d.loft("tip", s3d.station(0, 150, 80), s3d.station(85, 150, 80, x=15),
+              s3d.station(170, 0, 0, x=30))
+    return s3d.wire("probe", s3d.spline([(34, 0, 0), (0, 0, 562), (0, 0, 1124)]),
+                    [(0, 0), (0.0227, 154), (0.2227, 516), (0.6317, 860), (0.925, 553), (1, 0)])
+
+
+@case("loft", "sweep")
+def bounded_loft_and_end_scale():
+    for follow in (False, True):
+        s3d.loft("bounded", s3d.station(-20, 0, 0), s3d.station(0, 640, 380),
+                  s3d.station(165, 620, 430), s3d.station(400, 500, 390), follow=follow)
+    return s3d.sweep("anisotropic", s3d.rect(10, 6), [(0, 0, 0), (0, 0, 20)], scale=(0.9, 0.8))
+
+
+@case("wire")
+def filleted_wire_laws():
+    path = [(31, -54, 5), (44.5, -76, 27), (46.2, -97, 30.8), (47, -123, 29)]
+    s3d.wire("shrinking", path, [(0, 24), (0.4, 21), (0.7, 19.4), (1, 0)], fillet=14.4)
+    return s3d.wire("constant", path, [(0, 24), (1, 24)], fillet=14.4)
+
+
+@case("hull")
+def convex_hulls():
+    points = [(-20, -15, 0), (20, -15, 0), (-20, 15, 0), (20, 15, 0),
+              (-12, -10, 25), (16, -8, 30), (-15, 12, 22), (14, 14, 27),
+              (0, 0, 10), (20, -15, 0)]
+    s3d.hull("rock", [s3d.Frame(p) for p in points])
+
+@case("vary", "scatter", "along", "branches", "Frames")
+def varied_growth():
+    axes = s3d.branches(60, 3, levels=1, children=3, wander=6, droop=25, jitter=.15, seed=8)
+    for axis in axes:
+        s3d.wire(axis.name, axis.path, axis.d)
+    frames = s3d.along(axes[0].path, count=9, spin=137.508, span=(.15, .95)).jitter(rx=8, x=.2, seed=2)
+    for k, (f, length) in enumerate(zip(frames, s3d.vary(5, 1, len(frames), seed=1))):
+        s3d.at(s3d.cone(f"bud{k}", 1, length, d2=.1), on=f)
+    return [frames, s3d.scatter(80, (30, 40, 50), seed=5),
+            s3d.scatter(80, (30, 40, 50), seed=7, surface=True), axes.tips]
+
+
+@case("scatter")
+def surface_scatter():
+    fruit = s3d.at(s3d.sphere("fruit", 40), x=10, ry=30)
+    stone = s3d.at(s3d.box("stone", 10, 15, 20), x=60)
+    frames = s3d.scatter(120, [fruit, stone], seed=3)
+    s3d.at(s3d.cone("spike", 1, 3, d2=0), on=frames)
+    return frames
+
+
+@case("field", "noise")
+def implicit_solid():
+    return s3d.field("porous", (24, 24, 24),
+                     lambda x, y, z: x*x+y*y+(z-12)**2-81 + 3*s3d.noise(x/4, y/4, z/4, seed=7), cell=2)
+
+
+@case("facets", "smooth", "lay")
+def surface_details():
+    s3d.facets(10)
+    support = s3d.dome('support',40,12)
+    patch = s3d.smooth(s3d.extrude('patch',s3d.rect(8,8),1))
+    s3d.at(patch,z=10)
+    s3d.lay(patch,support,step=3)
+    petal = s3d.loft('petal',s3d.station(0,4,2),s3d.station(12,8,2),s3d.station(20,0,0),tip='sharp',rings=2)
+    s3d.material(petal,'plastic',color=lambda x,y,z,n,u: (u,0,1-u))
+    return support,patch,petal
+
+
+@case("waves")
+def wave_surfaces():
+    ob = s3d.box("waves", 12, 10, 1)
+    s3d.displace(ob, .3, 2, direction="+Z",
+                 noise=s3d.waves(4, direction=25, spread=18, sharpness=.7, seed=19))
+    s3d.displace(ob, .1, 2, direction="+Z",
+                 noise=s3d.waves(2, centers=[(-2, 0), (2, 1)], decay=4))
+    return ob
+
+
+@case("fill")
+def retained_fill():
+    pot = s3d.shell(s3d.box("pot", 40, 30, 30), 2, open="top")
+    s3d.fill("contents", pot, 24)
+    s3d.fill("sloped", pot, s3d.local(pot, z=15, ry=8), clearance=0)
+
+
+@case("tufts")
+def rooted_tufts():
+    sites = s3d.grid(3, 2, 10, 10)
+    s3d.tufts("grass", sites, 8, 1, seed=7)
+    return s3d.tufts("fur", sites.move(z=12), 5, 2, direction=(1, 0, .2), shape="cone", seed=3)
+
+
+@case("snap", "scatter")
+def grouped_surfaces():
+    child = s3d.at(s3d.group("child", s3d.box("pad", 12, 10, 3)), x=15)
+    root = s3d.at(s3d.group("root", child), rz=35, x=8)
+    return [s3d.scatter(12, root, seed=9), s3d.snap(root, [(20, 10, 30)], direction="-Z")]

@@ -7,6 +7,7 @@ becomes Y, Y becomes −Z), the axes OBJ readers expect and the GLB's; STL keeps
 slicer expects.
 """
 import os
+import json
 import struct
 
 from . import _core
@@ -44,10 +45,24 @@ def _triangles(ob, y_up):
 
 def write_obj(root, path):
     lines = [f"# {_core.given_name(root)} — written by sand3d, metres, Y up"]
+    from . import materials
+    means = [(ob, materials.mean_tag(ob)) for ob in _meshes(root)
+             if materials._nearest(ob) and materials.FUNCTION in json.loads(materials._nearest(ob))]
+    if means:
+        lines.append(f"mtllib {os.path.splitext(os.path.basename(os.fspath(path)))[0]}.mtl")
+        mtl = []
+        for index, (ob, tag) in enumerate(means):
+            rgba = materials._linear(materials.look(tag)['color'])
+            mtl += [f"newmtl colour{index}", "Kd " + " ".join(_num(c) for c in rgba[:3])]
+        with open(os.path.splitext(os.fspath(path))[0]+'.mtl', 'w', newline='\n') as f:
+            f.write('\n'.join(mtl)+'\n')
     base = 1
     for ob in _meshes(root):
         verts, tris = _triangles(ob, y_up=True)
         lines.append(f"o {_core.given_name(ob)}")
+        for index, (part, tag) in enumerate(means):
+            if part == ob:
+                lines.append(f"usemtl colour{index}")
         lines += ["v " + " ".join(_num(c) for c in v) for v in verts]
         lines += ["f " + " ".join(str(base + i) for i in t) for t in tris]
         base += len(verts)

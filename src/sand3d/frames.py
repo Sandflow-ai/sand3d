@@ -13,13 +13,16 @@ A frame read on a part — `ob.face`, `bbox`, an assembly's anchor — remembers
 `.offset`: a joint takes its pivot from it, wherever the part has gone since.
 """
 import atexit
+import bisect
 import math
 import re
+import random
 
 import bpy
 import bmesh
 from mathutils import Euler, Matrix, Vector
 from mathutils.bvhtree import BVHTree
+from mathutils.kdtree import KDTree
 
 from . import _core
 from .profile import Path, Placed, Profile, _as_path
@@ -138,6 +141,23 @@ class Frames(list):
     def move(self, x=0, y=0, z=0):
         return Frames(f.move(x, y, z) for f in self)
 
+    def jitter(self, rx=0, ry=0, rz=0, x=0, y=0, z=0, seed=0):
+        """Random turns and moves along own axes, bounded and bell-shaped.
+
+        Each amplitude is nonnegative (degrees or program length units). Independent
+        triangular draws use a local generator; moves use the original frame's axes.
+        Part memory is kept, as with turn and move.
+        """
+        amplitudes = (rx, ry, rz, x, y, z)
+        if not _finite(*amplitudes) or any(a < 0 for a in amplitudes):
+            raise ValueError("jitter: amplitudes must be finite nonnegative numbers")
+        rng = _random(seed, "jitter")
+        out = Frames()
+        for f in self:
+            a, b, c, dx, dy, dz = [rng.triangular(-v, v, 0) for v in amplitudes]
+            out.append(f.move(dx, dy, dz).turn(a, b, c))
+        return out
+
     def __getitem__(self, i):
         got = super().__getitem__(i)
         return Frames(got) if isinstance(i, slice) else got
@@ -181,6 +201,9 @@ def face(ob, which):
     largest flat group of faces with that name — or, given a direction ("+Z", "-X"),
     of the face furthest that way. Its origin is the parent's origin projected onto
     the face's plane, as CadQuery places a workplane."""
+    if ob.type != "MESH":
+        raise ValueError(f"face: {_core.given_name(ob)!r} is a group, not a solid: "
+                         'use bbox(group, "+Z") or a part face')
     me = ob.data
     polys = list(me.polygons)
     d = _DIRECTION.match(which)
@@ -224,6 +247,10 @@ def _facing(ob, which):
     rot = ob.matrix_basis.to_3x3()
     local = (rot.inverted() @ axis).normalized()
     chosen = [p for p in ob.data.polygons if p.normal.dot(local) > math.cos(math.radians(1))]
+    if not chosen and ob.data.attributes.get(_core.FACE_TAG + "field") is not None:
+        facing = [p for p in ob.data.polygons if p.normal.dot(local) > 0]
+        if facing:
+            return [max(facing, key=lambda p: (p.center.dot(local), -p.index))]
     if not chosen:
         return []
     far = max(p.center.dot(local) for p in chosen)
@@ -535,7 +562,7 @@ def _turned(values):
         (math.radians(v["rx"]), math.radians(v["ry"]), math.radians(v["rz"]))).to_matrix().to_4x4()
 
 
-def at(ob, x=None, y=None, z=None, rx=None, ry=None, rz=None, on=None, anchor=None):
+def at(ob, x=None, y=None, z=None, rx=None, ry=None, rz=None, on=None, anchor=None, *, scale=None):
     """Place it: set what is given, keep the rest; anchor: "-Z", "+Y-Z"….
 
     Put `ob` at (x, y, z), turned (rx, ry, rz) degrees, in the frame `on` — or in the
@@ -548,18 +575,27 @@ def at(ob, x=None, y=None, z=None, rx=None, ry=None, rz=None, on=None, anchor=No
     object, a handle, a profile (placed — a loft's section) or a path (moved); each of
     a list. With a list of frames for `on`, `ob` is used up and one copy goes on each
     frame: the list of copies is returned (of placed profiles, for a profile). A mirror
-    image is `transform`'s."""
+    image is `transform`'s.
+
+    `scale` acts about its own origin before placement and reading the placement
+    anchor: a solid takes a number or (sx, sy, sz), a group/handle one positive
+    factor, as scale(). With frame lists, a number or numeric axis tuple applies
+    to every copy; other sequences give exactly one value per frame. With one/no
+    frame, give one value. Profiles/paths do not take scale. Read geometry frames
+    after scaling; previously read frames and handle anchors do not rescale."""
     from .assembly import Handle
     given = {k: v for k, v in zip(KEYS, (x, y, z, rx, ry, rz)) if v is not None}
     if isinstance(on, (list, tuple)):
-        return _on_frames(ob, frames_of(on, "at"), given, anchor)
+        return _on_frames(ob, frames_of(on, "at"), given, anchor, scale)
     if on is not None and not hasattr(on, "matrix"):
         raise TypeError(f"at: on is a frame or a list of frames, as grid(), ring() and along() give, not {on!r}")
     items = _elements(ob)
     if items is not None:
         if anchor is not None and any(isinstance(i, (bpy.types.Object, Handle)) for i in items):
             raise ValueError("at: anchor on a list of objects: each has its own box — place them one by one")
-        return [at(i, x, y, z, rx, ry, rz, on, anchor) for i in items]
+        return [at(i, x, y, z, rx, ry, rz, on, anchor, scale=scale) for i in items]
+    if scale is not None:
+        anchor = _scaled(ob, scale, anchor)
     frame = on.matrix if on is not None else None
     if isinstance(ob, Handle):
         at(ob.root, x, y, z, rx, ry, rz, on, anchor)
@@ -724,17 +760,35 @@ def _recalled(ob):
     return (None if frame == Matrix.Identity(4) else frame), dict.fromkeys(KEYS, 0.0), None, Vector((0, 0, 0))
 
 
-def _on_frames(ob, frames, given, anchor):
+def _scaled(ob, factor, anchor):
+    """Scale through the editing verb, then refresh any kept placement anchor."""
+    from .assembly import Handle
+    from .edit import scale
+    root = ob.root if isinstance(ob, Handle) else ob
+    scale(ob, factor)
+    return _recalled(root)[2] if anchor is None else anchor
+
+
+def _on_frames(ob, frames, given, anchor, scale=None):
     """`at(ob, on=[frames])`: `ob` used up, a copy on each frame — placed as `at` with one
     frame would place it."""
     from . import _guard
     from .assembly import Handle
     from .edit import _children, _copy, _delete_tree
+    factors = [scale] * len(frames)
+    if scale is not None and not isinstance(scale, (int, float)):
+        if not (isinstance(scale, tuple) and len(scale) == 3
+                and all(isinstance(v, (int, float)) for v in scale)):
+            factors = list(scale)
+            if len(factors) != len(frames):
+                raise ValueError(f"at: on has {len(frames)} frames but scale has {len(factors)} values")
     items = _elements(ob)
     if items is not None:
         _not_nested(items, "at")
-        return [c for i in items for c in _on_frames(i, frames, given, anchor)]
+        return [c for i in items for c in _on_frames(i, frames, given, anchor, scale)]
     if not isinstance(ob, (bpy.types.Object, Handle)):
+        if scale is not None:
+            _scaled(ob, scale, anchor)
         return [_replaced(ob, f.matrix, given) for f in frames]
     _anchor_point(Vector(), Vector(), anchor)          # a wrong word raises before anything is made
     root = ob.root if isinstance(ob, Handle) else ob
@@ -743,10 +797,11 @@ def _on_frames(ob, frames, given, anchor):
     children = _children() if root.children else {}
     out = []
     try:
-        for f in frames:
+        for f, factor in zip(frames, factors):
             twin = _copy(ob, children)
-            _posed(twin.root if isinstance(twin, Handle) else twin, f.matrix, given, anchor)
             out.append(twin)
+            placed_anchor = _scaled(twin, factor, anchor) if scale is not None else anchor
+            _posed(twin.root if isinstance(twin, Handle) else twin, f.matrix, given, placed_anchor)
     except Exception:
         for twin in out:
             _delete_tree(twin.root if isinstance(twin, Handle) else twin)
@@ -792,34 +847,252 @@ def ring(n, r, start=0, angle=360, on=None):
     return Frames(out)
 
 
-def along(path, pitch=None, count=None):
-    """Along a path.
+def _finite(*values):
+    return all(isinstance(v, (int, float)) and math.isfinite(v) for v in values)
 
-    Frames along `path`, facing the way it runs: every `pitch` from its start, or
-    `count` of them evenly from end to end (round a closed path)."""
-    path = _as_path(path)
+
+def _random(seed, verb):
+    if not isinstance(seed, int):
+        raise ValueError(f"{verb}: seed must be an integer")
+    return random.Random(seed)
+
+
+def vary(value, spread, n, seed=0):
+    """Values within spread of value, most near it.
+
+    `n` floats: `value` plus a triangular draw in [-spread, spread], mode zero, from a
+    local generator seeded by `seed`. `spread` is in the value's own unit, like the
+    amounts of `jitter`: `vary(30, 6, n)` gives 24 to 36, `vary(0, 15, n)` -15 to 15
+    degrees either way. A size varied by a fifth: `vary(reach, reach / 5, n)`.
+    """
+    if not _finite(value, spread) or spread < 0:
+        raise ValueError("vary: value must be finite and spread finite and nonnegative")
+    if not isinstance(n, int) or n < 0:
+        raise ValueError("vary: n must be a nonnegative integer")
+    rng = _random(seed, "vary")
+    return [float(value + rng.triangular(-spread, spread, 0)) for _ in range(n)]
+
+
+def _path_measure(path):
     pts = [Vector(p) for p in path.points]
     if path.closed:
-        pts = pts + [pts[0]]
+        pts += pts[:1]
+    # Repeated points have no tangent. Removing them leaves arc length unchanged.
+    pts = [p for i, p in enumerate(pts) if i == 0 or p != pts[i - 1]]
+    if len(pts) < 2:
+        raise ValueError("along: path must have positive length")
     lengths = [0.0]
     for a, b in zip(pts, pts[1:]):
         lengths.append(lengths[-1] + (b - a).length)
+    return pts, lengths
+
+
+def _transport(frame, origin, tangent):
+    # Resolve a half-turn about the old X: deterministic even at a reversal.
+    if frame.z.dot(tangent) < -1 + 1e-7:
+        up = -frame.y
+    else:
+        up = frame.z.rotation_difference(tangent) @ frame.y
+    return frame._kept(Frame(origin, tangent, up))
+
+
+def _path_frames(pts, lengths, spots, initial=None):
+    """Sample in increasing arc length, transporting through every intervening segment."""
+    tangents = [(b - a).normalized() for a, b in zip(pts, pts[1:])]
+    frames = [Frame(pts[0], tangents[0]) if initial is None
+              else _transport(initial, pts[0], tangents[0])]
+    for i in range(1, len(tangents)):
+        frames.append(_transport(frames[-1], pts[i], tangents[i]))
+    out, j = Frames(), 0
+    for distance in spots:
+        while j < len(tangents) - 1 and lengths[j + 1] < distance:
+            j += 1
+        u = (distance - lengths[j]) / (lengths[j + 1] - lengths[j])
+        out.append(frames[j]._kept(Frame(pts[j].lerp(pts[j + 1], u), tangents[j], frames[j].y)))
+    return out
+
+
+def along(path, pitch=None, count=None, spin=0, span=(0, 1)):
+    """Along a path.
+
+    Frames facing its tangent, every pitch or count evenly over span (arc-length
+    fractions). A full closed path excludes the repeated endpoint with count.
+    Successive frames turn spin degrees more about the tangent. With nonzero spin,
+    X is parallel-transported through every path segment; zero keeps the historical
+    world-Z reference. Closed paths may retain transport holonomy at their seam.
+    """
+    if (not isinstance(span, (list, tuple)) or len(span) != 2
+            or not _finite(*span) or not 0 <= span[0] <= span[1] <= 1):
+        raise ValueError("along: span is two increasing fractions in [0, 1]")
+    if not _finite(spin):
+        raise ValueError("along: spin must be finite")
+    if count is not None and (not isinstance(count, int) or count < 0):
+        raise ValueError("along: count must be a nonnegative integer")
+    if pitch is not None and (not _finite(pitch) or pitch <= 0):
+        raise ValueError("along: pitch must be finite and positive")
+    path = _as_path(path)
+    pts, lengths = _path_measure(path)
     total = lengths[-1]
+    start, end = (v * total for v in span)
+    extent = end - start
     if count is not None:
-        spots = [total * k / (count if path.closed else max(count - 1, 1)) for k in range(count)]
-    elif pitch:
-        spots = [pitch * k for k in range(int(total / pitch + 1e-6) + 1)]   # lengths are single precision
+        divisor = count if path.closed and tuple(span) == (0, 1) else max(count - 1, 1)
+        spots = [start + extent * k / divisor for k in range(count)]
+    elif pitch is not None:
+        spots = [start + pitch * k for k in range(int(extent / pitch + 1e-6) + 1)]
     else:
         raise ValueError("along: give a pitch or a count")
-    out, j = [], 0
-    for s in spots:
-        while j < len(pts) - 2 and lengths[j + 1] < s:
+    if spin:
+        return Frames(f.turn(rz=k * spin) for k, f in enumerate(_path_frames(pts, lengths, spots)))
+    out, j = Frames(), 0
+    for distance in spots:
+        while j < len(pts) - 2 and lengths[j + 1] < distance:
             j += 1
-        seg = lengths[j + 1] - lengths[j]
-        f = (s - lengths[j]) / seg if seg > 0 else 0.0
-        tangent = (pts[j + 1] - pts[j]).normalized()
-        out.append(Frame(pts[j].lerp(pts[j + 1], f), tangent))
-    return Frames(out)
+        u = (distance - lengths[j]) / (lengths[j + 1] - lengths[j])
+        out.append(Frame(pts[j].lerp(pts[j + 1], u), (pts[j + 1] - pts[j]).normalized()))
+    return out
+
+
+def _surface_parts(targets, verb):
+    """Meshes keep their parent space; groups use the group's parent space."""
+    from .assembly import Handle
+    from ._surface import meshes
+    roots = targets if isinstance(targets, (list, tuple)) else [targets]
+    out = []
+    for root in roots:
+        if isinstance(root, Handle):
+            root = root.root
+        if not isinstance(root, bpy.types.Object):
+            raise ValueError(f"{verb}: give a mesh part, group or list of them")
+        if root.type == 'MESH':
+            out.append((root, root.matrix_basis))
+        else:
+            parent = _core.world(root.parent) if root.parent else Matrix.Identity(4)
+            out.extend((ob, parent.inverted() @ _core.world(ob)) for ob in meshes(root))
+    if not out:
+        raise ValueError(f"{verb}: group or list has no mesh descendants with surface area")
+    return out
+
+
+def _surface_candidates(parts, rng):
+    """Area-weighted triangles in each mesh's parent space, as with snap."""
+    triangles, cumulative, area = [], [], 0.0
+    for ob, matrix in _surface_parts(parts, "scatter"):
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(ob.data)
+            bm.transform(matrix)
+            if not bm.faces or any(not e.is_manifold for e in bm.edges):
+                raise ValueError("scatter: surface parts must be closed manifold meshes")
+            # Preserve the solid's winding (including cavity walls); a reflected
+            # placement reverses handedness, so reverse its faces once.
+            if matrix.to_3x3().determinant() < 0:
+                bmesh.ops.reverse_faces(bm, faces=list(bm.faces))
+            # Equal quad diagonals must not choose a different split when the
+            # program changes units and float32 rounding breaks the tie.
+            bmesh.ops.triangulate(bm, faces=list(bm.faces), quad_method='FIXED',
+                                  ngon_method='EAR_CLIP')
+            bm.normal_update()
+            for face in bm.faces:
+                a, b, c = [v.co.copy() for v in face.verts]
+                weight = (b - a).cross(c - a).length / 2
+                if weight > 0:
+                    area += weight
+                    cumulative.append(area)
+                    triangles.append((a, b, c, face.normal.copy()))
+        finally:
+            bm.free()
+    if not area:
+        raise ValueError("scatter: parts need a nonzero surface area")
+
+    def candidate():
+        a, b, c, normal = triangles[bisect.bisect_right(cumulative, rng.random() * area)]
+        u, v = math.sqrt(rng.random()), rng.random()
+        return Frame(a * (1 - u) + b * (u * (1 - v)) + c * (u * v), normal)
+    return candidate
+
+
+def _scatter_best(n, candidate, position=lambda f: f.origin):
+    points, out, tree, built = [], [], None, 0
+    for i in range(n):
+        if i and i % 64 == 0:
+            tree = KDTree(i)
+            for j, p in enumerate(points):
+                tree.insert(p, j)
+            tree.balance()
+            built = i
+
+        def distance(f):
+            p = position(f)
+            best = tree.find(p)[2] ** 2 if tree is not None else math.inf
+            return min([best] + [(p - q).length_squared for q in points[built:]])
+        chosen = max((candidate() for _ in range(16)), key=distance)
+        points.append(position(chosen))
+        out.append(chosen)
+    return out
+
+
+def scatter(n, size, seed=0, surface=False, on=None):
+    """Evenly spread radial frames inside an ellipsoid or on its surface.
+
+    A mesh part or list of mesh parts instead of size samples their closed surfaces
+    by triangle area, with outward face normals, in each part's parent space (as snap).
+    Parts must share a coordinate space. on is refused; surface is implicit. Separate
+    parts retain all surfaces, including overlap interiors; join first to sample a union.
+    Size otherwise gives three positive diameters in program units, centred on on. Mitchell
+    sampling chooses the best of 16 candidates by physical nearest-neighbour distance.
+    Surface candidates are uniform in area (ellipsoid Jacobian rejection); volume
+    candidates are uniform in volume. Ellipsoid normals are radial, even on its surface.
+    At most 4096 frames; a local seeded generator leaves global randomness untouched.
+    """
+    if not isinstance(n, int) or not 0 <= n <= 4096:
+        raise ValueError("scatter: n must be an integer in [0, 4096]")
+    if isinstance(size, bpy.types.Object) or (isinstance(size, (list, tuple))
+            and (not size or isinstance(size[0], bpy.types.Object))):
+        if on is not None:
+            raise ValueError("scatter: on is only for ellipsoids; parts already carry placement")
+        if not isinstance(surface, bool):
+            raise ValueError("scatter: surface must be a boolean")
+        parts = size if isinstance(size, (list, tuple)) else [size]
+        return Frames(_scatter_best(n, _surface_candidates(parts, _random(seed, "scatter"))))
+    if (not isinstance(size, (list, tuple)) or len(size) != 3
+            or not _finite(*size) or any(v <= 0 for v in size)):
+        raise ValueError("scatter: size must be three finite positive diameters")
+    if not isinstance(surface, bool):
+        raise ValueError("scatter: surface must be a boolean")
+    rng, base = _random(seed, "scatter"), _one(on, "scatter")
+    radii = [v / 2 for v in size]
+
+    def candidate():
+        while True:
+            z, a = rng.uniform(-1, 1), rng.uniform(0, 2 * math.pi)
+            r = math.sqrt(max(0, 1 - z * z))
+            unit = (r * math.cos(a), r * math.sin(a), z)
+            if not surface or rng.random() <= min(radii) * math.sqrt(sum((u / r) ** 2 for u, r in zip(unit, radii))):
+                break
+        scale = 1 if surface else rng.random() ** (1 / 3)
+        return Vector([u * r * scale for u, r in zip(unit, radii)])
+
+    points = _scatter_best(n, candidate, position=lambda p: p)
+    out = Frames()
+    for p in points:
+        normal = base.x * p.x + base.y * p.y + base.z * p.z
+        out.append(base._kept(Frame(base.origin + normal, normal)))
+    return out
+
+
+def _ray(direction):
+    """A direction of `snap`: a named axis ("+Z", "-X", "Z"…) or a nonzero (x, y, z)."""
+    d = _DIRECTION.match(direction) if isinstance(direction, str) else None
+    if d:
+        v = Vector({"x": (1, 0, 0), "y": (0, 1, 0), "z": (0, 0, 1)}[d.group(2).lower()])
+        return -v if d.group(1) in ("-", "<") else v
+    if (isinstance(direction, (tuple, list, Vector)) and len(direction) == 3
+            and all(isinstance(c, (int, float)) and not isinstance(c, bool) and math.isfinite(c) for c in direction)
+            and Vector(direction).length > 0):
+        return Vector(direction).normalized()
+    raise ValueError(f'snap: direction is a named axis ("+Z", "-X"…), a nonzero (x, y, z) or None, '
+                     f'not {direction!r}')
 
 
 def snap(targets, points, direction=None):
@@ -827,25 +1100,212 @@ def snap(targets, points, direction=None):
 
     Frames on the surface of `targets` (one object or several), one per point or
     frame of `points`: at the nearest spot, or where a line from it running along
-    `direction` first meets the surface; each frame's normal points out of it. Points
-    a line misses are dropped."""
+    `direction` ("-Z", "+X"… or (x, y, z)) first meets the surface; each frame's normal
+    points out of it. Points a line misses are dropped."""
+    ray = None if direction is None else _ray(direction)
     size = _core.in_mm(1.0)   # Blender's BVH pads its boxes in its own units, which breaks ties: search in mm
-    trees = [_core.mm_tree(ob, ob.matrix_basis) for ob in (targets if isinstance(targets, (list, tuple)) else [targets])]
+    trees = [_core.mm_tree(ob, matrix) for ob, matrix in _surface_parts(targets, "snap")]
     out = []
     for p in points:
         p = Vector(p.origin if isinstance(p, Frame) else p) * size
         if direction is None:
             found = [t.find_nearest(p) for t in trees]
             loc, normal, _, _ = min((f for f in found if f[0] is not None), key=lambda f: f[3])
-            if normal.dot(p - loc) < 0:
-                normal = -normal
         else:
-            ray = Vector(direction).normalized()
             found = [f for f in (t.ray_cast(p, ray) for t in trees) if f[0] is not None]
             if not found:
                 continue
             loc, normal, _, _ = min(found, key=lambda f: f[3])
-            if normal.dot(ray) > 0:
-                normal = -normal
         out.append(Frame(loc / size, normal))
     return Frames(out)
+
+
+def phyllotaxis(n, d, h=0, angle=137.508, on=None):
+    """Frames on a disc, or facing out from a cylinder when h > 0.
+
+    Each frame turns `angle` degrees from the previous; disc radii spread equal
+    areas, cylinder heights spread evenly. Dimensions are in the program's unit.
+    """
+    if not isinstance(n, int) or n < 0:
+        raise ValueError("phyllotaxis: n must be a nonnegative integer")
+    if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in (d, h, angle)) or d < 0 or h < 0:
+        raise ValueError("phyllotaxis: finite d >= 0, h >= 0 and angle are required")
+    base = _one(on, "phyllotaxis")
+    out = Frames()
+    for k in range(n):
+        a = math.radians(k * angle)
+        radial = base.x * math.cos(a) + base.y * math.sin(a)
+        r = d / 2 if h else d / 2 * math.sqrt((k + 0.5) / n)
+        origin = base.origin + radial * r + base.z * (h * (k + 0.5) / n)
+        out.append(base._kept(Frame(origin, radial if h else base.z,
+                                    base.z if h else base.z.cross(radial))))
+    return out
+
+
+class _Axis:
+    """One named axis, with its parent axis (None on the root)."""
+
+    def __init__(self, path, d, level, name, parent):
+        self.path, self.d, self.level, self.name, self.parent = path, d, level, name, parent
+
+
+class _Branches(list):
+    """Depth-first axes and the frames at the ends of the leaf axes."""
+
+    def __init__(self):
+        super().__init__()
+        self.tips = Frames()
+
+
+def _branch_bend_bound(path, diameter, tip_ratio):
+    """Conservative radius * curvature bound on sweep's smooth Hermite spans.
+
+    Speed is bounded below by its projection on the chord; acceleration is
+    linear, so its norm is bounded by its two endpoint norms. This bounds the
+    whole span, including between the spline samples, without making meshes.
+    """
+    pts, lengths = _path_measure(path)
+    if len(pts) != len(path.points):
+        return math.inf
+    steps = [b - a for a, b in zip(pts, pts[1:])]
+    hs = [b - a for a, b in zip(lengths, lengths[1:])]
+    directions = [v / h for v, h in zip(steps, hs)]
+    slopes = [directions[0]] + [
+        (directions[i - 1] * hs[i] + directions[i] * hs[i - 1]) / (hs[i - 1] + hs[i])
+        for i in range(1, len(steps))] + [directions[-1]]
+    worst = 0.0
+    for i, (v, h) in enumerate(zip(directions, hs)):
+        # Velocity in normalised span time: a*t*t + b*t + c.
+        c = slopes[i]
+        a = -6 * v + 3 * (c + slopes[i + 1])
+        b = 6 * v - 4 * c - 2 * slopes[i + 1]
+        av, bv, cv = a.dot(v), b.dot(v), c.dot(v)
+        speed = min(cv, av + bv + cv)
+        if av > 0 and 0 < -bv / (2 * av) < 1:
+            speed = min(speed, cv - bv * bv / (4 * av))
+        if speed <= 0:
+            return math.inf
+        acceleration = max(b.length, (2 * a + b).length) / h
+        u = lengths[i] / lengths[-1]
+        # The zero-tip rounded cap is no larger than sqrt(1-u).
+        radius = diameter / 2 * ((1 - u) ** .5 if tip_ratio == 0
+                                 else 1 - (1 - tip_ratio) * u)
+        worst = max(worst, radius * acceleration / (speed * speed))
+    return worst
+
+
+def branches(length, d, levels=3, children=3, attach=(0.45, 0.9), angle=45,
+             azimuth=137.508, length_ratio=0.55, diameter_ratio=0.55,
+             tip_ratio=0.15, jitter=0, seed=0, on=None, wander=0, droop=0, *, step=None):
+    """Depth-first axes and leaf-tip frames, straight or smoothly curved.
+
+    A root along +Z and levels generations of children. Children attach evenly over `attach` (a lone child at its midpoint). Each axis
+    exposes path, diameter law d, level, name and parent; tips are the leaf-end
+    frames. Jitter varies lengths, lean angles and azimuth steps by up to its fraction, from a
+    local seeded generator. A child's diameter is relative to its parent's
+    base diameter, not its diameter at attachment; azimuth restarts at each
+    parent. Paths and tips are already in the frame carrying `on`: use
+    wire(axis.name, axis.path, axis.d), without applying `on` a second time.
+    Wander bounds the random heading turn per each of eight segments (degrees).
+    Droop turns toward on's -Z by up to its degrees over the axis; negative rises.
+    Mesh rings sample accumulated turn at 3 degrees by default (facets overrides
+    the angular count); step gives a positive maximum arc-length spacing.
+    Curved axes are spline-smoothed Paths; attachments use their arc length and
+    transported tangents. Zero wander and droop retain exact two-point straight axes.
+    Curvature radii exceed twice the local section radius, so axes build with
+    wire or a matching sweep law.
+    Only leaf axes contribute tips. At most 4096 axes and 128 levels.
+    """
+    if any(not isinstance(v, int) or v < 0 for v in (levels, children)):
+        raise ValueError("branches: levels and children must be nonnegative integers")
+    if step is not None and (isinstance(step, bool) or not isinstance(step, (int, float)) or not math.isfinite(step) or step <= 0):
+        raise ValueError("branches: step must be a positive finite spacing")
+    count, generation = 1, 1
+    for _ in range(levels):
+        generation *= children
+        count += generation
+        if count > 4096 or levels > 128:
+            raise ValueError("branches: at most 4096 axes and 128 levels")
+        if generation == 0:
+            break
+    numbers = (length, d, angle, azimuth, length_ratio, diameter_ratio, tip_ratio, jitter, wander, droop)
+    if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in numbers):
+        raise ValueError("branches: parameters must be finite numbers")
+    if length <= 0 or d <= 0 or length_ratio <= 0 or diameter_ratio <= 0:
+        raise ValueError("branches: lengths, diameters and their ratios must be positive")
+    if not 0 <= jitter <= 1 or not 0 <= tip_ratio <= 1 or not isinstance(seed, int):
+        raise ValueError("branches: jitter and tip_ratio are in [0, 1]; seed is an integer")
+    if (not isinstance(attach, (list, tuple)) or len(attach) != 2
+            or not all(isinstance(v, (int, float)) and math.isfinite(v) for v in attach)
+            or not 0 <= attach[0] <= attach[1] <= 1):
+        raise ValueError("branches: attach is two increasing fractions in [0, 1]")
+    if wander < 0:
+        raise ValueError("branches: wander must be nonnegative")
+    base = _one(on, "branches")
+    rng, out = random.Random(seed), _Branches()
+
+    def grow(frame, size, diameter, level, name, parent):
+        curved = bool(wander or droop)
+        path = Path([frame.origin, frame.point(z=size)])
+        if curved:
+            from .profile import spline, _centripetal
+            # Draw once: retries must not change the seeded child sequence.
+            turns = [(rng.uniform(0, 360), rng.uniform(-wander, wander))
+                     if wander else (0, 0) for _ in range(8)]
+            gravity = -base.z if droop >= 0 else base.z
+            for attempt in range(12):
+                heading, controls = frame, [frame.origin]
+                strength = .5 ** attempt
+                for k, (bearing, lean) in enumerate(turns):
+                    previous = heading
+                    if wander:
+                        heading = heading.turn(rz=bearing).turn(ry=lean * strength)
+                    if droop:
+                        angle_left = heading.z.angle(gravity)
+                        turn = min(math.radians(abs(droop) / 8) * strength, angle_left)
+                        axis = heading.z.cross(gravity)
+                        if axis.length < 1e-7:
+                            axis = heading.x
+                        rotation = Matrix.Rotation(turn, 3, axis)
+                        heading = Frame(heading.origin, rotation @ heading.z, rotation @ heading.y)
+                    u = max(0, (k - 1) / 8)
+                    radius = diameter / 2 * ((1 - u) ** .5 if tip_ratio == 0
+                                             else 1 - (1 - tip_ratio) * u)
+                    limit = min(math.pi / 3, size / 8 / (2 * radius))
+                    turn = previous.z.angle(heading.z)
+                    if turn > limit:
+                        normal = previous.z.slerp(heading.z, limit / turn)
+                        heading = _transport(heading, heading.origin, normal)
+                    heading = heading.offset(size / 8)
+                    controls.append(heading.origin)
+                candidate = spline(controls)
+                if _branch_bend_bound(candidate, diameter, tip_ratio) < .5:
+                    path = candidate
+                    sampled = Path(_centripetal(controls, False, angular=3, step=step))
+                    if _branch_bend_bound(sampled, diameter, tip_ratio) < .5:
+                        path._mesh_path = sampled
+                    break
+            # At extreme size/coordinate ratios float32 can obscure curvature;
+            # the original straight path is the deterministic safe fallback.
+        pts, lengths = _path_measure(path)
+        axis = _Axis(path,
+                     [(0, diameter), (1, diameter * tip_ratio)], level, name, parent)
+        out.append(axis)
+        if level == levels or children == 0:
+            out.tips.append(_path_frames(pts, lengths, [lengths[-1]], frame)[0]
+                            if curved else frame.offset(size))
+            return
+        for j in range(children):
+            u = attach[0] + (attach[1] - attach[0]) * (j / (children - 1) if children > 1 else 0.5)
+            lean = angle * (1 + rng.uniform(-jitter, jitter))
+            child_length = size * length_ratio * (1 + rng.uniform(-jitter, jitter))
+            bearing = j * azimuth
+            if jitter:
+                bearing += rng.uniform(-jitter, jitter) * azimuth
+            attachment = (_path_frames(pts, lengths, [u * lengths[-1]], frame)[0]
+                          if curved else frame.move(z=size * u))
+            child = attachment.turn(rz=bearing).turn(ry=lean)
+            grow(child, max(child_length, _core.mm(1e-9)), diameter * diameter_ratio,
+                 level + 1, f"{name}/{j}", axis)
+    grow(base, length, d, 0, "root", None)
+    return out

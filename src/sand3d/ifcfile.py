@@ -34,6 +34,8 @@ so the clearer of them wins: `1 - opacity`, or most of `transmission`. Multiplyi
 as the GLB and the USDA do would put plain `glass` at 1, and a reader draws nothing at
 all at 1 — while `opacity=0` still does mean invisible, as `material` says it does.
 
+IOR, volume absorption and thickness are not represented by this surface style.
+
 No joint: IFC says no mechanism, so the file is the pose it was written at — the URDF
 and the USDA carry the joints. No timestamp either, and the ids are digests rather than
 chance — of a part's name and its geometry, of a group's name and its parts, of the

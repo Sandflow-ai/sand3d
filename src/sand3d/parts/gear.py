@@ -1,6 +1,7 @@
 """A spur gear with involute teeth."""
 import math
 
+from .. import _core
 from ..profile import circle, poly
 from ..solids import extrude
 

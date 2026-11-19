@@ -1,0 +1,8 @@
+- water: Fill, depth tint, waves on the surface, falls, foam, banks.
+- fire-smoke: Flames and emission, smoke and fog media, review renderer versus Cycles.
+- trees-vegetation: Branches, foliage, crown cost, grass, lawns, moss carpets and textile fur.
+- terrain-ground: Terrain, strewn stones, leaf litter, gravel, snow, contact, sand, dunes and wind ripples.
+- organic-forms: Faceted rock, field holes and folds, coral, fungi, verb choice.
+- surface-colour-weathering: Per-face colour, broad weathering, a vectorized example.
+- glass-ice-crystals: Transmission, IOR, absorption, thickness and closed crystals.
+- resolution: Triangle budgets and cost.

@@ -292,12 +292,12 @@ def _effective_type(c, k, j):
 # ---------------------------------------------------------------- URDF
 
 def _colour(ob):
-    tag = materials._nearest(ob)
+    tag = materials.mean_tag(ob)
     if tag is None:
         return None
     v = materials.look(tag)
     h = v["color"]
-    rgb = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    rgb = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)] if isinstance(h, str) else h
     return materials._name(tag), (*rgb, v["opacity"])
 
 
@@ -449,8 +449,6 @@ def _twins(mech, renamed, coll):
 
 def undo(state, coll):
     renamed, temps = state
-    for t in temps:
-        bpy.data.objects.remove(t)
-    bpy.data.collections.remove(coll)
+    bpy.data.batch_remove([*temps, coll])
     for ob, name in renamed:
         ob.name = name

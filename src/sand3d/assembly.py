@@ -1,5 +1,6 @@
 """The assembly layer: groups, handles and their anchors, details, export, the unit."""
 import os
+import math
 
 import bpy
 
@@ -60,11 +61,18 @@ def attach(handle, name, *children):
     return detail
 
 
-def export(root, path):
+def export(root, path, colors="material"):
     """root and what hangs on it by its joints, in metres: .glb at the current pose, joints
     in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's
     tree as OpenUSD text, with the materials; .ifc the part tree as IFC4, the open standard
     Revit opens and links (.rvt only Revit writes); .obj and .stl its meshes at the current pose.
+
+    colors="vertex" (.glb only) puts all base colours on corners, sharing a white
+    material per non-colour look; a surface that gives light keeps a material of its
+    own colour (the mean of a colour function's), which its emission reads.
+    colors="material" keeps plain colours on materials, as before.
+
+    Function colours use an area-weighted mean in .usda, .urdf and .obj; STL has no colours.
 
     The program's unit to metres, then one file, its extension the format: a GLB — with
     the materials the program set, if it set any; nested by the joints, each in its
@@ -76,6 +84,20 @@ def export(root, path):
     the current pose, with materials but no joints; GlobalIds are not stable across edits or
     unique across models — or the meshes alone, as OBJ (Y up) or binary STL (Z up), at the current pose.
     Limits only: masses, frictions, efforts and drives are dynamics, which sand3d does not say."""
+    if colors not in ("material", "vertex"):
+        raise ValueError('export: colors must be "material" or "vertex"')
+    if colors != "material" and os.path.splitext(str(path))[1].lower() != '.glb':
+        raise ValueError('export: colors="vertex" requires .glb')
+    actual = root.root if isinstance(root, Handle) else root
+    if os.path.splitext(str(path))[1].lower() == '.glb':
+        materials.resolve()
+        with materials.exporting(actual, colors), materials.volume_export():
+            return _export(root, path)
+    materials.resolve()
+    return _export(root, path)
+
+
+def _export(root, path):
     from . import ifcfile, meshfile, urdf, usd
     from .assembly import Handle
     root = root.root if isinstance(root, Handle) else root
@@ -94,7 +116,6 @@ def export(root, path):
     if suffix in (".obj", ".stl"):
         (meshfile.write_obj if suffix == ".obj" else meshfile.write_stl)(root, path)
         return
-    materials.resolve()
     if suffix == ".ifc":
         ifcfile.write_ifc(root, path)
         return
@@ -118,7 +139,7 @@ def export(root, path):
                 clash.name = "s3d~export~lent"
             coll.name = name
             bpy.ops.export_scene.gltf(filepath=str(path), export_format="GLB", collection=coll.name,
-                                      export_extras=True,
+                                      export_extras=True, export_vertex_color="MATERIAL",
                                       export_materials="EXPORT" if dressed else "NONE")
         finally:
             coll.name = "s3d~export"
@@ -161,8 +182,8 @@ def _return_meshes(lent):
     objects, copies = lent
     for ob, mesh in objects:
         ob.data = mesh
+    bpy.data.batch_remove([own for own, name in copies.values()])
     for mesh, (own, name) in copies.items():
-        bpy.data.meshes.remove(own)
         mesh.name = name
 
 
@@ -180,8 +201,11 @@ def empty_scene():
     if built:
         _core.UNIT, _core.MM = "mm", _core.UNITS["mm"]
         _core.FACETS = None
+        _core.FACET_SMOOTH = False
+        _core.FACET_CONFIGURED = False
     _core.settled = False
     _core.dressed = False
+    materials.FUNCTIONS.clear()
 
 
 def units(name=None):
@@ -201,27 +225,61 @@ def units(name=None):
     return name
 
 
-def facets(n=None):
-    """Segments of a full circle: a whole number from 3, or "auto" (default).
+_FACET_DEFAULT = object()
 
-    Set how many straight pieces a full circle gets — in every circle, arc, revolve,
-    helix, fillet, wire corner and superellipse — before the program's first verb:
+class _FacetScope:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *error):
+        _core.FACETS, _core.FACET_SMOOTH, _core.FACET_CONFIGURED = self.previous
+        return False
+
+
+class _FacetCount(int, _FacetScope):
+    pass
+
+
+class _FacetAuto(str, _FacetScope):
+    pass
+
+
+def facets(n=None, smooth=_FACET_DEFAULT):
+    """Segments per full turn: a whole number from 3, or "auto".
+
+    Set how many straight pieces a full turn gets, at any point of a program, between "auto"
+    and fixed counts alike; `with facets(n):` sets it for one part and restores it after:
     `facets(8)` builds an octagonal cylinder and a quarter-round fillet in 2, for
-    low-poly or faceted assets. "auto", the default, sets the count by the size, to a
-    chord tolerance of 0.05 mm (24 to 64 a turn). Lengthwise sampling (a loft's steps,
-    a body's sections) is not a circle and stays, and so do the teeth of `gear` and the
-    turns of `knurl` and `thread`, which sample their own. Without `n`, the setting in force:
-    what a program records beside `units()`."""
-    if n is None:
-        return "auto" if _core.FACETS is None else _core.FACETS
-    if n == "auto":
+    low-poly or faceted assets. A fixed count rules every turn, round a section and along
+    a solid alike: a loft, a body or a wire gets about n × a / 360 pieces where it turns
+    by a degrees, and a straight span only its sections. Its faces are flat;
+    Axisless field/blend surfaces and displace refinement use target edge π D / n,
+    D the largest local box dimension; hull preserves its explicit points.
+    `smooth=True` keeps the usual shading. "auto", the default, sets the count by the
+    size, to a chord tolerance of 0.05 mm (24 to 64 a turn), shaded as usual. The teeth
+    of `gear` and the turns of `knurl` and `thread` sample their own. Without `n`, the
+    count in force: what a program records beside `units()`."""
+    omitted = smooth is _FACET_DEFAULT
+    if omitted:
+        smooth = _core.FACET_SMOOTH
+    if not isinstance(smooth, bool):
+        raise ValueError(f"facets: smooth={smooth!r} is neither True nor False")
+    if n is None or n == "auto":
+        if smooth and not omitted:
+            raise ValueError('facets: smooth=True goes with a fixed count — "auto" is smooth already')
+        if n is None:
+            return "auto" if _core.FACETS is None else _core.FACETS
         value = None
     elif isinstance(n, int) and not isinstance(n, bool) and n >= 3:
         value = n
     else:
-        raise ValueError(f"facets: {n!r} is neither a whole number from 3 nor \"auto\"")
-    if value != _core.FACETS and _core.settled:
-        raise ValueError(f"facets: set {n!r} before the first verb — this scene is already built with "
-                         f"{facets()!r} (s3d.empty_scene() starts over)")
-    _core.FACETS = value
-    return n
+        raise ValueError(f'facets: {n!r} is neither a whole number from 3 nor "auto"')
+    if smooth != _core.FACET_SMOOTH and _core.FACET_CONFIGURED:
+        raise ValueError(f"facets: this program shades fixed counts with smooth={_core.FACET_SMOOTH}, chosen by its "
+                         f"first facets call; leave smooth out to keep that, or shade one part with s3d.smooth(ob)")
+    previous = (_core.FACETS, _core.FACET_SMOOTH, _core.FACET_CONFIGURED)
+    _core.FACET_CONFIGURED = True
+    _core.FACETS, _core.FACET_SMOOTH = value, smooth
+    result = _FacetAuto(n) if isinstance(n, str) else _FacetCount(n)
+    result.previous = previous
+    return result
