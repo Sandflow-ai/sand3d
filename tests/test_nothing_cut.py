@@ -3,6 +3,7 @@
 import os
 import unittest
 import warnings
+from unittest import mock
 
 import bpy
 
@@ -56,7 +57,7 @@ class NothingCut(unittest.TestCase):
         plate = s3d.box("plate", 60, 40, 8)
         s3d.pocket(plate, s3d.circle(8), depth=2, on=[s3d.Frame((0, 0, 8)), s3d.Frame((100, 0, 8))])
         self.assertLess(closed_volume(plate)[1], 60 * 40 * 8)
-        with self.assertRaisesRegex(ValueError, r"^pocket: no tool cuts into 'plate'"):
+        with self.assertRaisesRegex(ValueError, r"^pocket: none of the 2 frames cuts into 'plate'"):
             s3d.pocket(plate, s3d.circle(8), depth=2, on=[s3d.Frame((100, 0, 8)), s3d.Frame((-100, 0, 8))])
 
     def test_a_tool_that_takes_everything_says_so(self):
@@ -79,6 +80,9 @@ class MissedCutWarns(unittest.TestCase):
 
     def setUp(self):
         s3d.empty_scene()
+        environ = mock.patch.dict(os.environ)     # put back as it was, SAND3D_STRICT included
+        environ.start()
+        self.addCleanup(environ.stop)
         os.environ.pop("SAND3D_STRICT", None)
 
     def test_a_cut_that_misses_warns_and_leaves_the_part(self):
@@ -117,6 +121,26 @@ class MissedCutWarns(unittest.TestCase):
             s3d.pocket(plate, s3d.circle(8), depth=2, on=[s3d.Frame((100, 0, 8)), s3d.Frame((-100, 0, 8))])
         self.assertEqual([type(w.message) for w in seen if issubclass(w.category, MissedCut)], [MissedCut])
 
+    def test_a_pocket_pattern_all_off_the_part_names_every_frame(self):
+        plate = s3d.box("plate", 60, 40, 8)
+        with self.assertWarns(MissedCut) as caught:
+            s3d.pocket(plate, s3d.circle(8), depth=2, on=[s3d.Frame((100, 0, 8)), s3d.Frame((-100, 0, 8))])
+        self.assertEqual(str(caught.warning),
+                         "pocket: none of the 2 frames cuts into 'plate' — the pockets miss it, or only touch it "
+                         "(its box (-30, -20, 0) .. (30, 20, 8); the pockets' (-104, -4, 6) .. (104, 4, 8.01))")
+
+    def test_the_warning_points_at_the_program(self):
+        """At the program's line, whatever the verb's depth in the library."""
+        plate = s3d.box("plate", 60, 40, 8)
+        calls = [lambda: s3d.cut(plate, s3d.at(s3d.cylinder("pin", 10, 20), x=80)),
+                 lambda: s3d.hole(plate, 5, on=s3d.Frame((100, 0, 0))),
+                 lambda: s3d.pocket(plate, s3d.circle(8), depth=2, on=s3d.Frame((100, 0, 8))),
+                 lambda: s3d.pocket(plate, s3d.circle(8), depth=2, on=[s3d.Frame((100, 0, 8))])]
+        for call in calls:
+            with self.subTest(line=call.__code__.co_firstlineno), self.assertWarns(MissedCut) as caught:
+                call()
+            self.assertEqual((caught.filename, caught.lineno), (__file__, call.__code__.co_firstlineno))
+
     def test_the_environment_makes_it_strict(self):
         plate = s3d.box("plate", 60, 40, 8)
         os.environ["SAND3D_STRICT"] = "1"
@@ -125,6 +149,27 @@ class MissedCutWarns(unittest.TestCase):
                 s3d.cut(plate, s3d.at(s3d.cylinder("pin", 10, 20), x=80))
         finally:
             del os.environ["SAND3D_STRICT"]
+
+    def test_the_environment_says_yes_or_no(self):
+        for value, strict_mode in (("1", True), ("true", True), ("YES", True), ("on", True),
+                                   ("0", False), ("false", False), ("no", False), ("off", False), ("", False)):
+            with self.subTest(value=value):
+                os.environ["SAND3D_STRICT"] = value
+                plate = s3d.box("plate", 60, 40, 8)
+                tool = s3d.at(s3d.cylinder("pin", 10, 20), x=80)
+                if strict_mode:
+                    with self.assertRaises(NothingCutError):
+                        s3d.cut(plate, tool)
+                else:
+                    with self.assertWarns(MissedCut):
+                        s3d.cut(plate, tool)
+                s3d.empty_scene()
+
+    def test_any_other_value_in_the_environment_raises(self):
+        os.environ["SAND3D_STRICT"] = "maybe"
+        plate = s3d.box("plate", 60, 40, 8)
+        with self.assertRaisesRegex(ValueError, r"^SAND3D_STRICT='maybe': give 1, true, yes or on"):
+            s3d.cut(plate, s3d.at(s3d.cylinder("pin", 10, 20), x=80))
 
     def test_strict_off_overrides_the_environment(self):
         plate = s3d.box("plate", 60, 40, 8)
