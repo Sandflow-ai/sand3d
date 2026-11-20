@@ -67,6 +67,9 @@ def write_stl(root, path):
             n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
             length = sum(x * x for x in n) ** 0.5 or 1.0
             body.append(struct.pack("<12fH", *(x / length for x in n), *a, *b, *c, 0))
-    header = f"{_core.given_name(root)} — written by sand3d, metres, Z up".encode()[:80].ljust(80, b" ")
+    header = f"{_core.given_name(root)} — written by sand3d, metres, Z up".encode()
+    if header[:5].lower() == b"solid":
+        header = b"sand3d: " + header
+    header = header[:80].ljust(80, b" ")
     with open(os.fspath(path), "wb") as f:
         f.write(header + struct.pack("<I", len(body)) + b"".join(body))
