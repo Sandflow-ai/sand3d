@@ -13,7 +13,8 @@ import math
 from mathutils import Matrix, Vector, geometry
 
 from . import _core
-from .profile import EPS, Loop, Path, Placed, Profile, _as_path, arc, circle, poly, rect, superellipse
+from .profile import (EPS, Loop, Path, Placed, Profile, _as_path, _crossing, _fit, _said, arc, circle, poly, rect,
+                      superellipse)
 
 
 # ---------------------------------------------------------------- shared pieces
@@ -470,8 +471,9 @@ def wire(name, path, d, closed=None, fillet=0):
     A round wire of diameter `d` along `path` — a pipe, a spring, a rod bent to shape.
     `fillet` rounds the corners of a path given as points to that radius, on the wire's
     centre line, as a tube bender does: one number for all of them, or a list giving
-    each point its own (0 leaves it), as `poly` takes it. It raises where it cannot bend:
-    too large for a side, under `d / 2` (the tube would fold on itself), at a point where
+    each point its own (0 leaves it), as `poly` takes it. A fillet too large for a side
+    is clamped to the largest that fits, with a warning (strict mode: an error). It raises
+    where it cannot bend: under `d / 2` (the tube would fold on itself), at a point where
     the path turns back. A point written twice is one. A stool's leg:
     `wire("leg", [(0, 0, 0), (0, 0, 650), (-250, 0, 650)], 33, fillet=60)`."""
     if fillet:
@@ -493,8 +495,9 @@ def _filleted(points, closed, amount, least=0.0):
     """The polyline `points` with each corner turned into an arc of its radius (`amount`: one
     number, or one per point, 0 leaving it), tangent to both sides, in the plane they make.
     A point written twice is one; a radius under `least` (the wire's own), or a corner where
-    the path turns back, raises. Turns are read in double precision: `Vector` is single, and
-    put a path that doubles back past 180°, which made the setback negative."""
+    the path turns back, raises; one too large for a side is clamped to the largest that
+    fits, with a warning (strict mode raises). Turns are read in double precision: `Vector`
+    is single, and put a path that doubles back past 180°, which made the setback negative."""
     p = [tuple(float(c) for c in q) + (0.0,) * (3 - len(q)) for q in points]
     if isinstance(amount, (int, float)):
         radii = [float(amount)] * len(p)
@@ -541,13 +544,31 @@ def _filleted(points, closed, amount, least=0.0):
             raise ValueError(f"wire: fillet {r:g} at {said(b)} sets the bend back by {setback:g}: a radius is more "
                              f"than 0")
         corners[i] = (setback, r, (p[i] - p[i - 1]).normalized(), (p[(i + 1) % m] - p[i]).normalized(), turn)
+    over = []
     for i in range(m if closed else m - 1):
         j = (i + 1) % m
         used = corners.get(i, (0,))[0] + corners.get(j, (0,))[0]
         length = math.dist(pts[i], pts[j])
         if used > length + _core.mm(1e-9):
-            a, b = (tuple(round(c, 6) for c in q) for q in (pts[i], pts[j]))
-            raise ValueError(f"wire: fillet too large for the side from {a} to {b} ({used:.4g} > {length:.4g})")
+            over.append((i, j, used, length))
+    if over:
+        i, j, used, length = over[0]
+        a, b = (tuple(round(c, 6) for c in q) for q in (pts[i], pts[j]))
+        error = ValueError(f"wire: fillet too large for the side from {a} to {b} ({used:.4g} > {length:.4g})")
+        factors, (f, i, j, length) = _fit(corners, over)
+        r = max(corners[k][1] for k in (i, j) if k in corners)
+        from .edit import _clamped, _is_strict
+        if not _is_strict():
+            for k, fk in factors.items():
+                if corners[k][1] * fk < least - _core.mm(1e-9):
+                    raise ValueError(f"{error}: the largest fillet that fits at {said(pts[k])}, "
+                                     f"{corners[k][1] * fk:.4g}, is tighter than the wire's radius {least:g} (d / 2), "
+                                     f"and a tube bent tighter than its radius folds on itself")
+        _clamped(error, f"wire: fillet={r:g} too large for the side of {length:.4g} from {_said(pts[i])} to "
+                        f"{_said(pts[j])}; clamped to {r * f:.4g}")
+        for k, fk in factors.items():
+            t, rk, u, v, turn = corners[k]
+            corners[k] = (t * fk, rk * fk, u, v, turn)
     out = []
     for i in range(m):
         if i not in corners:
@@ -805,8 +826,14 @@ def loft(name, *sections, follow=False, loop=False):
             raise TypeError(f"loft: a section is a profile placed with at, not a solid ({_core.given_name(s)!r})")
     placed = [_placed(s) for s in sections]
     shapes = []
-    for prof, mat in placed:
+    for rank, (prof, mat) in enumerate(placed, 1):
         if len(prof.loops) != 1:
+            if prof._outline is not None:   # not holes: poly split an outline that crosses itself
+                q = _crossing(prof._outline)
+                near = f" near {_said(q)}" if q is not None else ""
+                raise ValueError(f"loft: section {rank} crosses itself{near} — poly split its outline into "
+                                 f"{len(prof.loops)} pieces, and a section is one outline: move its points so that "
+                                 f"its sides do not cross")
             raise ValueError("loft: each section must be one outline, without holes")
         shapes.append((prof.loops[0], mat))
     rings2d, flags = _correspond(shapes)

@@ -42,6 +42,7 @@ class Profile:
     def __init__(self, loops):
         self.loops = [loop if loop.area() >= 0 or len(loops) > 1 else loop.reversed() for loop in loops]
         self._mesh = None
+        self._outline = None    # the outline drawn, when poly split one that crosses itself into pieces
 
     def __add__(self, other):
         return _boolean(self, _flat(other), lambda a, b: a or b)
@@ -323,6 +324,20 @@ def _simple(pts):
     return True
 
 
+def _crossing(pts):
+    """The first point where a closed polyline crosses itself, or None."""
+    n = len(pts)
+    for i in range(n):
+        a, b = Vector(pts[i]), Vector(pts[(i + 1) % n])
+        for j in range(i + 2, n):
+            if i == 0 and j == n - 1:
+                continue
+            q = geometry.intersect_line_line_2d(a, b, Vector(pts[j]), Vector(pts[(j + 1) % n]))
+            if q is not None:
+                return (q.x, q.y)
+    return None
+
+
 def _single(pts, sharp):
     """A one-loop profile, its crossings resolved if it has any."""
     pts, sharp = _clean(pts, sharp)
@@ -333,7 +348,10 @@ def _single(pts, sharp):
         loop = loop.reversed()
     if _simple(loop.pts):
         return Profile([loop])
-    return _from_region(_region([[loop]], lambda w: w != 0))
+    profile = _from_region(_region([[loop]], lambda w: w != 0))
+    if len(profile.loops) > 1:      # in pieces: loft, which takes one outline, says where it crossed
+        profile._outline = loop.pts
+    return profile
 
 
 # ---------------------------------------------------------------- shapes
@@ -358,7 +376,7 @@ def rect(w, d, r=0, chamfer=0):
 
     A rectangle `w` wide (X) and `d` deep (Y), centred; its corners rounded by
     `r` or cut by `chamfer`."""
-    return poly([(-w / 2, -d / 2), (w / 2, -d / 2), (w / 2, d / 2), (-w / 2, d / 2)], fillet=r, chamfer=chamfer)
+    return _poly([(-w / 2, -d / 2), (w / 2, -d / 2), (w / 2, d / 2), (-w / 2, d / 2)], r, chamfer, ("rect", "r"))
 
 
 def slot(l, d):
@@ -658,7 +676,14 @@ def poly(pts, fillet=0, chamfer=0):
     A closed outline through `pts`: (x, y) points joined by straight lines, with
     `arc(...)`, `tangent_arc(to)` or an open `spline(...)` among them for curved runs.
     `fillet` rounds and `chamfer` cuts the corners between two straight lines — one
-    number for all of them, or a list giving each point its own (0 leaves it)."""
+    number for all of them, or a list giving each point its own (0 leaves it). A fillet
+    too large for a side is clamped to the largest that fits, with a warning (strict mode:
+    an error)."""
+    return _poly(pts, fillet, chamfer, ("poly", "fillet"))
+
+
+def _poly(pts, fillet, chamfer, said):
+    """`poly`, its fillet named in a warning as `said`: (verb, parameter)."""
     nodes = _outline(pts, "poly", POLY_LIFT)
     if len(nodes) > 1 and math.dist((nodes[0].x, nodes[0].y), (nodes[-1].x, nodes[-1].y)) < _core.mm(EPS):
         last = nodes.pop()
@@ -681,13 +706,34 @@ def poly(pts, fillet=0, chamfer=0):
     pts2 = [(n.x, n.y) for n in nodes]
     lines = [n.line_out for n in nodes]
     src = [n.src for n in nodes]
-    pts2, sharp, lines, src = _corners(pts2, sharp, lines, src, fillet, "fillet")
+    pts2, sharp, lines, src = _corners(pts2, sharp, lines, src, fillet, "fillet", said)
     pts2, sharp, lines, src = _corners(pts2, sharp, lines, src, chamfer, "chamfer")
     return _single(pts2, sharp)
 
 
-def _corners(pts, sharp, lines, src, amount, kind):
-    """Round (`fillet`) or cut (`chamfer`) the drawn corners between two straight lines."""
+def _fit(setbacks, over):
+    """The corners' setbacks scaled to fit their sides: `over` lists the sides too short,
+    (i, j, used, length); each corner takes the smallest of its sides' factors, so every
+    side fits. Returns the factors, corner -> f, and the tightest side, (f, i, j, length)."""
+    factors, tightest = {}, None
+    for i, j, used, length in over:
+        f = length / used
+        for k in (i, j):
+            if k in setbacks:
+                factors[k] = min(factors.get(k, 1.0), f)
+        if tightest is None or f < tightest[0]:
+            tightest = (f, i, j, length)
+    return factors, tightest
+
+
+def _said(q):
+    return "(" + ", ".join(f"{round(c, 6):g}" for c in q) + ")"
+
+
+def _corners(pts, sharp, lines, src, amount, kind, said=None):
+    """Round (`fillet`) or cut (`chamfer`) the drawn corners between two straight lines.
+    A fillet too large for a side is clamped to the largest that fits, and `said` (verb,
+    parameter) names it in the warning; strict mode raises, as a chamfer always does."""
     if not amount:
         return pts, sharp, lines, src
     m = len(pts)
@@ -704,12 +750,28 @@ def _corners(pts, sharp, lines, src, amount, kind):
         if turn < 1e-6:
             continue
         trims[i] = (value * math.tan(turn / 2) if kind == "fillet" else value, value, u, v)
+    over = []
     for i in range(m):
         j = (i + 1) % m
         used = trims.get(i, (0,))[0] + trims.get(j, (0,))[0]
         length = math.dist(pts[i], pts[j])
         if used > length + _core.mm(1e-9):
-            raise ValueError(f"{kind} too large for the side from {pts[i]} to {pts[j]} ({used:.4g} > {length:.4g})")
+            over.append((i, j, used, length))
+    if over:
+        i, j, used, length = over[0]
+        error = ValueError(f"{kind} too large for the side from {pts[i]} to {pts[j]} ({used:.4g} > {length:.4g})")
+        if kind != "fillet":
+            raise error
+        factors, (f, i, j, length) = _fit(trims, over)
+        r = max(trims[k][1] for k in (i, j) if k in trims)
+        verb, name = said
+        where = "" if verb == "rect" else f" from {_said(pts[i])} to {_said(pts[j])}"
+        from .edit import _clamped
+        _clamped(error, f"{verb}: {name}={r:g} too large for the side of {length:.4g}{where}; clamped to "
+                        f"{r * f:.4g}")
+        for k, fk in factors.items():
+            t, value, u, v = trims[k]
+            trims[k] = (t * fk, value * fk, u, v)
     out = ([], [], [], [])
 
     def put(p, s, line, k=None):

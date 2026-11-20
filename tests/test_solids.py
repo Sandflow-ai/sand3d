@@ -6,6 +6,7 @@ import bpy  # noqa: F401 — before bmesh, which bpy provides
 import bmesh
 
 import sand3d as s3d
+from sand3d.edit import strict
 
 
 def closed_volume(ob):
@@ -105,9 +106,9 @@ class Solids(unittest.TestCase):
         hoop = [(0, 0, 0), (200, 0, 0), (200, 100, 0), (0, 100, 0)]
         self.assertSolid(s3d.wire("hoop", hoop, 10, closed=True, fillet=20),
                          section(10) * (2 * (200 + 100) - 8 * 20 + 2 * math.pi * 20), rel=0.003)
-        # too large for a side: said, as poly says it
-        with self.assertRaisesRegex(ValueError, r"wire: fillet too large for the side from \(0.0, 0.0, 650.0\) to "
-                                                r"\(-30.0, 0.0, 650.0\) \(60 > 30\)"):
+        # too large for a side, in strict mode: said, as poly says it (test_clamped_radius: clamped otherwise)
+        with strict(), self.assertRaisesRegex(ValueError, r"wire: fillet too large for the side from "
+                                                          r"\(0.0, 0.0, 650.0\) to \(-30.0, 0.0, 650.0\) \(60 > 30\)"):
             s3d.wire("short", [(0, 0, 0), (0, 0, up), (-30, 0, up)], d, fillet=r)
         with self.assertRaisesRegex(ValueError, "wire: fillet rounds the corners of a path given as points"):
             s3d.wire("curve", s3d.spline([(0, 0, 0), (0, 0, 100), (50, 0, 150)]), d, fillet=10)
