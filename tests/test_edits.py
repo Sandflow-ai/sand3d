@@ -62,6 +62,12 @@ class Edits(unittest.TestCase):
         self.assertSolid(a, 2000, rel=1e-9)
         self.assertAlmostEqual(length(a, "top"), 60, places=4, msg="the seam across the joined tops is no edge")
 
+    def test_coplanar_edges_dissolved_on_join(self):
+        a = s3d.box("a", 10, 10, 10)
+        s3d.join(a, s3d.at(s3d.box("b", 5, 5, 10), x=4, y=4))
+        self.assertSolid(a, 10 * 10 * 10 + 5 * 5 * 10 - 3.5 * 3.5 * 10, rel=1e-9)
+        self.assertEqual(len(a.data.polygons), 12, "coplanar top/bottom splits are merged into single faces")
+
     def test_split(self):
         above, below = s3d.split(s3d.box("b", 20, 20, 20), s3d.Frame((0, 0, 14)), keep="both")
         self.assertSolid(above, 20 * 20 * 6, rel=1e-9)

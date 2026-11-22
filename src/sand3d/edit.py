@@ -440,6 +440,7 @@ def _boolean(ob, tools, operation, strip, self_intersect=False, verb="boolean", 
     bm.faces.layers.int.remove(layer)
     _core.add_tags(bm, face_add, edge_add)
     _flatten_names(bm)
+    _dissolve_coplanar(bm)
     _replace_mesh(ob, bm)
     if MERGED in ob:
         del ob[MERGED]
@@ -459,6 +460,21 @@ def _flatten_names(bm):
                 for lay in layers:
                     e[lay] = False
                 e.smooth = True
+
+
+def _dissolve_coplanar(bm):
+    """Merge coplanar faces left split by the boolean solver when they share tags and no named edge separates them."""
+    elayers = [lay for lay in bm.edges.layers.bool.values() if lay.name.startswith(_core.EDGE_TAG)]
+    flayers = [lay for lay in bm.faces.layers.bool.values() if lay.name.startswith(_core.FACE_TAG)]
+    coplanar = [
+        e for e in bm.edges
+        if len(e.link_faces) == 2
+        and e.link_faces[0].normal.dot(e.link_faces[1].normal) > 1.0 - 1e-6
+        and not any(e[lay] for lay in elayers)
+        and all(e.link_faces[0][lay] == e.link_faces[1][lay] for lay in flayers)
+    ]
+    if coplanar:
+        bmesh.ops.dissolve_edges(bm, edges=coplanar, use_verts=False, use_face_split=False)
 
 
 def _replace_mesh(ob, bm):
