@@ -329,13 +329,13 @@ def _segment_crossing(a, b, c, d):
     return None
 
 
-def _crossing(pts):
+def _crossing(pts, intersect=_segment_crossing):
     """The first point where a closed polyline crosses itself, or None."""
     n = len(pts)
     for i, a in enumerate(pts):
         b = pts[(i + 1) % n]
         for j in range(i + 2, n - (i == 0)):
-            q = _segment_crossing(a, b, pts[j], pts[(j + 1) % n])
+            q = intersect(a, b, pts[j], pts[(j + 1) % n])
             if q is not None:
                 return q
     return None
@@ -376,10 +376,20 @@ def _single(pts, sharp):
     loop = Loop(pts, sharp)
     if loop.area() < 0:
         loop = loop.reversed()
-    crossing = _crossing(loop.pts) if len(loop.pts) <= _CROSSING_LIMIT else None
-    if crossing is None:
+    if len(loop.pts) > _CROSSING_LIMIT:
         return Profile([loop])
+    crossing = _crossing(loop.pts)
+    if crossing is None:
+        rounded = [Vector(p) for p in loop.pts]
+        count = len({tuple(p) for p in rounded})
+        if (count == len(rounded) or count == len(set(loop.pts))
+                or _crossing(rounded, geometry.intersect_line_line_2d) is None):
+            return Profile([loop])
     profile = _from_region(_region([[loop]], lambda w: w != 0))
+    # The old float32 crossing check also resolved some near-duplicate joins.
+    # Keep that outline when it is still one loop; a false split needs the drawing.
+    if crossing is None and len(profile.loops) != 1:
+        return Profile([loop])
     if len(profile.loops) > 1:
         profile._crossing = crossing
     return profile

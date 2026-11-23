@@ -1601,10 +1601,13 @@ def _catmull(values, steps, closed):
 
 
 def _loft_local_shapes(shapes):
-    """Recenter the mesh if distinct points in a drawing collapse in a Vector."""
+    """Recenter the mesh if doing so separates points that collapse in a Vector."""
     for outline in dict.fromkeys(outline for outline, _ in shapes):
         count = len({tuple(Vector(p)) for p in outline.pts})
-        if count < len(outline.pts) and count < len(set(outline.pts)):
+        if count == len(outline.pts):
+            continue
+        x, y = outline.pts[0]
+        if len({tuple(Vector((a - x, b - y))) for a, b in outline.pts}) > count:
             break
     else:
         return shapes, Matrix.Identity(4), None

@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 import sand3d as s3d
+from mathutils import Matrix
 from sand3d.edit import ClampedRadius, strict
 from test_solids import closed_volume
 
@@ -194,6 +195,19 @@ class LoftSection(unittest.TestCase):
                     closed, volume = closed_volume(ob)
                     self.assertTrue(closed)
                     self.assertAlmostEqual(volume, 300.0008, places=4)
+
+    def test_a_spline_section_keeps_its_frame_with_near_duplicate_points(self):
+        curve = s3d.spline([(8, 0), (20, -10), (40, 0)])
+        # At x=40 the two points round together. After shifting by 8 they
+        # straddle a rounding boundary, though the gap is below a float32 step at x=32.
+        p = s3d.poly([curve, (40, 10), (40 - 1.5e-6, 10), (8, 20)])
+        sections = s3d.at(p), s3d.at(p, z=10)
+        actual = s3d.loft("spline", *sections)
+        with mock.patch("sand3d.solids._loft_local_shapes",
+                        side_effect=lambda shapes: (shapes, Matrix.Identity(4), None)):
+            expected = s3d.loft("reference", *sections)
+        self.assertEqual(mesh(actual), mesh(expected))
+        self.assertEqual(actual.matrix_basis, expected.matrix_basis)
 
     def test_a_section_with_a_hole_says_so_as_before(self):
         with self.assertRaises(ValueError) as caught:
