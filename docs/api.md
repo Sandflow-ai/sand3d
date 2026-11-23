@@ -371,7 +371,7 @@ object's; functions are session-local, not saved in Blender files.
 
 GLB always exports callable colours on face corners (COLOR_0); `colors="vertex"`, GLB only, also puts
 plain colours on corners and shares white materials, an emissive material keeping its colour (the
-area-weighted mean for a function). OBJ, URDF and USD use the area-weighted linear mean.
+area-weighted mean for a function). OBJ, URDF, IFC and USD use the area-weighted linear mean.
 When the OBJ has an MTL, each part gets its own colour or a neutral grey.
 
 Placement, copy, merge, displace, bend, twist, taper, scale, lay and interpolating mesh edits keep the

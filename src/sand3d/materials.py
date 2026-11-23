@@ -438,11 +438,23 @@ def face_colors(ob):
     return result
 
 
-def mean_tag(ob, colors=None):
+def _export_face_colors(ob):
+    """Keep the preset where a format newly evaluates a function it used to ignore."""
+    try:
+        return face_colors(ob)
+    except Exception as exc:
+        from .edit import _is_strict, _warn
+        if _is_strict():
+            raise
+        _warn(f"export: cannot evaluate colours on {_core.given_name(ob)!r}: {exc}", RuntimeWarning)
+        return None
+
+
+def mean_tag(ob, colors=None, *, fallback=False):
     """Area-weighted linear mean, encoded as sRGB for single-colour readers."""
     tag = _nearest(ob)
     if colors is None:
-        colors = face_colors(ob)
+        colors = _export_face_colors(ob) if fallback else face_colors(ob)
     if colors is None:
         return tag
     mesh = ob.data

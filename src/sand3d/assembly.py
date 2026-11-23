@@ -72,7 +72,7 @@ def export(root, path, colors="material"):
     own colour (the mean of a colour function's), which its emission reads.
     colors="material" keeps plain colours on materials, as before.
 
-    Function colours use an area-weighted mean in .usda, .urdf and .obj; STL has no colours.
+    Function colours use an area-weighted mean in .usda, .urdf, .ifc and .obj; STL has no colours.
 
     The program's unit to metres, then one file, its extension the format: a GLB — with
     the materials the program set, if it set any; nested by the joints, each in its

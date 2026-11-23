@@ -10,6 +10,7 @@ import bpy
 
 import sand3d as s3d
 from sand3d import materials
+from sand3d.edit import strict
 
 
 def worn(ob):
@@ -225,6 +226,30 @@ class Export(unittest.TestCase):
             self.assertIn("mtllib lot.mtl", path.read_text())
             self.assertIn("Kd 0 1 0", path.with_suffix(".mtl").read_text())
 
+    def test_fix44_ifc_averages_function_colours(self):
+        a = s3d.material(s3d.box("a", 10, 10, 10), "plastic",
+                         color=lambda x, y, z: "#ff0000" if z > 5 else "#0000ff")
+        b = s3d.material(s3d.box("b", 10, 10, 10), "plastic", color=lambda x, y, z: "#00ff00")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "lot.ifc"
+            s3d.export(s3d.group("lot", a, b), path)
+            rgb = re.findall(r"IFCCOLOURRGB\(\$,([^)]*)\)", path.read_text())
+        actual = [tuple(map(float, rgb.split(","))) for rgb in rgb]
+        self.assertEqual(len(actual), 2, actual)
+        self.assertAlmostEqual(materials._linear(actual[0])[0], 1/6)
+        self.assertAlmostEqual(materials._linear(actual[0])[2], 5/6)
+        self.assertEqual(actual[1], (0, 1, 0))
+
+    def test_ifc_invalid_colour_warns_and_keeps_preset(self):
+        ob = s3d.material(s3d.box("a", 10, 10, 10), "plastic", color=lambda x, y, z: "red")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.ifc"
+            with self.assertWarnsRegex(RuntimeWarning, "cannot evaluate colours on 'a'"):
+                s3d.export(ob, path)
+            self.assertIn("IFCCOLOURRGB($,0.847058824,0.847058824,0.847058824)", path.read_text())
+            with strict(), self.assertRaisesRegex(ValueError, "invalid colour"):
+                s3d.export(ob, path)
+
 
 class Mistakes(unittest.TestCase):
 
@@ -418,6 +443,7 @@ class Absorption(unittest.TestCase):
         import sys
         code = """import sand3d as s3d
 from sand3d import materials
+from sand3d.edit import strict
 import json, tempfile, struct, pathlib, os
 s3d.empty_scene()
 ob=s3d.material(s3d.box('pane',10,10,10),'glass',absorb='#aabbcc',
