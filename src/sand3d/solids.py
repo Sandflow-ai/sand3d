@@ -13,7 +13,7 @@ import math
 from mathutils import Matrix, Vector, geometry
 
 from . import _core
-from .profile import (EPS, Loop, Path, Placed, Profile, _as_path, _crossing, _fit, _said, arc, circle, poly, rect,
+from .profile import (EPS, Loop, Path, Placed, Profile, _as_path, _fit, _said, arc, circle, poly, rect,
                       superellipse)
 
 
@@ -835,12 +835,10 @@ def loft(name, *sections, follow=False, loop=False):
     shapes = []
     for rank, (prof, mat) in enumerate(placed, 1):
         if len(prof.loops) != 1:
-            if prof._outline is not None:   # not holes: poly split an outline that crosses itself
-                q = _crossing(prof._outline)
-                near = f" near {_said(q)}" if q is not None else ""
-                raise ValueError(f"loft: section {rank} crosses itself{near} — poly split its outline into "
-                                 f"{len(prof.loops)} pieces, and a section is one outline: move its points so that "
-                                 f"its sides do not cross")
+            if prof._crossing is not None:
+                raise ValueError(f"loft: section {rank} crosses itself near {_said(prof._crossing)} — its outline "
+                                 f"split into {len(prof.loops)} pieces, and a section is one outline: move its points "
+                                 f"so that its sides do not cross")
             raise ValueError("loft: each section must be one outline, without holes")
         shapes.append((prof.loops[0], mat))
     rings2d, flags = _correspond(shapes)

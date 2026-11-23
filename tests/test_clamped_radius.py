@@ -148,7 +148,7 @@ class Strict(unittest.TestCase):
 
 
 class LoftSection(unittest.TestCase):
-    """A section poly split because its outline crosses itself is not a section with holes."""
+    """Distinguish a crossed section from one with holes."""
 
     def setUp(self):
         s3d.empty_scene()
@@ -160,8 +160,14 @@ class LoftSection(unittest.TestCase):
         with self.assertRaises(ValueError) as caught:
             s3d.loft("shell", s3d.at(ok, y=0, rx=90), s3d.at(sec, y=1000, rx=90))
         self.assertEqual(str(caught.exception),
-                         "loft: section 2 crosses itself near (367.619, 500) — poly split its outline into 3 pieces, "
+                         "loft: section 2 crosses itself near (367.619, 500) — its outline split into 3 pieces, "
                          "and a section is one outline: move its points so that its sides do not cross")
+
+    def test_a_crossed_spline_does_not_name_poly(self):
+        p = s3d.spline([(0, 0), (10, 10), (0, 10), (10, 0)], closed=True)
+        with self.assertRaisesRegex(ValueError, r"^loft: section 1 crosses itself near \(5, 5\)") as caught:
+            s3d.loft("spline", s3d.at(p), s3d.at(p, z=10))
+        self.assertNotIn("poly", str(caught.exception))
 
     def test_a_section_with_a_hole_says_so_as_before(self):
         with self.assertRaises(ValueError) as caught:

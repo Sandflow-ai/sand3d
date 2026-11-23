@@ -43,7 +43,7 @@ class Profile:
     def __init__(self, loops):
         self.loops = [loop if loop.area() >= 0 or len(loops) > 1 else loop.reversed() for loop in loops]
         self._mesh = None
-        self._outline = None    # the outline drawn, when poly split one that crosses itself into pieces
+        self._crossing = None   # where the drawn outline crossed, if split into pieces
 
     def __add__(self, other):
         return _boolean(self, _flat(other), lambda a, b: a or b)
@@ -309,22 +309,6 @@ def _clean(pts, sharp):
     return out, flags
 
 
-def _simple(pts):
-    """Whether a closed polyline crosses itself (checked up to 400 points)."""
-    n = len(pts)
-    if n > 400:
-        return True
-    for i in range(n):
-        a, b = Vector(pts[i]), Vector(pts[(i + 1) % n])
-        for j in range(i + 2, n):
-            if i == 0 and j == n - 1:
-                continue
-            c, d = Vector(pts[j]), Vector(pts[(j + 1) % n])
-            if geometry.intersect_line_line_2d(a, b, c, d) is not None:
-                return False
-    return True
-
-
 def _crossing(pts):
     """The first point where a closed polyline crosses itself, or None."""
     n = len(pts)
@@ -347,11 +331,12 @@ def _single(pts, sharp):
     loop = Loop(pts, sharp)
     if loop.area() < 0:
         loop = loop.reversed()
-    if _simple(loop.pts):
+    crossing = _crossing(loop.pts) if len(loop.pts) <= 400 else None
+    if crossing is None:
         return Profile([loop])
     profile = _from_region(_region([[loop]], lambda w: w != 0))
-    if len(profile.loops) > 1:      # in pieces: loft, which takes one outline, says where it crossed
-        profile._outline = loop.pts
+    if len(profile.loops) > 1:
+        profile._crossing = crossing
     return profile
 
 
