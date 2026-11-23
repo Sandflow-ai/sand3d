@@ -169,6 +169,9 @@ def material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, 
         if not isinstance(target, bpy.types.Object):
             raise TypeError(f"material: {target!r} is not a part, a group or an assembly — a profile or a path "
                             "becomes one through extrude, revolve, sweep or loft")
+        if target.type == "LIGHT":
+            raise TypeError(f"material: {_core.given_name(target)!r} is a light object, not a solid: its colour is "
+                            f"light(color=)")
     for target in targets:
         target[TAG] = tag
     _core.dressed = True

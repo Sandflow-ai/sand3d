@@ -35,6 +35,11 @@ plate.top).
 
 ## Profiles and outlines
 
+A corner radius too large for its sides (`rect(r=)`, `poly(fillet=)`, `wire(fillet=)`) is
+clamped to the largest that fits and warns with `sand3d.edit.ClampedRadius`;
+`SAND3D_STRICT=1` or `with sand3d.edit.strict():` raises instead. A wire still raises when
+a bend would be tighter than `d / 2`. A loft section whose outline crosses itself says where.
+
 ```python
 rect(w, d, r=0, chamfer=0)  # Centred; corners rounded or cut
 circle(d)  # Centred
@@ -150,6 +155,7 @@ gear(name, teeth, module, width, bore=0, angle=20)  # Involute spur gear
 knurl(name, d, h, pitch=None, straight=False)  # Knurled grip; pitch 1 mm by default
 thread(name, d, length, pitch, left=False)  # Threaded rod
 material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, emission=None, absorb=None, absorb_distance=None, thickness="auto", ior=None, transmission=None, scatter=None, scatter_distance=None, scatter_anisotropy=None)  # Kind: oak walnut pine birch steel brushed_steel chrome aluminium brass copper painted_metal plastic glossy_plastic rubber glass ceramic fabric velvet leather marble concrete bark leaf moss grass rock soil sand water snow foam smoke fog light; color "#rrggbb" or color(x,y,z[,n[,u]])
+light(name, kind='point', lm=None, lux=None, color='#ffffff', angle=None, blend=None, shadow=True, size=None)  # Kind: point spot sun ambient; lm lumens (point, spot; 800), lux (sun 100 000, ambient 10 000); spot angle: full opening in degrees, at least 1 and under 180 (default 45); shines along its own -Z
 joint(name, child, on, kind='revolute', axis='normal', range=None, follows=None, ratio=1)  # How child moves on the part on was read on: revolute (range in degrees), continuous (no range), prismatic (range in the unit), free (no axis, no range); follows: a child or a joint name, and this joint's value is ratio × its (degrees per unit, or units per degree), no range; returns child
 pose(ob, value, joint=None)  # Move the mechanism: that joint to value (degrees or the unit), an error outside its range; what it carries follows; joint= when child has two
 seat(host, part)  # Take out of host the volume part fills, as it sits at rest; part untouched
@@ -157,7 +163,7 @@ group(name, *children)  # Parent of children
 assembly(name, *children, **anchors)  # Parts and anchors
 attach(handle, name, *children)  # A detail, under a handle
 Handle(root, **anchors)  # Root and anchors
-export(root, path, colors="material")  # root and what hangs on it by its joints, in metres: .glb at the current pose, joints in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's tree as OpenUSD text, with the materials; .ifc the part tree as IFC4 at the current pose, no joints; GlobalIds can change with geometry or placement and may repeat across models; .obj and .stl its meshes at the current pose
+export(root, path, trace=None, *, colors="material")  # root and what hangs on it by its joints, in metres: .glb at the current pose, joints in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's tree as OpenUSD text, with the materials; .ifc the part tree as IFC4 at the current pose, no joints; GlobalIds can change with geometry or placement and may repeat across models; .obj and .stl its meshes at the current pose; trace=True or SAND3D_TRACE=1 (<stem>.trace.json beside it), or a path: also a JSON of what was built, in the world, nested as the GLB. Export writes meshes and sand3d lights where the format supports them. Curves, text objects and anything else added with raw bpy are left out. Convert them to meshes first, or use Blender's own exporters.
 empty_scene()  # Fresh scene
 facets(n=None, smooth=...)  # Read count, or set segments per turn (integer >=3 or "auto") at any point; with facets(n): one part, then the previous count
 units(name=None)  # Length unit: "mm" (default), "cm", "m"

@@ -17,7 +17,8 @@ import bpy
 from mathutils import Matrix, Vector, geometry
 
 from . import _core
-from .profile import EPS, Loop, Path, Placed, Profile, _as_path, arc, circle, poly, rect, superellipse
+from .profile import (EPS, _CROSSING_LIMIT, Loop, Path, Placed, Profile, _as_path, _fit, _large_crossing,
+                      _said, arc, circle, poly, rect, superellipse)
 
 
 # ---------------------------------------------------------------- shared pieces
@@ -807,8 +808,9 @@ def wire(name, path, d, closed=None, fillet=0, *, tip="round", rings=0):
     A round wire of diameter `d` along `path` — a pipe, a spring, a rod bent to shape.
     `fillet` rounds the corners of a path given as points to that radius, on the wire's
     centre line, as a tube bender does: one number for all of them, or a list giving
-    each point its own (0 leaves it), as `poly` takes it. It raises where it cannot bend:
-    too large for a side, under `d / 2` (the tube would fold on itself), at a point where
+    each point its own (0 leaves it), as `poly` takes it. A fillet too large for a side
+    is clamped to the largest that fits, with a warning (strict mode: an error). It raises
+    where it cannot bend: under `d / 2` (the tube would fold on itself), at a point where
     the path turns back. A point written twice is one. A stool's leg:
     `wire("leg", [(0, 0, 0), (0, 0, 650), (-250, 0, 650)], 33, fillet=60)`."""
     path = getattr(path, "_mesh_path", path)
@@ -1152,8 +1154,9 @@ def _filleted(points, closed, amount, least=0.0, curve=False):
     """The polyline `points` with each corner turned into an arc of its radius (`amount`: one
     number, or one per point, 0 leaving it), tangent to both sides, in the plane they make.
     A point written twice is one; a radius under `least` (the wire's own), or a corner where
-    the path turns back, raises. Turns are read in double precision: `Vector` is single, and
-    put a path that doubles back past 180°, which made the setback negative."""
+    the path turns back, raises; one too large for a side is clamped to the largest that
+    fits, with a warning (strict mode raises). Turns are read in double precision: `Vector`
+    is single, and put a path that doubles back past 180°, which made the setback negative."""
     p = [tuple(float(c) for c in q) + (0.0,) * (3 - len(q)) for q in points]
     if isinstance(amount, (int, float)):
         radii = [float(amount)] * len(p)
@@ -1200,13 +1203,38 @@ def _filleted(points, closed, amount, least=0.0, curve=False):
             raise ValueError(f"wire: fillet {r:g} at {said(b)} sets the bend back by {setback:g}: a radius is more "
                              f"than 0")
         corners[i] = (setback, r, (p[i] - p[i - 1]).normalized(), (p[(i + 1) % m] - p[i]).normalized(), turn)
+    over = []
     for i in range(m if closed else m - 1):
         j = (i + 1) % m
         used = corners.get(i, (0,))[0] + corners.get(j, (0,))[0]
         length = math.dist(pts[i], pts[j])
         if used > length + _core.mm(1e-9):
-            a, b = (tuple(round(c, 6) for c in q) for q in (pts[i], pts[j]))
-            raise ValueError(f"wire: fillet too large for the side from {a} to {b} ({used:.4g} > {length:.4g})")
+            over.append((i, j, used, length))
+    if over:
+        i, j, used, length = over[0]
+        a, b = (tuple(round(c, 6) for c in q) for q in (pts[i], pts[j]))
+        error = ValueError(f"wire: fillet too large for the side from {a} to {b} ({used:.4g} > {length:.4g})")
+        from .edit import _clamped, _is_strict
+        if _is_strict():
+            raise error
+        minimums = {k: min(t, least * math.tan(turn / 2)) for k, (t, _, _, _, turn) in corners.items()}
+        for i, j, _, length in over:
+            if minimums.get(i, 0) + minimums.get(j, 0) <= length + _core.mm(1e-9):
+                continue
+            k = i if i in corners else j
+            other = j if k == i else i
+            largest = max(0.0, length - minimums.get(other, 0)) / math.tan(corners[k][4] / 2)
+            raise ValueError(f"{error}: the largest fillet that fits at {said(pts[k])}, {largest:.4g}, is tighter "
+                             f"than the wire's radius {least:g} (d / 2), and a tube bent tighter than its radius "
+                             f"folds on itself")
+        factors, (i, j, length) = _fit(corners, over, minimums)
+        k = max((k for k in (i, j) if k in factors), key=lambda k: corners[k][1])
+        r = corners[k][1]
+        _clamped(error, f"wire: fillet={r:g} too large for the side of {length:.4g} from {_said(pts[i])} to "
+                        f"{_said(pts[j])}; clamped to {r * factors[k]:.4g}")
+        for k, fk in factors.items():
+            t, rk, u, v, turn = corners[k]
+            corners[k] = (t * fk, rk * fk, u, v, turn)
     if curve:
         return _fillet_path(pts, closed, corners)
     out = []
@@ -1572,6 +1600,31 @@ def _catmull(values, steps, closed):
     return out if closed else out + [values[-1]]
 
 
+def _loft_local_shapes(shapes):
+    """Recenter the mesh if distinct points in a drawing collapse in a Vector."""
+    for outline in dict.fromkeys(outline for outline, _ in shapes):
+        count = len({tuple(Vector(p)) for p in outline.pts})
+        if count < len(outline.pts) and count < len(set(outline.pts)):
+            break
+    else:
+        return shapes, Matrix.Identity(4), None
+
+    def placed_origin(mat, x, y):
+        return [math.fsum((mat[k][0] * x, mat[k][1] * y, mat[k][3])) for k in range(3)]
+
+    first, mat = shapes[0]
+    origin = placed_origin(mat, *first.pts[0])
+    local, offsets = [], []
+    for loop, mat in shapes:
+        x, y = loop.pts[0]
+        offsets.append(Vector((x, y)))
+        shift = placed_origin(mat, x, y)
+        mat = mat.copy()
+        mat.translation = Vector([a - b for a, b in zip(shift, origin)])
+        local.append((Loop([(a - x, b - y) for a, b in loop.pts], loop.sharp), mat))
+    return local, Matrix.Translation(origin), offsets
+
+
 def _bounded_loft(name, shapes, rings2d, flags, zero, follow, tip="round", extra=0):
     tips = _ring_options(tip, extra)
     """Shape-preserving station fields, with caps confined to the end spans.
@@ -1715,16 +1768,30 @@ def loft(name, *sections, follow=False, loop=False, tip="round", rings=0):
             raise TypeError(f"loft: a section is a profile placed with at, not a solid ({_core.given_name(s)!r})")
     placed = [_placed(s) for s in sections]
     shapes = []
-    for prof, mat in placed:
+    checked = set()
+    for rank, (prof, mat) in enumerate(placed, 1):
         if len(prof.loops) != 1:
+            if prof._crossing is not None:
+                raise ValueError(f"loft: section {rank} crosses itself near {_said(prof._crossing)} — its outline "
+                                 f"split into {len(prof.loops)} pieces, and a section is one outline: move its points "
+                                 f"so that its sides do not cross")
             raise ValueError("loft: each section must be one outline, without holes")
         outline = prof.loops[0]
+        if len(outline.pts) > _CROSSING_LIMIT and outline not in checked:
+            q = _large_crossing(outline.pts)
+            if q is not None:
+                raise ValueError(f"loft: section {rank} crosses itself near {_said(q)} — "
+                                 f"move its points so that its sides do not cross")
+            checked.add(outline)
         if outline.pts and all(q == outline.pts[0] for q in outline.pts):
             mat = mat.copy()
             mat.translation = mat @ Vector((*outline.pts[0], 0))
             outline = Loop([(0, 0)], [False])
         shapes.append((outline, mat))
     zero = [all(x == 0 and y == 0 for x, y in outline.pts) for outline, _ in shapes]
+    frame, offsets = Matrix.Identity(4), None
+    if not any(zero):
+        shapes, frame, offsets = _loft_local_shapes(shapes)
     tips = _ring_options(tip, extra)
     for end,neighbour,t in ((0,1,tips[0]),(-1,-2,tips[1])):
         if t == 'flat' and zero[end]:
@@ -1754,7 +1821,7 @@ def loft(name, *sections, follow=False, loop=False, tip="round", rings=0):
     base_steps = steps
     if extra:
         steps *= extra + 1
-    origins = [mat.to_translation() for _, mat in shapes]
+    origins = [mat.to_translation() for _, mat in placed]
     xs = [mat.to_3x3() @ Vector((1, 0, 0)) for _, mat in shapes]
     ys = [mat.to_3x3() @ Vector((0, 1, 0)) for _, mat in shapes]
     dense_o = _catmull(origins, steps, loop)
@@ -1762,6 +1829,9 @@ def loft(name, *sections, follow=False, loop=False, tip="round", rings=0):
         dense_x = _catmull(xs, steps, loop)
         dense_y = _catmull(ys, steps, loop)
         dense_pts = [_catmull([ring[k] for ring in rings2d], steps, loop) for k in range(n)]
+        if offsets is not None:
+            dense_offsets = _catmull(offsets, steps, loop)
+            world_origin = frame.translation
     count = len(dense_o)
     b = _core.Builder(name)
     rings = []
@@ -1806,6 +1876,9 @@ def loft(name, *sections, follow=False, loop=False, tip="round", rings=0):
             z = x.cross(y).normalized()
             x = x.normalized()
             y = z.cross(x)
+        if offsets is not None:
+            shift = dense_offsets[i]
+            o = Vector([math.fsum((o[j], shift.x * x[j], shift.y * y[j], -world_origin[j])) for j in range(3)])
         rings.append([b.vert(o + dense_pts[k][i].x * x + dense_pts[k][i].y * y) for k in range(n)])
     if (_core.FACETS is not None or extra) and (follow or loop):
         # Probe the transported meridians, then keep the original station rings.
@@ -1842,7 +1915,7 @@ def loft(name, *sections, follow=False, loop=False, tip="round", rings=0):
             for t in _cap(ring):
                 caps.append(b.face([rings[k][v] for v in (reversed(t) if flip else t)], -1 - (k > 0), (tag,)))
         b.dissolve(caps)
-    return _object(b, Matrix.Identity(4), "seam")
+    return _object(b, frame, "seam")
 
 
 # ---------------------------------------------------------------- body

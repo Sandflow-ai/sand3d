@@ -61,11 +61,14 @@ def attach(handle, name, *children):
     return detail
 
 
-def export(root, path, colors="material"):
+def export(root, path, trace=None, *, colors="material"):
     """root and what hangs on it by its joints, in metres: .glb at the current pose, joints
     in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's
     tree as OpenUSD text, with the materials; .ifc the part tree as IFC4, the open standard
     Revit opens and links (.rvt only Revit writes); .obj and .stl its meshes at the current pose.
+    Export writes meshes and sand3d lights where the format supports them. Curves, text
+    objects and anything else added with raw bpy are left out. Convert them to meshes
+    first, or use Blender's own exporters.
 
     colors="vertex" (.glb only) puts all base colours on corners, sharing a white
     material per non-colour look; a surface that gives light keeps a material of its
@@ -83,24 +86,42 @@ def export(root, path, colors="material"):
     tree as an IfcProject of assemblies and proxies, every mesh a triangulated face set at
     the current pose, with materials but no joints; GlobalIds are not stable across edits or
     unique across models — or the meshes alone, as OBJ (Y up) or binary STL (Z up), at the current pose.
-    Limits only: masses, frictions, efforts and drives are dynamics, which sand3d does not say."""
+    Limits only: masses, frictions, efforts and drives are dynamics, which sand3d does not say.
+
+    The lights of the tree (`light`), in the words each format has for them: the GLB a point
+    or a spot in candela and a sun in lux (KHR_lights_punctual), and in each light's extras
+    (`s3d_light`) what glTF has no word for, its size and its shadow; the USDA all four, in UsdLux;
+    the IFC a point or a spot as an `IfcLightFixture`, in lumens. The URDF, the OBJ and the STL
+    have none. A light a format has no word for is left out, with a warning.
+
+    `trace=True` or `SAND3D_TRACE=1` (`<stem>.trace.json` beside it), or a path: also a JSON of
+    what was built, in the world in metres: boxes (with the parts under them), volumes, names,
+    joints, materials, nested as the GLB nests them."""
+    root = root.root if isinstance(root, Handle) else root
+    suffix = os.path.splitext(str(path))[1].lower()
     if colors not in ("material", "vertex"):
         raise ValueError('export: colors must be "material" or "vertex"')
-    if colors != "material" and os.path.splitext(str(path))[1].lower() != '.glb':
+    if colors != "material" and suffix != ".glb":
         raise ValueError('export: colors="vertex" requires .glb')
-    actual = root.root if isinstance(root, Handle) else root
-    if os.path.splitext(str(path))[1].lower() == '.glb':
-        materials.resolve()
-        with materials.exporting(actual, colors), materials.volume_export():
-            return _export(root, path)
+    if trace is None:
+        trace = os.environ.get("SAND3D_TRACE") == "1"
+    if trace and not isinstance(trace, (str, os.PathLike)):
+        trace = os.path.splitext(str(path))[0] + ".trace.json"
+    if trace and os.path.exists(trace):
+        os.remove(trace)                    # no stale trace beside a failed export
     materials.resolve()
-    return _export(root, path)
+    if suffix == ".glb":
+        with materials.exporting(root, colors), materials.volume_export():
+            _export(root, path)
+    else:
+        _export(root, path)
+    if trace:
+        from . import trace as tracefile
+        tracefile.write(root, trace)
 
 
 def _export(root, path):
-    from . import ifcfile, meshfile, urdf, usd
-    from .assembly import Handle
-    root = root.root if isinstance(root, Handle) else root
+    from . import ifcfile, lights, meshfile, urdf, usd
     suffix = os.path.splitext(str(path))[1].lower()
     if suffix in (".usd", ".usdc", ".usdz"):
         tool = "usdzip" if suffix == ".usdz" else f"usdcat x.usda -o x{suffix}"
@@ -114,23 +135,31 @@ def _export(root, path):
         raise ValueError(f"export: {suffix or 'a path with no extension'} is not a format sand3d writes: "
                          f"name the file .glb, .ifc, .obj, .stl, .urdf or .usda")
     if suffix in (".obj", ".stl"):
+        lights.left_out(lights.lights([root, *root.children_recursive]), path, "an OBJ or an STL holds meshes only")
         (meshfile.write_obj if suffix == ".obj" else meshfile.write_stl)(root, path)
         return
     if suffix == ".ifc":
+        lights.left_out([ob for ob in lights.lights([root, *root.children_recursive])
+                         if lights.kind(ob) in ("sun", "ambient")], path,
+                        "IFC gives a sun or the sky only a share of 0..1, not lux")
         ifcfile.write_ifc(root, path)
         return
     if suffix == ".urdf":
+        lights.left_out(urdf.Mechanism(root).lights(), path, "a URDF has no light")
         urdf.write_urdf(root, path)
         return
     if suffix == ".usda":
         usd.write_usda(root, path)
         return
+    lights.left_out([ob for ob in urdf.Mechanism(root).lights() if lights.kind(ob) == "ambient"], path,
+                    "glTF has no ambient light")
     lent = _lend_meshes()
     try:
         name = root.name                                   # the GLB's scene: the exporter names it after coll
         coll = bpy.data.collections.new("s3d~export")      # the exporter writes this, not the whole scene
         bpy.context.scene.collection.children.link(coll)
         state = urdf.glb_tree(root, coll)
+        lit = [ob for ob in coll.objects if ob.type == "LIGHT"]
         dressed = materials.dressed()           # asked before the tags come off: it reads them
         tags = {m: m.pop(materials.TAG) for m in bpy.data.materials if materials.TAG in m}   # extras: joints only
         clash = bpy.data.collections.get(name)  # a collection of the program's, lent its name meanwhile
@@ -138,9 +167,11 @@ def _export(root, path):
             if clash is not None:
                 clash.name = "s3d~export~lent"
             coll.name = name
-            bpy.ops.export_scene.gltf(filepath=str(path), export_format="GLB", collection=coll.name,
-                                      export_extras=True, export_vertex_color="MATERIAL",
-                                      export_materials="EXPORT" if dressed else "NONE")
+            with lights.gltf_spot_cones(lit):
+                bpy.ops.export_scene.gltf(filepath=str(path), export_format="GLB", collection=coll.name,
+                                          export_extras=True, export_lights=bool(lit),
+                                           export_vertex_color="MATERIAL",
+                                          export_materials="EXPORT" if dressed else "NONE")
         finally:
             coll.name = "s3d~export"
             if clash is not None:

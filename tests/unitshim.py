@@ -134,6 +134,8 @@ LENGTHS = {
     "pose": {"ob": "-", "value": "-", "joint": "-"},
     "seat": {"host": "-", "part": "-"},
     # assembly
+    "light": {"name": "-", "kind": "-", "lm": "-", "lux": "-", "color": "-", "angle": "-", "blend": "-",
+              "shadow": "-", "size": "L"},
     "material": {"ob": "-", "kind": "-", "color": "-", "roughness": "-", "metallic": "-", "opacity": "-",
                  "emission": "-", "absorb": "-", "absorb_distance": "L", "thickness": "P",
                  "ior": "-", "transmission": "-", "scatter": "-", "scatter_distance": "L",
@@ -142,7 +144,7 @@ LENGTHS = {
     "assembly": {"name": "-", "children": "-", "anchors": "-"},
     "attach": {"handle": "-", "name": "-", "children": "-"},
     "Handle": {"root": "-", "anchors": "-"},
-    "export": {"root": "-", "path": "-", "colors": "-"},
+    "export": {"root": "-", "path": "-", "trace": "-", "colors": "-"},
     "facets": {"n": "-", "smooth": "-"},
     "smooth": {"ob": "-", "angle": "-"},
     "lay": {"ob": "-", "over": "-", "reach": "L", "step": "L"},

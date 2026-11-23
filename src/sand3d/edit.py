@@ -288,6 +288,11 @@ class MissedCut(UserWarning):
     """The warning a missed cut, hole or pocket gives outside strict mode: the part is left as it was."""
 
 
+class ClampedRadius(UserWarning):
+    """The warning a corner radius too large for its side gives outside strict mode — `rect(r=)`,
+    `poly(fillet=)`, `wire(fillet=)`: it is clamped to the largest that fits."""
+
+
 _STRICT = contextvars.ContextVar("sand3d_strict", default=None)   # None: SAND3D_STRICT decides
 
 
@@ -309,7 +314,9 @@ def _is_strict():
 @contextlib.contextmanager
 def strict(on=True):
     """Within the block, a cut, a hole or a pocket whose tools all miss the part raises
-    NothingCut (on) or warns with MissedCut and leaves the part as it was (off).
+    NothingCut (on) or warns with MissedCut and leaves the part as it was (off); a corner
+    radius too large for its side (`rect(r=)`, `poly(fillet=)`, `wire(fillet=)`) raises
+    ValueError (on) or warns with ClampedRadius and is clamped to the largest that fits (off).
 
     Outside any block, SAND3D_STRICT in the environment decides: 1, true, yes or on make
     it raise; 0, false, no, off or nothing make it warn, as a boolean that misses does in
@@ -354,6 +361,14 @@ def _box_in_scene(ob, box):
 
 def _box_text(box):
     return "(" + ", ".join(f"{v:.6g}" for v in box[0]) + ") .. (" + ", ".join(f"{v:.6g}" for v in box[1]) + ")"
+
+
+def _clamped(error, message):
+    """A corner radius too large for its side: raise `error` in strict mode, else warn
+    with `message` at the program's line and let the verb clamp it."""
+    if _is_strict():
+        raise error
+    _warn(message, ClampedRadius)
 
 
 def _boxes(ob, operands):
@@ -696,13 +711,13 @@ def delete(ob):
             seen.add(part)
             parts.append(part)
     collect(ob)
-    meshes = set()
+    data = set()
     for part in parts:
         _guard.deleting(part)
-        if part.type == "MESH":
-            meshes.add(part.data)
+        if part.type in ("MESH", "LIGHT"):
+            data.add(part.data)
     bpy.data.batch_remove(parts)
-    bpy.data.batch_remove([mesh for mesh in meshes if mesh.users == 0])
+    bpy.data.batch_remove([block for block in data if block.users == 0])
 
 
 # ---------------------------------------------------------------- holes and pockets
