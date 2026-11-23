@@ -244,7 +244,7 @@ class Export(unittest.TestCase):
         ob = s3d.material(s3d.box("a", 10, 10, 10), "plastic", color=lambda x, y, z: "red")
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "bad.ifc"
-            with self.assertWarnsRegex(RuntimeWarning, "cannot evaluate colours on 'a'"):
+            with strict(False), self.assertWarnsRegex(RuntimeWarning, "cannot evaluate colours on 'a'"):
                 s3d.export(ob, path)
             self.assertIn("IFCCOLOURRGB($,0.847058824,0.847058824,0.847058824)", path.read_text())
             with strict(), self.assertRaisesRegex(ValueError, "invalid colour"):
@@ -271,7 +271,7 @@ class Export(unittest.TestCase):
         a = s3d.box("support", 2, 2, 2)
         b = s3d.material(s3d.box("battant", 2, 2, 2), "plastic", color=lambda x, y, z: "red")
         s3d.joint("pivot", b, s3d.bbox(a, "+X"), range=(0, 90))
-        with self.assertWarnsRegex(RuntimeWarning, "cannot evaluate colours on 'battant'"):
+        with strict(False), self.assertWarnsRegex(RuntimeWarning, "cannot evaluate colours on 'battant'"):
             doc, _ = export(a)
         rgb = doc["materials"][0]["pbrMetallicRoughness"]["baseColorFactor"]
         self.assertAlmostEqual(rgb[0], materials._linear("#d8d8d8")[0])

@@ -68,7 +68,7 @@ class Fill(unittest.TestCase):
         self.closed(near)
         self.assertAlmostEqual(volume(near), (4 - 2 * 1.9)**2 * (6 - 1.9), places=5)
         for clearance in (2, 3, 6, 1e40):
-            with self.subTest(clearance=clearance), warnings.catch_warnings(record=True) as caught:
+            with self.subTest(clearance=clearance), strict(False), warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always")
                 line = inspect.currentframe().f_lineno + 1
                 water = s3d.fill("water", cup, 8, clearance=clearance)
@@ -94,7 +94,7 @@ class Fill(unittest.TestCase):
         near = s3d.fill("near", cup, 8, clearance=0.9)
         self.assertLess(volume(near), volume(exact))
         for clearance in (1, 1.1):
-            with self.subTest(clearance=clearance), self.assertWarnsRegex(UserWarning, "clearance"):
+            with self.subTest(clearance=clearance), strict(False), self.assertWarnsRegex(UserWarning, "clearance"):
                 water = s3d.fill("water", cup, 8, clearance=clearance)
                 self.assertAlmostEqual(volume(water), volume(exact))
 
@@ -104,7 +104,7 @@ class Fill(unittest.TestCase):
         level = s3d.Frame((0, 0, 20))
         exact = s3d.fill("exact", [cup, stone], level, clearance=0)
         for clearance in (0.5, 0.6):
-            with self.subTest(clearance=clearance), self.assertWarnsRegex(UserWarning, "clearance"):
+            with self.subTest(clearance=clearance), strict(False), self.assertWarnsRegex(UserWarning, "clearance"):
                 water = s3d.fill("water", [cup, stone], level, clearance=clearance)
                 self.closed(water)
                 self.assertAlmostEqual(volume(water), volume(exact))
