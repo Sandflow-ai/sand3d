@@ -12,6 +12,17 @@ class Field(unittest.TestCase):
         s3d.empty_scene()
         s3d.units('mm')
 
+    def test_edges_and_corner_indices_have_a_fixed_order(self):
+        ob = s3d.field('ball', (24, 24, 24),
+                       lambda x, y, z: x*x + y*y + (z-12)**2 - 81, cell=2)
+        mesh = ob.data
+        edges = [tuple(edge.vertices) for edge in mesh.edges]
+        self.assertTrue(edges == sorted(set(edges)))
+        for face in mesh.polygons:
+            for i, loop in enumerate(face.loop_indices):
+                pair = tuple(sorted((face.vertices[i], face.vertices[(i+1) % 3])))
+                self.assertEqual(edges[mesh.loops[loop].edge_index], pair)
+
     def test_sphere_and_exact_zero_samples(self):
         ob = s3d.field('ball', (24, 24, 24), lambda x,y,z: x*x+y*y+(z-12)**2-100, cell=1)
         closed, volume = closed_volume(ob)
