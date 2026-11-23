@@ -20,5 +20,5 @@
   fall, broken into sheets, with foam at the impact: `waves` has no horizontal motion, overturning or
   breaking.
 - **Foam** (crests, spray, suds) is the rough diffuse `foam` preset, not water painted white.
-- **The review renderer** approximates refraction and the tinted medium along its ray path; it has no
-  caustics, volumetric shadows, anisotropy or multiple scattering. Cycles renders the volume.
+- **Depth tint in Cycles and glTF**: Cycles uses the distance each ray travels through the mesh.
+  glTF readers with volume support use the material's thickness.

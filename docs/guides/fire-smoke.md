@@ -1,4 +1,4 @@
-# Emission, smoke and fog media, review rendering versus Cycles
+# Emission, smoke and fog in Cycles and glTF
 
 ## Flames
 
@@ -15,11 +15,7 @@ Build closed plume volumes with readable shape and density, not opaque grey ball
 `material(plume, "smoke", scatter="#b3aea8", scatter_distance=600)`; `fog` is lighter. A finely folded
 `field` is still one uniform density, not filaments.
 
-## Review renderer versus Cycles
-
-The review renderer adds emission to the surface colour (it lights no neighbour, casts no volumetric
-shadow, has no bloom) and shows a medium as tinted opacity `1 - exp(-sigma_s * path_length)` along its
-ray path, combined with absorption, without anisotropy, indirect light or multiple scattering.
+## Cycles and glTF
 
 Cycles gets real Volume Scatter and Absorption nodes, and emission lights nearby surfaces. It stops
 shadow rays at any refracting surface, IOR 1 included, so a clear non-emissive boundary around a medium
@@ -27,5 +23,8 @@ shadow rays at any refracting surface, IOR 1 included, so a clear non-emissive b
 medium gets direct light and casts its shadow; GLB and EEVEE keep the Principled BSDF. Each boundary
 crossing spends one transparent bounce (`scene.cycles.transparent_max_bounces`, default 8): a folded
 envelope or noisy `field` can show black cracks along its outline; raise the limit.
-`scene.cycles.volume_bounces` defaults to 0 (single scattering). sand3d changes no render setting;
-exposure, lights and view transform change perceived brightness, so check both renderers.
+`scene.cycles.volume_bounces` defaults to 0 (single scattering). Exposure, lights and the view
+transform affect perceived brightness.
+
+GLB carries emissive surface colour. It exports smoke and fog as volume attenuation, combining
+absorption and scattering into extinction. Readers with volume support show a darkened medium.
