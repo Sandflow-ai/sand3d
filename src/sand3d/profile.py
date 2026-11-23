@@ -711,18 +711,26 @@ def _poly(pts, fillet, chamfer, said):
     return _single(pts2, sharp)
 
 
-def _fit(setbacks, over):
-    """The corners' setbacks scaled to fit their sides: `over` lists the sides too short,
-    (i, j, used, length); each corner takes the smallest of its sides' factors, so every
-    side fits. Returns the factors, corner -> f, and the tightest side, (f, i, j, length)."""
-    factors, tightest = {}, None
+def _fit(setbacks, over, minimums=None):
+    """Scale the available setback above each corner's minimum to fit its sides.
+    Return factors corner -> f and the tightest side (f, i, j, length)."""
+    minimums = minimums or {}
+    shares, tightest = {}, None
     for i, j, used, length in over:
         f = length / used
+        reserved = minimums.get(i, 0) + minimums.get(j, 0)
+        excess = used - reserved
+        share = max(0.0, length - reserved) / excess if excess > 0 else 0.0
         for k in (i, j):
             if k in setbacks:
-                factors[k] = min(factors.get(k, 1.0), f)
+                shares[k] = min(shares.get(k, 1.0), share)
         if tightest is None or f < tightest[0]:
             tightest = (f, i, j, length)
+    factors = {}
+    for k, share in shares.items():
+        t = setbacks[k][0]
+        minimum = minimums.get(k, 0)
+        factors[k] = (minimum + (t - minimum) * share) / t
     return factors, tightest
 
 

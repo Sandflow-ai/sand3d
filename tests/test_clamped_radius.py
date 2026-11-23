@@ -71,6 +71,14 @@ class Clamped(unittest.TestCase):
                          "clamped to 30")
         self.assertEqual(mesh(ob), mesh(s3d.wire("fits", LEG, 33, fillet=30)))
 
+    def test_wire_preserves_the_minimum_bend_radius(self):
+        pts = [(0, 0), (0, 100), (10, 100), (10, 200)]
+        with self.assertWarns(ClampedRadius) as caught:
+            ob = s3d.wire("minimum", pts, 4, fillet=[0, 100, 2, 0])
+        self.assertIn("clamped to 8", str(caught.warning))
+        self.assertEqual(mesh(ob), mesh(s3d.wire("fits", pts, 4, fillet=[0, 8, 2, 0])))
+        self.assertTrue(closed_volume(ob)[0])
+
     def test_a_wire_clamped_tighter_than_its_radius_raises(self):
         with self.assertRaisesRegex(ValueError, r"^wire: fillet too large for the side from \(0.0, 0.0, 650.0\) to "
                                                 r"\(-30.0, 0.0, 650.0\) \(60 > 30\): the largest fillet that fits at "

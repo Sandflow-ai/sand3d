@@ -555,17 +555,24 @@ def _filleted(points, closed, amount, least=0.0):
         i, j, used, length = over[0]
         a, b = (tuple(round(c, 6) for c in q) for q in (pts[i], pts[j]))
         error = ValueError(f"wire: fillet too large for the side from {a} to {b} ({used:.4g} > {length:.4g})")
-        factors, (f, i, j, length) = _fit(corners, over)
-        r = max(corners[k][1] for k in (i, j) if k in corners)
         from .edit import _clamped, _is_strict
-        if not _is_strict():
-            for k, fk in factors.items():
-                if corners[k][1] * fk < least - _core.mm(1e-9):
-                    raise ValueError(f"{error}: the largest fillet that fits at {said(pts[k])}, "
-                                     f"{corners[k][1] * fk:.4g}, is tighter than the wire's radius {least:g} (d / 2), "
-                                     f"and a tube bent tighter than its radius folds on itself")
+        if _is_strict():
+            raise error
+        minimums = {k: min(t, least * math.tan(turn / 2)) for k, (t, _, _, _, turn) in corners.items()}
+        for i, j, _, length in over:
+            if minimums.get(i, 0) + minimums.get(j, 0) <= length + _core.mm(1e-9):
+                continue
+            k = i if i in corners else j
+            other = j if k == i else i
+            largest = max(0.0, length - minimums.get(other, 0)) / math.tan(corners[k][4] / 2)
+            raise ValueError(f"{error}: the largest fillet that fits at {said(pts[k])}, {largest:.4g}, is tighter "
+                             f"than the wire's radius {least:g} (d / 2), and a tube bent tighter than its radius "
+                             f"folds on itself")
+        factors, (_, i, j, length) = _fit(corners, over, minimums)
+        k = max((k for k in (i, j) if k in corners and factors[k] < 1), key=lambda k: corners[k][1])
+        r = corners[k][1]
         _clamped(error, f"wire: fillet={r:g} too large for the side of {length:.4g} from {_said(pts[i])} to "
-                        f"{_said(pts[j])}; clamped to {r * f:.4g}")
+                        f"{_said(pts[j])}; clamped to {r * factors[k]:.4g}")
         for k, fk in factors.items():
             t, rk, u, v, turn = corners[k]
             corners[k] = (t * fk, rk * fk, u, v, turn)
