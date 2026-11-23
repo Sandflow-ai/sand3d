@@ -15,9 +15,9 @@ def smooth(ob, angle=55):
     if not parts:
         raise TypeError('smooth: a part, a group, an assembly or a list of them is expected')
     for part in parts:
-        if "s3d~merged.shading" in part:
-            del part["s3d~merged.shading"]
+        if _core.MERGED_SHADING in part:
+            del part[_core.MERGED_SHADING]
         _core.own_mesh(part)
         part[_core.SHADE] = float(angle)
-    _core.shade_meshes(parts)
+        _core.shade_mesh(part)
     return ob

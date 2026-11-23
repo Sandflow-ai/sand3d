@@ -665,6 +665,6 @@ def field(name, size, density, *, cell, level=0, min_component_cells=3):
         raise ValueError(
             "field: degenerate triangles at mesh precision; change level or cell"
         )
-    ob = _core.link(bpy.data.objects.new(name, mesh))
+    ob = _core.new_mesh_object(name, mesh)
     ob[_core.NAME] = name
     return ob

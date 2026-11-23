@@ -486,7 +486,7 @@ def _flatten_names(bm):
                 e.smooth = True
 
 
-def _replace_mesh(ob, bm):
+def _replace_mesh(ob, bm, *, keep_shading=False):
     """`bm` as `ob`'s mesh. Normals are not recomputed: a boolean's are right, and a
     void inside a shell must keep facing in."""
     old = ob.data
@@ -498,6 +498,8 @@ def _replace_mesh(ob, bm):
     if old.users == 0:
         bpy.data.meshes.remove(old)
     mesh.name = _core.given_name(ob)
+    if not keep_shading:
+        _core.shade_mesh(ob)
 
 
 # ---------------------------------------------------------------- booleans
@@ -1524,8 +1526,8 @@ def merge(*obs):
     to_local = _core.world(first).inverted()
     meshes = [(first.data, Matrix.Identity(4))] + [(o.data, to_local @ _core.world(o)) for o in others]
     bm = _concat(meshes)
-    _replace_mesh(first, bm)
-    first["s3d~merged.shading"] = True
+    _replace_mesh(first, bm, keep_shading=True)
+    first[_core.MERGED_SHADING] = True
     if others:
         first[MERGED] = True
     for o in others:
@@ -1719,6 +1721,7 @@ def scale(ob, s):
     ob.data.transform(Matrix.Diagonal((sx, sy, sz, 1)))
     if sx * sy * sz < 0:
         ob.data.flip_normals()
+    _core.shade_mesh(ob)
     return ob
 
 
@@ -1866,6 +1869,7 @@ def dent(ob, points, r, depth, *, coords="local"):
     _core.own_mesh(ob)
     bm.to_mesh(ob.data)
     bm.free()
+    _core.shade_mesh(ob)
     return ob
 
 
@@ -2631,6 +2635,7 @@ def _deform(ob, value, axis, verb, toward=None, step=None):
         bm.to_mesh(part.data)
         bm.free()
         part.data.update()
+        _core.shade_mesh(part)
     return ob
 
 
@@ -2816,4 +2821,5 @@ def lay(ob, over, reach=None, *, step=None):
         for v, co in zip(part.data.vertices, positions):
             v.co = co
         part.data.update()
+        _core.shade_mesh(part)
     return ob

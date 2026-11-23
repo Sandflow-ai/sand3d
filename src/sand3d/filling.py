@@ -170,7 +170,7 @@ def fill(name, container, level, clearance=None):
             v.co.z += depth
         mesh = bpy.data.meshes.new(name)
         bm.to_mesh(mesh)
-        ob = _core.link(bpy.data.objects.new(name, mesh))
+        ob = _core.new_mesh_object(name, mesh)
         ob[_core.NAME] = name
         ob.matrix_basis = matrix @ Matrix.Translation((0, 0, -depth))
         return ob

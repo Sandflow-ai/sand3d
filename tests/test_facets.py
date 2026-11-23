@@ -95,6 +95,54 @@ class Facets(unittest.TestCase):
         self.assertFalse(any(p.use_smooth for p in low.data.polygons))
         self.assertTrue(all(p.use_smooth for p in after.data.polygons))
 
+    def test_existing_parts_keep_their_shading(self):
+        operations = {
+            "at": lambda ob: s3d.at(ob, z=50),
+            "group": lambda ob: s3d.group("group", ob),
+            "material": lambda ob: s3d.material(ob, "plastic"),
+            "assembly": lambda ob: s3d.assembly("assembly", ob),
+            "bbox": lambda ob: s3d.bbox(ob, "+Z"),
+            "copy": s3d.copy,
+        }
+        for name, operation in operations.items():
+            with self.subTest(verb=name):
+                s3d.empty_scene()
+                ball = s3d.sphere("ball", 40)
+                unrelated = s3d.sphere("unrelated", 20)
+                parts = [(ob, len(ob.data.polygons)) for ob in (ball, unrelated)]
+                with s3d.facets(6):
+                    result = operation(ball)
+                if name == "copy":
+                    parts.append((result, parts[0][1]))
+                for ob, expected in parts:
+                    with self.subTest(part=ob.name):
+                        self.assertEqual(sum(p.use_smooth for p in ob.data.polygons), expected)
+
+    def test_edit_inherits_construction_shading(self):
+        def fillet(ob, smooth):
+            before = len(ob.data.polygons)
+            s3d.fillet(ob, 2, edges="top")
+            self.assertGreater(len(ob.data.polygons), before)
+            self.assertEqual({p.use_smooth for p in ob.data.polygons}, {smooth})
+
+        usual = s3d.box("usual", 40, 40, 10)
+        with s3d.facets(8):
+            flat = s3d.box("flat", 40, 40, 10)
+            with self.subTest(part="usual"):
+                fillet(usual, True)
+        with self.subTest(part="flat copy"):
+            fillet(s3d.copy(flat), False)
+
+    def test_merge_keeps_per_face_shading(self):
+        usual = s3d.sphere("usual", 20)
+        n_smooth = len(usual.data.polygons)
+        with s3d.facets(8):
+            flat = s3d.sphere("flat", 20)
+            merged = s3d.merge(usual, flat)
+        self.assertEqual(sum(p.use_smooth for p in merged.data.polygons), n_smooth)
+        s3d.smooth(merged, 55)
+        self.assertTrue(all(p.use_smooth for p in merged.data.polygons))
+
     def test_the_same_value_again_is_no_change(self):
         s3d.facets(8)
         s3d.box("b", 10, 10, 10)
