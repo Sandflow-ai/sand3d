@@ -39,6 +39,7 @@ A corner radius too large for its sides (`rect(r=)`, `poly(fillet=)`, `wire(fill
 clamped to the largest that fits and warns with `sand3d.edit.ClampedRadius`;
 `SAND3D_STRICT=1` or `with sand3d.edit.strict():` raises instead. A wire still raises when
 a bend would be tighter than `d / 2`. A loft section whose outline crosses itself says where.
+If the section still has one outline, loft warns and builds it (strict mode raises).
 
 ```python
 rect(w, d, r=0, chamfer=0)  # Centred; corners rounded or cut

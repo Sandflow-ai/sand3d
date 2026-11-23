@@ -1815,6 +1815,7 @@ def loft(name, *sections, follow=False, loop=False, tip="round", rings=0):
                             "(profile, Frame) pair")
         if hasattr(s, "data") and hasattr(s, "matrix_basis"):
             raise TypeError(f"loft: a section is a profile placed with at, not a solid ({_core.given_name(s)!r})")
+    from .edit import _is_strict, _warn
     placed = [_placed(s) for s in sections]
     shapes = []
     checked = set()
@@ -1829,8 +1830,11 @@ def loft(name, *sections, follow=False, loop=False, tip="round", rings=0):
         if len(outline.pts) > _CROSSING_LIMIT and outline not in checked:
             q = _large_crossing(outline.pts)
             if q is not None:
-                raise ValueError(f"loft: section {rank} crosses itself near {_said(q)} — "
-                                 f"move its points so that its sides do not cross")
+                message = (f"loft: section {rank} crosses itself near {_said(q)} — "
+                           "move its points so that its sides do not cross")
+                if _is_strict():
+                    raise ValueError(message)
+                _warn(message, UserWarning)
             checked.add(outline)
         if outline.pts and all(q == outline.pts[0] for q in outline.pts):
             mat = mat.copy()

@@ -180,7 +180,10 @@ class LoftSection(unittest.TestCase):
             if step == 1:
                 self.assertTrue(closed_volume(s3d.loft("simple", start, end))[0])
             else:
-                with self.assertRaisesRegex(ValueError, r"^loft: section 2 crosses itself near \("):
+                with strict(False), self.assertWarnsRegex(UserWarning, r"^loft: section 2 crosses itself near \("):
+                    ob = s3d.loft("crossed", s3d.at(s3d.circle(40)), end)
+                self.assertEqual((len(ob.data.vertices), len(ob.data.polygons)), (802, 402))
+                with strict(), self.assertRaisesRegex(ValueError, r"^loft: section 2 crosses itself near \("):
                     s3d.loft("crossed", s3d.at(s3d.circle(40)), end)
 
     def test_thin_translated_section_does_not_cross_itself(self):
