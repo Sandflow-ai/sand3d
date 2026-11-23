@@ -37,7 +37,7 @@ own words, so a model writes it in a few hundred tokens and a person can read it
 - **Short.** A part takes 2 to 6× fewer tokens than the same part in Blender Python, CadQuery or FeatureScript ([details](https://sand3d.sandflow.ai/tokens.html)).
 - **One file to prompt.** Every signature, one line each, in [the API](https://sand3d.sandflow.ai/api.html); a short guide per technique (water, trees, terrain…) is read only when a task needs it.
 - **Named, not computed.** Parts, edges and faces are reached by name, never by hand-computed coordinates.
-- **Deterministic.** The same program builds the same mesh, bit for bit.
+- **Deterministic.** The same program builds the same mesh, bit for bit, in the same environment.
 
 ## A whole object, part by part
 
@@ -70,7 +70,8 @@ s3d.export(machine, "washer.glb")    # or .urdf, .usda, .ifc, .obj, .stl
 | **URDF** | a link per moving part, its joints and their limits, at rest; OBJ meshes beside it | ROS, PyBullet, MuJoCo, Isaac |
 | **USDA** | the same tree in OpenUSD (UsdGeom, UsdPhysics), with the materials and every light (UsdLux) | Omniverse, Isaac Sim, USD pipelines |
 | **IFC** | the part tree as an IFC4 project — assemblies, a proxy per part, triangulated face sets, the materials, a light fixture per point or spot | Revit, ArchiCAD, Tekla, BIM |
-| **OBJ**, **STL** | the meshes alone, at the current pose: OBJ Y up, binary STL Z up | any 3D tool, slicers |
+| **OBJ** | meshes in the root's tree at the current pose, Y up, with a mean colour per part for callable colours | any 3D tool |
+| **STL** | meshes in the root's tree at the current pose, binary, Z up | any 3D tool, slicers |
 
 `.usd`, `.usdc` and `.usdz` come from the `.usda` through USD's own tools (`usdcat`,
 `usdzip`). Revit's own `.rvt` is written by Revit alone — no library writes one — so
@@ -79,6 +80,9 @@ s3d.export(machine, "washer.glb")    # or .urdf, .usda, .ifc, .obj, .stl
 `export` writes meshes and sand3d lights where the format supports them. Curves, text
 objects and anything else added with raw `bpy` are left out. Convert them to meshes first,
 or use Blender's own exporters.
+
+GLB, URDF and USDA also follow joints to parts outside the root's tree. IFC, OBJ and STL
+follow Blender parenting only.
 
 IFC exports the current pose, without joints. Its `GlobalId` values depend on geometry
 and placement: editing or moving a part can change its ID, and identical parts in separate

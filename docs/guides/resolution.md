@@ -10,7 +10,7 @@ noise feature size.
 s3d.displace(leaf, amount=0.2, size=1.0, step=2.0)
 s3d.bend(stem, 35, step=4.0)
 s3d.lay(patch, terrain, step=3.0)
-s3d.blend(rocks, r=4.0, step=1.0)
+s3d.blend(*rocks, r=4, step=1)
 ```
 
 Indicative budgets at 1024 px (triangles, not a quality score):

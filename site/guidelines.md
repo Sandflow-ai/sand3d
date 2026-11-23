@@ -2,7 +2,7 @@
 
 Eight rules for any program that builds a multi-part object in sand3d, by hand or by model. They were
 drawn from a review of generated asset and articulated programs, and have not been tested as a prompt.
-Every example is a real program, run under 1.4.0, when sand3d was still named sky3d. A fault is followed by how it should have been
+Every example is a real program, run under 1.4.0. A fault is followed by how it should have been
 written: `# ←` comments are added to the original, and rewrites keep the original's shape.
 
 1. **The head is the table of contents.** First function, named after the object, no geometry.

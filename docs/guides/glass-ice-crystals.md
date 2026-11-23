@@ -3,6 +3,6 @@
 Start from `glass` or `water`; override `transmission`, `ior` or `roughness` only when needed. Give ice
 and crystals closed thickness, recognisable facets and a background or bank to see through. Tint with
 `absorb`, not opacity: alpha is not absorption, and colour, opacity and transmission are separate.
-`thickness` only informs glTF raster viewers (`"auto"`: 2 × volume / area at export); Cycles follows the
-real mesh. Avoid stacked coincident transparent shells. The review renderer approximates refraction,
-Fresnel reflection and absorption; it is not a path tracer.
+Cycles uses the ray length through the mesh. glTF raster readers with volume support use the
+material's `thickness` (`"auto"` estimates 2 × volume / area at export). A thickness of 0 disables the
+medium in both. Avoid stacked coincident transparent shells.

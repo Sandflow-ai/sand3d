@@ -1,5 +1,5 @@
 - water: Fill, depth tint, waves on the surface, falls, foam, banks.
-- fire-smoke: Flames and emission, smoke and fog media, review renderer versus Cycles.
+- fire-smoke: Flames and emission, smoke and fog in Cycles and glTF.
 - trees-vegetation: Branches, foliage, crown cost, grass, lawns, moss carpets and textile fur.
 - terrain-ground: Terrain, strewn stones, leaf litter, gravel, snow, contact, sand, dunes and wind ripples.
 - organic-forms: Faceted rock, field holes and folds, coral, fungi, verb choice.

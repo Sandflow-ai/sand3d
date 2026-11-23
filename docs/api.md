@@ -8,7 +8,7 @@ plate.top).
    changes the frame, and x, y, z then run along its axes; `transform` moves the whole thing, as a parent
    would, mirror included.
 2. To repeat, pass a list of frames to `on=`: once per frame, in `at`, `hole` and `pocket`.
-3. A list of objects is worth its elements, wherever a verb takes objects.
+3. A list of objects is worth its elements in verbs such as `join`; pass `*parts` to `blend`.
 4. What a verb uses up no longer exists. `copy` keeps it; always use what `at` returns.
 5. Every solid starts at z = 0, centred in x and y: `box` is the `extrude` of its `rect`; `extrude(both=True)`
    centres one on its plane. A face's frame starts where the origin projects onto it: a vertical face's, at
@@ -163,7 +163,7 @@ group(name, *children)  # Parent of children
 assembly(name, *children, **anchors)  # Parts and anchors
 attach(handle, name, *children)  # A detail, under a handle
 Handle(root, **anchors)  # Root and anchors
-export(root, path, trace=None, *, colors="material")  # root and what hangs on it by its joints, in metres: .glb at the current pose, joints in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's tree as OpenUSD text, with the materials; .ifc the part tree as IFC4 at the current pose, no joints; GlobalIds can change with geometry or placement and may repeat across models; .obj and .stl its meshes at the current pose; trace=True or SAND3D_TRACE=1 (<stem>.trace.json beside it), or a path: also a JSON of what was built, in the world, nested as the GLB. Export writes meshes and sand3d lights where the format supports them. Curves, text objects and anything else added with raw bpy are left out. Convert them to meshes first, or use Blender's own exporters.
+export(root, path, trace=None, *, colors="material")  # Metres. GLB, URDF and USDA follow parenting and joints; IFC, OBJ and STL follow parenting only. GLB, IFC, OBJ and STL write the current pose; URDF and USDA write the mechanism at rest.
 empty_scene()  # Fresh scene
 facets(n=None, smooth=...)  # Read count, or set segments per turn (integer >=3 or "auto") at any point; with facets(n): one part, then the previous count
 units(name=None)  # Length unit: "mm" (default), "cm", "m"
@@ -353,6 +353,16 @@ transmission)`, no volume or sheen: fully transmitting water, glass, smoke or fo
 IFC carries surface colour, transparency `max(1-opacity, .85*transmission)` and GLASS reflectance. OBJ
 carries diffuse colours in a companion MTL, URDF colour and opacity, STL nothing.
 
+GLB puts joints in node extras. URDF writes a link per moving part with OBJ meshes beside it. USDA
+writes that tree with materials. IFC writes the part tree as IFC4 without joints; its GlobalIds can
+change with geometry or placement and may repeat across models. OBJ is Y up; binary STL is Z up.
+Convert raw Blender curves and text to meshes before export.
+
+Trace: `trace=True` or `SAND3D_TRACE=1` writes `<stem>.trace.json` beside the export. Pass a path
+to name it. The JSON records world-space bounds and volumes, names, materials and joints, nested
+as in the GLB. GLB writes points, spots and suns, USDA all four light kinds, and IFC points and
+spots. OBJ, STL and URDF carry meshes without lights. An unsupported light warns.
+
 ## Colour functions
 
 `color` may be a function `color(x, y, z[, n[, u]])`: exactly 3, 4 or 5 positional parameters, no
@@ -371,10 +381,9 @@ every export evaluates anew: functions must be pure. Example:
 `lambda x,y,z: np.stack((x*0+.2, y*0+.4, z*0+.6), axis=-1)`.
 
 The colour is reflectance: do not bake a light direction, highlight or shadow into it through normals;
-use normals for an authored surface property (dust on upward faces). The review renderer lights with
-fixed lights, and emission adds colour without lighting neighbours; Cycles uses real lights and can
-look different. One RGB per face, no UVs or textures: fine colour needs fine faces; prefer colour to
-sub-millimetre displaced veins or grain. `copy` keeps the function, `join` and `merge` the first
+use normals for an authored surface property (dust on upward faces). One RGB per face, no UVs or
+textures: fine colour needs fine faces; prefer colour to sub-millimetre displaced veins or grain.
+`copy` keeps the function, `join` and `merge` the first
 object's; functions are session-local, not saved in Blender files.
 
 GLB always exports callable colours on face corners (COLOR_0); `colors="vertex"`, GLB only, also puts

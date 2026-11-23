@@ -62,13 +62,11 @@ def attach(handle, name, *children):
 
 
 def export(root, path, trace=None, *, colors="material"):
-    """root and what hangs on it by its joints, in metres: .glb at the current pose, joints
-    in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's
-    tree as OpenUSD text, with the materials; .ifc the part tree as IFC4, the open standard
-    Revit opens and links (.rvt only Revit writes); .obj and .stl its meshes at the current pose.
-    Export writes meshes and sand3d lights where the format supports them. Curves, text
-    objects and anything else added with raw bpy are left out. Convert them to meshes
-    first, or use Blender's own exporters.
+    """Write meshes and supported sand3d lights in metres.
+
+    GLB, URDF and USDA follow parenting and joints. IFC, OBJ and STL follow parenting.
+    GLB, IFC, OBJ and STL write the current pose. URDF and USDA write the mechanism at
+    rest. Convert raw Blender curves and text to meshes first.
 
     colors="vertex" (.glb only) puts all base colours on corners, sharing a white
     material per non-colour look; a surface that gives light keeps a material of its

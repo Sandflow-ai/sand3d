@@ -5,7 +5,7 @@
 ## Docs
 
 - [Website](https://sand3d.sandflow.ai/): the quickstart (every verb, with code that runs and its render), an articulated gallery, the API.
-- [API reference](docs/api.md): the rules of the vocabulary, every signature with one line, worked examples; about 9 500 tokens, written to be put in a prompt whole.
+- [API reference](docs/api.md): the rules of the vocabulary, every signature with one line, worked examples; 10 880 tokens (o200k_base), written to be put in a prompt whole.
 - [Writing an assembly](docs/guidelines.md): eight rules for objects of several parts: the plan first, then the details, then the parts; about 5 300 tokens, with the API the base prompt.
 - [Task guides](docs/guides/index.md): one short guide per technique (water, fire and smoke, trees and grass, terrain and sand, organic forms, surface colour, glass, mesh resolution), 100 to 700 tokens each, read only when a task needs it.
 
@@ -13,4 +13,4 @@
 
 - [A washing machine](programs/washing_machine.py): an articulated object, four joints, materials.
 - [A tufted chair](programs/tufted_chair.py): lofts, tufts, rows of nails as details on anchors.
-- [The worked examples](docs/examples/): a bracket, a lamp, a rack, a chair, a gate.
+- [The worked examples](docs/examples/): a bracket, a lamp, a rack, a chair, a gate, a curved stem, a pond.
