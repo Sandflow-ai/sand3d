@@ -9,8 +9,12 @@ from mathutils import Matrix, Vector
 from mathutils.bvhtree import BVHTree
 
 from . import _core
-from .edit import _flat, _deform_parts, _tool_mesh, _solve, _offset, box_tool
+from .edit import _flat, _deform_parts, _tool_mesh, _solve, _offset, _is_strict, _warn, box_tool
 from .frames import Frame, local
+
+
+class InvalidFillClearance(UserWarning):
+    """The requested wall offset was invalid and the fill uses zero clearance."""
 
 
 def fill(name, container, level, clearance=None):
@@ -151,8 +155,20 @@ def fill(name, container, level, clearance=None):
                 else:
                     move = _offset([(f.normal, -1) for f in walls], clearance)
                 moves.append((v, move))
+            bm.verts.index_update()
+            bm.faces.index_update()
+            triangles = bm.calc_loop_triangles()
+            before = [v.co.copy() for v, _ in moves]
             for v, move in moves:
                 v.co += move
+            if _invalid_offset(bm, before, triangles):
+                message = f"fill {name!r}: clearance {clearance:g} collapses, folds or crosses the fill"
+                if _is_strict():
+                    raise ValueError(message)
+                _warn(f"{message}. Using zero clearance.", InvalidFillClearance)
+                for (v, _), point in zip(moves, before):
+                    v.co = point
+                bm.normal_update()
         bm.faces.index_update()
         bm.edges.index_update()
         face_tags = [{"top"} if f in top else {"side"} for f in bm.faces]
@@ -180,6 +196,66 @@ def fill(name, container, level, clearance=None):
         for mesh in meshes:
             if mesh.users == 0:
                 bpy.data.meshes.remove(mesh)
+
+
+def _invalid_offset(bm, before, triangles):
+    after = [v.co.copy() for v in bm.verts]
+    original = np.asarray(before, dtype=np.float64)
+    points = np.asarray(after, dtype=np.float64)
+    if not np.isfinite(points).all():
+        return True
+
+    # Check real mesh edges, including edges that shrink to a point and then
+    # reopen. A tessellation diagonal may move freely inside a concave face.
+    edges = np.array([[v.index for v in edge.verts] for edge in bm.edges])
+    a, b = edges.T
+    edge = original[b] - original[a]
+    change = points[b] - points[a] - edge
+    length_sq = np.einsum("ij,ij->i", change, change)
+    moving = length_sq > 0
+    t = np.clip(-np.einsum("ij,ij->i", edge[moving], change[moving]) / length_sq[moving], 0, 1)
+    shortest = edge[moving] + t[:, None] * change[moving]
+    if np.any(np.linalg.norm(shortest, axis=1) <= 1e-6 * np.linalg.norm(edge[moving], axis=1)):
+        return True
+
+    indices = np.array([[loop.vert.index for loop in tri] for tri in triangles])
+    faces = np.array([tri[0].face.index for tri in triangles])
+    start = original[indices]
+    end = points[indices]
+    u, v = start[:, 1] - start[:, 0], start[:, 2] - start[:, 0]
+    du, dv = end[:, 1] - end[:, 0] - u, end[:, 2] - end[:, 0] - v
+    normals = np.array([f.normal for f in bm.faces], dtype=np.float64)[faces]
+    # Project each face onto its original normal. Its signed area is quadratic
+    # in the offset fraction, regardless of how its interior is triangulated.
+    coefficients = (np.cross(u, v), np.cross(du, v) + np.cross(u, dv), np.cross(du, dv))
+    constant, linear, quadratic = (
+        np.bincount(faces, np.einsum("ij,ij->i", coeff, normals), minlength=len(bm.faces))
+        for coeff in coefficients
+    )
+    minimum = np.minimum(constant, constant + linear + quadratic)
+    interior = (quadratic > 0) & (linear < 0) & (-linear < 2 * quadratic)
+    t = -0.5 * linear[interior] / quadratic[interior]
+    minimum[interior] = constant[interior] + 0.5 * linear[interior] * t
+    if np.any((constant > 0) & (minimum <= 1e-12 * constant)):
+        return True
+
+    # A fold can also bring separate regions together without reversing any
+    # triangle locally. Ignore adjacency and contacts already present before the move.
+    bm.normal_update()
+    contacts = _crossings(after, bm.calc_loop_triangles())
+    return bool(contacts and contacts - _crossings(before, triangles))
+
+
+def _crossings(points, triangles):
+    indices = [tuple(loop.vert.index for loop in tri) for tri in triangles]
+    corners = [frozenset(tri) for tri in indices]
+    faces = [tri[0].face.index for tri in triangles]
+    tree = BVHTree.FromPolygons(points, indices, all_triangles=True)
+    return {
+        tuple(sorted((faces[a], faces[b])))
+        for a, b in tree.overlap(tree)
+        if a < b and corners[a].isdisjoint(corners[b])
+    }
 
 
 def _not_closed(part):
