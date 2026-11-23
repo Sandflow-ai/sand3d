@@ -60,13 +60,13 @@ def attach(handle, name, *children):
     return detail
 
 
-def export(root, path):
+def export(root, path, trace=None):
     """root and what hangs on it by its joints, in metres: .glb at the current pose, joints
     in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's
     tree as OpenUSD text, with the materials; .ifc the part tree as IFC4, the open standard
     Revit opens and links (.rvt only Revit writes); .obj and .stl its meshes at the current pose.
-    Export writes only meshes in the root's tree. To include curves or text, convert them
-    to meshes and include them in that tree, or use Blender's own exporters.
+    Meshes only: curves, text objects and anything else a program adds with raw bpy are
+    left out; convert them to meshes first, or use Blender's own exporters.
 
     The program's unit to metres, then one file, its extension the format: a GLB — with
     the materials the program set, if it set any; nested by the joints, each in its
@@ -77,10 +77,26 @@ def export(root, path):
     tree as an IfcProject of assemblies and proxies, every mesh a triangulated face set at
     the current pose, with materials but no joints; GlobalIds are not stable across edits or
     unique across models — or the meshes alone, as OBJ (Y up) or binary STL (Z up), at the current pose.
-    Limits only: masses, frictions, efforts and drives are dynamics, which sand3d does not say."""
-    from . import ifcfile, meshfile, urdf, usd
-    from .assembly import Handle
+    Limits only: masses, frictions, efforts and drives are dynamics, which sand3d does not say.
+
+    `trace=True` or `SAND3D_TRACE=1` (`<stem>.trace.json` beside it), or a path: also a JSON of
+    what was built, in the world in metres: boxes (with the parts under them), volumes, names,
+    joints, materials, nested as the GLB nests them."""
     root = root.root if isinstance(root, Handle) else root
+    if trace is None:
+        trace = os.environ.get("SAND3D_TRACE") == "1"
+    if trace and not isinstance(trace, (str, os.PathLike)):
+        trace = os.path.splitext(str(path))[0] + ".trace.json"
+    if trace and os.path.exists(trace):
+        os.remove(trace)                    # no stale trace beside a failed export
+    _export(root, path)
+    if trace:
+        from . import trace as tracefile
+        tracefile.write(root, trace)
+
+
+def _export(root, path):
+    from . import ifcfile, meshfile, urdf, usd
     suffix = os.path.splitext(str(path))[1].lower()
     if suffix in (".usd", ".usdc", ".usdz"):
         tool = "usdzip" if suffix == ".usdz" else f"usdcat x.usda -o x{suffix}"
