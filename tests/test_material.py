@@ -1,5 +1,6 @@
 """material: a named preset, its values changed where given, inherited down a group."""
 import json
+import re
 import struct
 import tempfile
 import unittest
@@ -200,6 +201,29 @@ class Export(unittest.TestCase):
         self.assertAlmostEqual(got["plastic opacity=0.4"]["pbrMetallicRoughness"]["baseColorFactor"][3], 0.4, places=5)
         self.assertEqual(got["glass"]["extensions"]["KHR_materials_transmission"]["transmissionFactor"], 1)
         self.assertEqual(got["light"]["extensions"]["KHR_materials_emissive_strength"]["emissiveStrength"], 12)
+
+    def test_fix44_obj_assigns_each_appearance(self):
+        a = s3d.material(s3d.box("a", 10, 10, 10), "plastic",
+                         color=lambda x, y, z: "#ff0000" if z > 5 else "#0000ff")
+        b = s3d.at(s3d.box("b", 10, 10, 10), x=20)
+        c = s3d.at(s3d.material(s3d.box("c", 10, 10, 10), "plastic", color="#00ff00"), x=40)
+        root = s3d.group("lot", a, b, c)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "lot.obj"
+            s3d.export(root, path)
+            obj, mtl = path.read_text(), path.with_suffix(".mtl").read_text()
+            self.assertIn("mtllib lot.mtl", obj)
+            colors = {name: tuple(map(float, rgb.split())) for name, rgb in
+                      re.findall(r"newmtl (.*)\nKd (.*)", mtl)}
+            assignments = re.findall(r"^o (.*)\nusemtl (.*)", obj, re.M)
+            self.assertEqual([name for name, _ in assignments], ["a", "b", "c"], (obj, mtl))
+            self.assertAlmostEqual(colors[assignments[0][1]][0], 1/6)
+            self.assertAlmostEqual(colors[assignments[0][1]][2], 5/6)
+            self.assertEqual(colors[assignments[1][1]], (.8, .8, .8))
+            self.assertEqual(colors[assignments[2][1]], (0, 1, 0))
+            s3d.export(c, path)
+            self.assertIn("mtllib lot.mtl", path.read_text())
+            self.assertIn("Kd 0 1 0", path.with_suffix(".mtl").read_text())
 
 
 class Mistakes(unittest.TestCase):

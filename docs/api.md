@@ -343,7 +343,7 @@ total extinction as volume attenuation, so a GLB viewer, and Blender after reimp
 as a dark medium. USD Preview Surface carries IOR and coat, transmission as `opacity * (1 -
 transmission)`, no volume or sheen: fully transmitting water, glass, smoke or fog can be invisible.
 IFC carries surface colour, transparency `max(1-opacity, .85*transmission)` and GLASS reflectance. OBJ
-carries vertex colour, URDF colour and opacity, STL nothing.
+carries diffuse colours in a companion MTL, URDF colour and opacity, STL nothing.
 
 ## Colour functions
 
@@ -372,6 +372,7 @@ object's; functions are session-local, not saved in Blender files.
 GLB always exports callable colours on face corners (COLOR_0); `colors="vertex"`, GLB only, also puts
 plain colours on corners and shares white materials, an emissive material keeping its colour (the
 area-weighted mean for a function). OBJ, URDF and USD use the area-weighted linear mean.
+When the OBJ has an MTL, each part gets its own colour or a neutral grey.
 
 Placement, copy, merge, displace, bend, twist, taper, scale, lay and interpolating mesh edits keep the
 construction labels behind `u` and `coords="path"`; a join between parameterized parts transfers them
