@@ -654,7 +654,7 @@ def field(name, size, density, *, cell, level=0, min_component_cells=3):
     if sharp is not None:
         mesh.attributes.remove(sharp)
     for tag in ("field", f"{name}.field"):
-        attr = mesh.attributes.new(_core.FACE_TAG + tag, "BOOLEAN", "FACE")
+        attr = mesh.attributes.new(_core.tag_key(_core.FACE_TAG, tag), "BOOLEAN", "FACE")
         attr.data.foreach_set("value", np.ones(len(faces), dtype=bool))
     co = np.empty(len(verts) * 3, dtype=np.float32)
     mesh.vertices.foreach_get("co", co)

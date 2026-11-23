@@ -23,6 +23,11 @@ class Field(unittest.TestCase):
         s3d.displace(ob, amount=.01, size=3)
         self.assertTrue(closed_volume(ob)[0])
 
+    def test_field_qualifies_long_face_names(self):
+        name = 'long' * 25
+        part = s3d.field(name, (6, 6, 6), lambda x, y, z: x*x + y*y + (z-3)**2 - 4, cell=1)
+        s3d.displace(part, .01, 1, faces=name + '.field', step=0)
+
     def test_cavity_winding(self):
         ob = s3d.field('shell', (24,24,24), lambda x,y,z: abs(math.sqrt(x*x+y*y+(z-12)**2)-8)-2, cell=1.1)
         ob.data.calc_loop_triangles()
