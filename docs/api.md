@@ -8,7 +8,7 @@ plate.top).
    changes the frame, and x, y, z then run along its axes; `transform` moves the whole thing, as a parent
    would, mirror included.
 2. To repeat, pass a list of frames to `on=`: once per frame, in `at`, `hole` and `pocket`.
-3. A list of objects is worth its elements, wherever a verb takes objects.
+3. A list of objects is worth its elements in verbs such as `join`; pass `*parts` to `blend`.
 4. What a verb uses up no longer exists. `copy` keeps it; always use what `at` returns.
 5. Every solid starts at z = 0, centred in x and y: `box` is the `extrude` of its `rect`; `extrude(both=True)`
    centres one on its plane. A face's frame starts where the origin projects onto it: a vertical face's, at
@@ -124,7 +124,7 @@ lay(ob, over, reach=None, *, step=None)  # Seat on a surface along own Z, retain
 ```python
 Frame(origin=(0, 0, 0), normal=(0, 0, 1), up=None)  # A place to build on
 .offset(d) .turn(rx=0, ry=0, rz=0) .move(x=0, y=0, z=0) .point(x=0, y=0, z=0)
-Frames(frames)  # A list of frames that moves, turns, offsets and jitters as one; what distributors return
+Frames(iterable=(), /)  # A list of frames that moves, turns, offsets and jitters as one; what distributors return
 ob.face(which)  # Frame of a named face, or furthest along "+Z"
 ob.edge(which)  # Path along the edges named which, in the space ob is in: the longest run (as long: the one reaching furthest -X, then -Y, -Z), closed if it closes
 bbox(ob, which)  # Frame on its bounding box: a side "+X", an edge "+X-Y", a corner "+X-Y+Z"
@@ -157,7 +157,7 @@ group(name, *children)  # Parent of children
 assembly(name, *children, **anchors)  # Parts and anchors
 attach(handle, name, *children)  # A detail, under a handle
 Handle(root, **anchors)  # Root and anchors
-export(root, path, colors="material")  # root and what hangs on it by its joints, in metres: .glb at the current pose, joints in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's tree as OpenUSD text, with the materials; .ifc the part tree as IFC4 at the current pose, no joints; GlobalIds can change with geometry or placement and may repeat across models; .obj and .stl its meshes at the current pose
+export(root, path, colors="material")  # Metres. GLB, URDF and USDA follow parenting and joints; IFC, OBJ and STL follow parenting only. GLB, IFC, OBJ and STL write the current pose; URDF and USDA write the mechanism at rest.
 empty_scene()  # Fresh scene
 facets(n=None, smooth=...)  # Read count, or set segments per turn (integer >=3 or "auto") at any point; with facets(n): one part, then the previous count
 units(name=None)  # Length unit: "mm" (default), "cm", "m"
@@ -333,9 +333,9 @@ Natural presets are average untextured colours, nonmetallic, alpha 1: `bark` (ou
 
 Water is a volume bounded by a **closed mesh**: model its bottom and sides as well as its top, with
 outward normals. Cycles absorbs along the actual ray length. `thickness` is the constant depth glTF
-raster viewers assume instead: `"auto"` estimates it at export as 2 × volume / area of the meshes that
-wear the material (D/3 for a sphere), one value per material; a length sets it; 0 disables absorption
-in those viewers and omits the glTF volume extension. It creates no geometry.
+raster viewers assume instead. `"auto"` estimates it at export as 2 × volume / area of the meshes that
+wear the material (D/3 for a sphere), one value per material. A positive length sets it; 0 disables
+the medium in Cycles and omits the glTF volume extension.
 
 Export: GLB carries `KHR_materials_volume`, `KHR_materials_ior` and transmission (distances in world
 metres, thickness in mesh units). **glTF has no ratified scattering**: a scattering medium exports its
@@ -343,7 +343,13 @@ total extinction as volume attenuation, so a GLB viewer, and Blender after reimp
 as a dark medium. USD Preview Surface carries IOR and coat, transmission as `opacity * (1 -
 transmission)`, no volume or sheen: fully transmitting water, glass, smoke or fog can be invisible.
 IFC carries surface colour, transparency `max(1-opacity, .85*transmission)` and GLASS reflectance. OBJ
-carries vertex colour, URDF colour and opacity, STL nothing.
+writes a companion MTL with the mean colour of each part that has a colour function. Plain material
+colours are omitted from the MTL. URDF carries colour and opacity. STL carries geometry only.
+
+GLB puts joints in node extras. URDF writes a link per moving part with OBJ meshes beside it. USDA
+writes that tree with materials. IFC writes the part tree as IFC4 without joints; its GlobalIds can
+change with geometry or placement and may repeat across models. OBJ is Y up; binary STL is Z up.
+Convert raw Blender curves and text to meshes before export.
 
 ## Colour functions
 
@@ -363,10 +369,9 @@ every export evaluates anew: functions must be pure. Example:
 `lambda x,y,z: np.stack((x*0+.2, y*0+.4, z*0+.6), axis=-1)`.
 
 The colour is reflectance: do not bake a light direction, highlight or shadow into it through normals;
-use normals for an authored surface property (dust on upward faces). The review renderer lights with
-fixed lights, and emission adds colour without lighting neighbours; Cycles uses real lights and can
-look different. One RGB per face, no UVs or textures: fine colour needs fine faces; prefer colour to
-sub-millimetre displaced veins or grain. `copy` keeps the function, `join` and `merge` the first
+use normals for an authored surface property (dust on upward faces). One RGB per face, no UVs or
+textures: fine colour needs fine faces; prefer colour to sub-millimetre displaced veins or grain.
+`copy` keeps the function, `join` and `merge` the first
 object's; functions are session-local, not saved in Blender files.
 
 GLB always exports callable colours on face corners (COLOR_0); `colors="vertex"`, GLB only, also puts

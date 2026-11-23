@@ -5,14 +5,15 @@
 ## Docs
 
 - [Website](https://sand3d.sandflow.ai/): the quickstart (every verb, with code that runs and its render), an articulated gallery, the API.
-- [API reference](api.md): the rules of the vocabulary, every signature with one line, worked examples; about 3 600 tokens, written to be put in a prompt whole.
+- [API reference](api.md): the rules of the vocabulary, every signature with one line, worked examples; 10 880 tokens (o200k_base), written to be put in a prompt whole.
 - [Writing an assembly](guidelines.md): eight rules for objects of several parts: the plan first, then the details, then the parts.
+- [Task guides](https://github.com/Sandflow-ai/sand3d/blob/main/docs/guides/index.md): water, fire and smoke, trees and grass, terrain and sand, organic forms, surface colour, glass, mesh resolution.
 
 ## Examples
 
 - [A washing machine](https://github.com/Sandflow-ai/sand3d/blob/main/programs/washing_machine.py): an articulated object, four joints, materials.
 - [A tufted chair](https://github.com/Sandflow-ai/sand3d/blob/main/programs/tufted_chair.py): lofts, tufts, rows of nails as details on anchors.
-- [The worked examples](https://github.com/Sandflow-ai/sand3d/blob/main/docs/examples/): a bracket, a lamp, a rack, a chair, a gate.
+- [The worked examples](https://github.com/Sandflow-ai/sand3d/blob/main/docs/examples/): a bracket, a lamp, a rack, a chair, a gate, a curved stem, a pond.
 
 ## Optional
 
