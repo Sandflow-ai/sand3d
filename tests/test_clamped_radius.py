@@ -169,6 +169,18 @@ class LoftSection(unittest.TestCase):
             s3d.loft("spline", s3d.at(p), s3d.at(p, z=10))
         self.assertNotIn("poly", str(caught.exception))
 
+    def test_large_sections_are_checked_for_crossings(self):
+        for step in (1, 2):
+            n = 401
+            angles = [math.tau * step * i / n for i in range(n)]
+            p = s3d.poly([(20 * math.cos(a), 20 * math.sin(a)) for a in angles])
+            start, end = s3d.at(p), s3d.at(p, z=10)
+            if step == 1:
+                self.assertTrue(closed_volume(s3d.loft("simple", start, end))[0])
+            else:
+                with self.assertRaisesRegex(ValueError, r"^loft: section 2 crosses itself near \("):
+                    s3d.loft("crossed", s3d.at(s3d.circle(40)), end)
+
     def test_thin_translated_section_does_not_cross_itself(self):
         pts = [(0, 0), (3, 0), (3, 2), (7, 2), (7, 0), (10, 0),
                (10, 5), (7, 5), (7, 2.00002), (3, 2.00002), (3, 5), (0, 5)]

@@ -13,8 +13,8 @@ import math
 from mathutils import Matrix, Vector, geometry
 
 from . import _core
-from .profile import (EPS, Loop, Path, Placed, Profile, _as_path, _fit, _said, arc, circle, poly, rect,
-                      superellipse)
+from .profile import (EPS, _CROSSING_LIMIT, Loop, Path, Placed, Profile, _as_path, _fit, _large_crossing,
+                      _said, arc, circle, poly, rect, superellipse)
 
 
 # ---------------------------------------------------------------- shared pieces
@@ -858,6 +858,7 @@ def loft(name, *sections, follow=False, loop=False):
             raise TypeError(f"loft: a section is a profile placed with at, not a solid ({_core.given_name(s)!r})")
     placed = [_placed(s) for s in sections]
     shapes = []
+    checked = set()
     for rank, (prof, mat) in enumerate(placed, 1):
         if len(prof.loops) != 1:
             if prof._crossing is not None:
@@ -865,7 +866,14 @@ def loft(name, *sections, follow=False, loop=False):
                                  f"split into {len(prof.loops)} pieces, and a section is one outline: move its points "
                                  f"so that its sides do not cross")
             raise ValueError("loft: each section must be one outline, without holes")
-        shapes.append((prof.loops[0], mat))
+        outline = prof.loops[0]
+        if len(outline.pts) > _CROSSING_LIMIT and outline not in checked:
+            q = _large_crossing(outline.pts)
+            if q is not None:
+                raise ValueError(f"loft: section {rank} crosses itself near {_said(q)} — "
+                                 f"move its points so that its sides do not cross")
+            checked.add(outline)
+        shapes.append((outline, mat))
     shapes, frame, offsets = _loft_local_shapes(shapes)
     rings2d, flags = _correspond(shapes)
     n = len(rings2d[0])

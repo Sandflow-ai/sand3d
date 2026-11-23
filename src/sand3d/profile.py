@@ -16,6 +16,8 @@ from . import _core, _guard
 
 #: Two points closer than this (mm, so `_core.mm(EPS)` in the program's unit) are one point.
 EPS = 1e-6
+# Larger outlines are checked at loft entry, without resolving them into regions.
+_CROSSING_LIMIT = 400
 
 
 # ---------------------------------------------------------------- the two types
@@ -339,6 +341,33 @@ def _crossing(pts):
     return None
 
 
+def _large_crossing(pts):
+    """Find a crossing by testing only segments with overlapping bounding boxes."""
+    n = len(pts)
+    ends = pts[1:] + pts[:1]
+
+    def coverage(axis):
+        coord = [p[axis] for p in pts]
+        span = max(coord) - min(coord)
+        return sum(abs(a[axis] - b[axis]) for a, b in zip(pts, ends)) / span if span else math.inf
+
+    x = min((0, 1), key=coverage)
+    y = 1 - x
+    boxes = sorted((min(a[x], b[x]), max(a[x], b[x]), min(a[y], b[y]), max(a[y], b[y]), i)
+                   for i, (a, b) in enumerate(zip(pts, ends)))
+    active = []
+    for left, right, bottom, top, i in boxes:
+        active = [box for box in active if box[0] >= left]
+        for _, lo, hi, j in active:
+            if hi < bottom or top < lo or abs(i - j) in (1, n - 1):
+                continue
+            q = _segment_crossing(pts[i], ends[i], pts[j], ends[j])
+            if q is not None:
+                return q
+        active.append((right, bottom, top, i))
+    return None
+
+
 def _single(pts, sharp):
     """A one-loop profile, its crossings resolved if it has any."""
     pts, sharp = _clean(pts, sharp)
@@ -347,7 +376,7 @@ def _single(pts, sharp):
     loop = Loop(pts, sharp)
     if loop.area() < 0:
         loop = loop.reversed()
-    crossing = _crossing(loop.pts) if len(loop.pts) <= 400 else None
+    crossing = _crossing(loop.pts) if len(loop.pts) <= _CROSSING_LIMIT else None
     if crossing is None:
         return Profile([loop])
     profile = _from_region(_region([[loop]], lambda w: w != 0))
