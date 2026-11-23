@@ -250,6 +250,34 @@ class Export(unittest.TestCase):
             with strict(), self.assertRaisesRegex(ValueError, "invalid colour"):
                 s3d.export(ob, path)
 
+    def test_fix44_glb_colours_joint_only_parts(self):
+        a = s3d.box("support", 2, 2, 2)
+        b = s3d.material(s3d.box("battant", 2, 2, 2), "plastic", color=lambda x, y, z: "#ff0000")
+        s3d.joint("pivot", b, s3d.bbox(a, "+X"), range=(0, 90))
+        original = b.data
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "joint.glb"
+            for mode in ("material", "vertex"):
+                with self.subTest(mode=mode):
+                    s3d.export(a, path, colors=mode)
+                    doc = gltf(path)
+                    node = next(n for n in doc["nodes"] if n["name"] == "battant")
+                    attrs = doc["meshes"][node["mesh"]]["primitives"][0]["attributes"]
+                    self.assertIn("COLOR_0", attrs)
+                    self.assertEqual(b.data, original)
+                    self.assertIsNone(b.data.color_attributes.get(materials.COLOR_ATTRIBUTE))
+
+    def test_glb_invalid_joint_colour_warns_and_keeps_preset(self):
+        a = s3d.box("support", 2, 2, 2)
+        b = s3d.material(s3d.box("battant", 2, 2, 2), "plastic", color=lambda x, y, z: "red")
+        s3d.joint("pivot", b, s3d.bbox(a, "+X"), range=(0, 90))
+        with self.assertWarnsRegex(RuntimeWarning, "cannot evaluate colours on 'battant'"):
+            doc, _ = export(a)
+        rgb = doc["materials"][0]["pbrMetallicRoughness"]["baseColorFactor"]
+        self.assertAlmostEqual(rgb[0], materials._linear("#d8d8d8")[0])
+        with strict(), self.assertRaisesRegex(ValueError, "invalid colour"):
+            export(a)
+
 
 class Mistakes(unittest.TestCase):
 

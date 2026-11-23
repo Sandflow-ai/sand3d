@@ -483,7 +483,7 @@ def put_colors(mesh, colors):
 
 
 @contextmanager
-def exporting(root, mode="material"):
+def exporting(root, mode="material", *, members=None):
     """Lend one corner-coloured mesh per source and material.
 
     A surface that gives light keeps its colour in its material, where its emission
@@ -492,7 +492,11 @@ def exporting(root, mode="material"):
     from .meshfile import _meshes
     saved, made = [], {}
     shared = {}
-    parts = _meshes(root)
+    tree = _meshes(root)
+    in_tree = set(tree)
+    # Keep tree order for existing material names. Append parts reached through joints.
+    joint_parts = [ob for ob in members or () if ob.type == "MESH" and ob not in in_tree]
+    parts = tree + joint_parts
     before = set(bpy.data.materials)
     was_dressed = _core.dressed
     try:
@@ -503,7 +507,7 @@ def exporting(root, mode="material"):
                 ob.data = shared[key]
                 saved.append((ob, original, ob.data))
                 continue
-            colors = face_colors(ob)
+            colors = face_colors(ob) if ob in in_tree else _export_face_colors(ob)
             if colors is None and mode == "material":
                 continue
             source = _nearest(ob) or '{"kind":"plastic", "color":"#cccccc"}'

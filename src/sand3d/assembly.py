@@ -88,16 +88,11 @@ def export(root, path, colors="material"):
         raise ValueError('export: colors must be "material" or "vertex"')
     if colors != "material" and os.path.splitext(str(path))[1].lower() != '.glb':
         raise ValueError('export: colors="vertex" requires .glb')
-    actual = root.root if isinstance(root, Handle) else root
-    if os.path.splitext(str(path))[1].lower() == '.glb':
-        materials.resolve()
-        with materials.exporting(actual, colors), materials.volume_export():
-            return _export(root, path)
     materials.resolve()
-    return _export(root, path)
+    return _export(root, path, colors)
 
 
-def _export(root, path):
+def _export(root, path, colors):
     from . import ifcfile, meshfile, urdf, usd
     from .assembly import Handle
     root = root.root if isinstance(root, Handle) else root
@@ -125,12 +120,21 @@ def _export(root, path):
     if suffix == ".usda":
         usd.write_usda(root, path)
         return
+    mech = urdf.Mechanism(root)
+    with materials.exporting(root, colors, members=mech.members), materials.volume_export():
+        return _write_glb(mech, path)
+
+
+def _write_glb(mech, path):
+    from . import urdf
+
+    root = mech.root
     lent = _lend_meshes()
     try:
         name = root.name                                   # the GLB's scene: the exporter names it after coll
         coll = bpy.data.collections.new("s3d~export")      # the exporter writes this, not the whole scene
         bpy.context.scene.collection.children.link(coll)
-        state = urdf.glb_tree(root, coll)
+        state = urdf.glb_tree(mech, coll)
         dressed = materials.dressed()           # asked before the tags come off: it reads them
         tags = {m: m.pop(materials.TAG) for m in bpy.data.materials if materials.TAG in m}   # extras: joints only
         clash = bpy.data.collections.get(name)  # a collection of the program's, lent its name meanwhile
