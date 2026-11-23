@@ -65,6 +65,8 @@ def export(root, path):
     in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's
     tree as OpenUSD text, with the materials; .ifc the part tree as IFC4, the open standard
     Revit opens and links (.rvt only Revit writes); .obj and .stl its meshes at the current pose.
+    Export writes only meshes in the root's tree. To include curves or text, convert them
+    to meshes and include them in that tree, or use Blender's own exporters.
 
     The program's unit to metres, then one file, its extension the format: a GLB — with
     the materials the program set, if it set any; nested by the joints, each in its
