@@ -86,6 +86,15 @@ class Clamped(unittest.TestCase):
         self.assertEqual(mesh(ob), mesh(s3d.wire("fits", pts, 1, fillet=[0, 2, 8, 0])))
         self.assertTrue(closed_volume(ob)[0])
 
+    def test_rotated_profile_with_an_exact_fit_does_not_warn(self):
+        c, s = math.cos(0.1), math.sin(0.1)
+        pts = [(x * c - y * s, x * s + y * c) for x, y in [(0, 0), (10, 0), (10, 100), (0, 100)]]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", ClampedRadius)
+            for enabled in (False, True):
+                with strict(enabled):
+                    self.assertEqual(len(s3d.poly(pts, fillet=5).loops), 1)
+
     def test_a_wire_clamped_tighter_than_its_radius_raises(self):
         with self.assertRaisesRegex(ValueError, r"^wire: fillet too large for the side from \(0.0, 0.0, 650.0\) to "
                                                 r"\(-30.0, 0.0, 650.0\) \(60 > 30\): the largest fillet that fits at "

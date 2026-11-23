@@ -758,7 +758,7 @@ def _corners(pts, sharp, lines, src, amount, kind, said=None):
     if not amount:
         return pts, sharp, lines, src
     m = len(pts)
-    trims = {}
+    trims, mesh_setbacks = {}, {}
     for i in range(m):
         value = amount if isinstance(amount, (int, float)) else (
             amount[src[i]] if src[i] is not None and src[i] < len(amount) else 0)
@@ -768,16 +768,34 @@ def _corners(pts, sharp, lines, src, amount, kind, said=None):
         u = (p - Vector(pts[i - 1])).normalized()
         v = (Vector(pts[(i + 1) % m]) - p).normalized()
         turn = math.acos(max(-1.0, min(1.0, u.dot(v))))
-        if turn < 1e-6:
-            continue
-        trims[i] = (value * math.tan(turn / 2) if kind == "fillet" else value, value, u, v)
+        if kind == "fillet":
+            ax, ay = pts[i - 1]
+            bx, by = pts[i]
+            cx, cy = pts[(i + 1) % m]
+            ux, uy = bx - ax, by - ay
+            vx, vy = cx - bx, cy - by
+            exact_turn = math.atan2(abs(ux * vy - uy * vx), ux * vx + uy * vy)
+            if exact_turn < 1e-6:
+                continue
+            mesh_setbacks[i] = value * math.tan(turn / 2)
+            setback = value * math.tan(exact_turn / 2)
+        else:
+            if turn < 1e-6:
+                continue
+            setback = value
+            mesh_setbacks[i] = value
+        trims[i] = (setback, value, u, v)
     over = []
+    mesh_fits = True
+    tol = _core.mm(1e-9)
     for i in range(m):
         j = (i + 1) % m
         used = trims.get(i, (0,))[0] + trims.get(j, (0,))[0]
         length = math.dist(pts[i], pts[j])
-        if used > length + _core.mm(1e-9):
+        if used > length + tol:
             over.append((i, j, used, length))
+        if mesh_setbacks.get(i, 0) + mesh_setbacks.get(j, 0) > length + tol:
+            mesh_fits = False
     if over:
         i, j, used, length = over[0]
         error = ValueError(f"{kind} too large for the side from {pts[i]} to {pts[j]} ({used:.4g} > {length:.4g})")
@@ -794,6 +812,8 @@ def _corners(pts, sharp, lines, src, amount, kind, said=None):
         for k, fk in factors.items():
             t, value, u, v = trims[k]
             trims[k] = (t * fk, value * fk, u, v)
+    # Preserve the arc coordinates of profiles that already fit in single precision.
+    keep_mesh_setbacks = not over and mesh_fits
     out = ([], [], [], [])
 
     def put(p, s, line, k=None):
@@ -805,6 +825,8 @@ def _corners(pts, sharp, lines, src, amount, kind, said=None):
             put(pts[i], sharp[i], lines[i], src[i])
             continue
         t, value, u, v = trims[i]
+        if keep_mesh_setbacks:
+            t = mesh_setbacks[i]
         p = Vector(pts[i])
         a, b = p - u * t, p + v * t
         if kind == "chamfer":
