@@ -32,6 +32,18 @@ def specimens(n, smooth=False):
 
 
 class NatureFacets(unittest.TestCase):
+    def test_smooth_unwraps_nested_handles(self):
+        s3d.empty_scene()
+        part = s3d.box('part', 2, 2, 2)
+        grouped = s3d.box('grouped', 2, 2, 2)
+        assembled = s3d.box('assembled', 2, 2, 2)
+        group = s3d.group('group', grouped)
+        handle = s3d.assembly('handle', assembled)
+        parts = [part, [group, [handle, part]]]
+        self.assertIs(s3d.smooth(parts, angle=180), parts)
+        for item in (part, grouped, assembled):
+            self.assertTrue(all(face.use_smooth for face in item.data.polygons))
+
     def setUp(self):
         s3d.empty_scene()
 

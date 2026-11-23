@@ -1,6 +1,7 @@
 """Read-only group queries respect nested placements and reject ambiguous faces."""
 import unittest
 import sand3d as s3d
+from sand3d.edit import strict
 
 
 class GroupSurface(unittest.TestCase):
@@ -28,6 +29,21 @@ class GroupSurface(unittest.TestCase):
         self.assertAlmostEqual(hits[0].origin.z, 10, places=4)
         self.assertEqual(s3d.snap(root, [(100,100,30)], direction='-Z'), [])
         self.assertIsNotNone(part.data)
+
+    def test_snap_ignores_meshes_without_faces(self):
+        empty = s3d.tufts('empty', [], 1, 1)
+        points = [(0, 0, 3)]
+        with strict(False), self.assertWarnsRegex(UserWarning, 'snap:.*no faces'):
+            self.assertEqual(s3d.snap(empty, points), [])
+        with strict(True), self.assertRaisesRegex(ValueError, 'snap:.*no faces'):
+            s3d.snap(empty, points)
+        with self.assertWarnsRegex(UserWarning, 'snap:.*no faces'):
+            self.assertEqual(s3d.snap(empty, points, direction='-Z'), [])
+        box = s3d.box('target', 2, 2, 2)
+        for direction in (None, '-Z'):
+            self.assertEqual([tuple(f.origin) for f in s3d.snap([empty, box], points, direction)],
+                             [(0, 0, 2)])
+        self.assertEqual(s3d.snap(empty, []), [])
 
     def test_scatter_nested_group(self):
         root, _ = self.nested()

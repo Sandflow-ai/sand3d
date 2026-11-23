@@ -290,9 +290,10 @@ class Builder:
                   for name in ('.s3d_s', '.s3d_x', '.s3d_y', '.s3d_extent')}
         self.bm.verts.index_update()
         self.parameters = {v.index: u for ring, u in zip(rings, parameters) for v in ring}
+        tangent_eps = mm(1e-10)
         for i, (ring, u, centre, distance) in enumerate(zip(rings, parameters, centres, lengths)):
             tangent = centres[min(i+1,len(centres)-1)] - centres[max(0,i-1)]
-            if tangent.length < 1e-10:
+            if tangent.length < tangent_eps:
                 tangent = Vector((0,0,1))
             tangent.normalize()
             frame = Frame(centre, tangent) if frame is None else _transport(frame, centre, tangent)

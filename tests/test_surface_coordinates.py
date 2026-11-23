@@ -13,6 +13,25 @@ class Surfaces(unittest.TestCase):
     def setUp(self):
         s3d.empty_scene()
 
+    def test_lengthwise_tangent_threshold_is_in_mm(self):
+        def label(unit, k):
+            s3d.empty_scene()
+            s3d.units(unit)
+            builder = _core.Builder('rows')
+            try:
+                centres = [Vector(), Vector((1e-8 * k, 0, 0))]
+                rows = [[builder.vert(centre + Vector((0, 0, k)))] for centre in centres]
+                builder.lengthwise(rows, [0., 1.], centres=centres)
+                y = builder.bm.verts.layers.float['.s3d_y']
+                return [row[0][y] / k for row in rows]
+            finally:
+                builder.bm.free()
+
+        expected = label('mm', 1)
+        self.assertEqual(expected, [1., 1.])
+        for y in label('m', .001):
+            self.assertAlmostEqual(y, expected[0])
+
     def test_missing_merge_coordinates_are_rejected(self):
         a = s3d.cylinder('a',4,12)
         s3d.material(a,'plastic',color=lambda x,y,z,n,u: (u,0,0))

@@ -1,6 +1,7 @@
 """Size variation is local geometry, before placement and anchor lookup."""
 import unittest
 import sand3d as s3d
+from sand3d.edit import strict
 from sand3d.frames import _bounds
 
 class AtScale(unittest.TestCase):
@@ -19,6 +20,27 @@ class AtScale(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'on has 3 frames but scale has 2 values'):
             s3d.at(ob, on=s3d.grid(3), scale=[1, 2])
         self.assertEqual(len(ob.data.vertices), 8)
+
+    def test_invalid_second_prototype_keeps_the_whole_batch(self):
+        import bpy
+
+        part = s3d.box('box', 2, 2, 2)
+        profile = s3d.rect(2, 2)
+        group = s3d.group('group', s3d.box('child', 2, 2, 2))
+        frames = s3d.grid(2, px=10)
+        objects = set(bpy.data.objects)
+        meshes = set(bpy.data.meshes)
+        for invalid, factors, message in [(profile, 2, 'profile is not a solid'),
+                                          (group, [2, (1, 2, 3)], 'scales by one factor')]:
+            with self.subTest(message=message):
+                with strict(True), self.assertRaisesRegex((TypeError, ValueError), message):
+                    s3d.at([part, invalid], on=frames, scale=factors)
+                self.assertEqual(set(bpy.data.objects), objects)
+                self.assertEqual(set(bpy.data.meshes), meshes)
+                with strict(False), self.assertWarnsRegex(UserWarning, message):
+                    self.assertEqual(s3d.at([part, invalid], on=frames, scale=factors), [])
+                self.assertEqual(set(bpy.data.objects), objects)
+                self.assertEqual(set(bpy.data.meshes), meshes)
 
     def test_handle_and_group_rules(self):
         handle = s3d.assembly('plant', s3d.at(s3d.box('leaf', 2, 4, 6), x=5))
@@ -51,6 +73,7 @@ class AtScale(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         code = """
 import sand3d as s3d
+from sand3d.edit import strict
 import sys
 sys.path.insert(0, 'tests')
 from harness import digest

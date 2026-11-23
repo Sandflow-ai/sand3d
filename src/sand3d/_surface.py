@@ -1,11 +1,11 @@
 """Mesh descendants shared by surface edits."""
 def meshes(ob):
     from .assembly import Handle
-    if isinstance(ob, Handle):
-        ob = ob.root
     roots = ob if isinstance(ob, (list, tuple)) else [ob]
     result = []
     for root in roots:
+        if isinstance(root, Handle):
+            root = root.root
         if isinstance(root, (list, tuple)):
             parts = meshes(root)
         else:

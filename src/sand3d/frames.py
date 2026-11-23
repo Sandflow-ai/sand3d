@@ -582,7 +582,9 @@ def at(ob, x=None, y=None, z=None, rx=None, ry=None, rz=None, on=None, anchor=No
     factor, as scale(). With frame lists, a number or numeric axis tuple applies
     to every copy; other sequences give exactly one value per frame. With one/no
     frame, give one value. Profiles/paths do not take scale. Read geometry frames
-    after scaling; previously read frames and handle anchors do not rescale."""
+    after scaling; previously read frames and handle anchors do not rescale. If
+    placing a list of items on frames fails during preparation, keep the items,
+    warn and return an empty list. Strict mode raises the preparation error."""
     from .assembly import Handle
     given = {k: v for k, v in zip(KEYS, (x, y, z, rx, ry, rz)) if v is not None}
     if isinstance(on, (list, tuple)):
@@ -770,11 +772,11 @@ def _scaled(ob, factor, anchor):
 
 
 def _on_frames(ob, frames, given, anchor, scale=None):
-    """`at(ob, on=[frames])`: `ob` used up, a copy on each frame — placed as `at` with one
-    frame would place it."""
+    """Prepare all placements before using up any of their prototypes."""
     from . import _guard
     from .assembly import Handle
-    from .edit import _children, _copy, _delete_tree
+    from .edit import _children, _copy, _delete_tree, _is_strict, _warn, delete
+    from .joints import refuse_at
     factors = [scale] * len(frames)
     if scale is not None and not isinstance(scale, (int, float)):
         if not (isinstance(scale, tuple) and len(scale) == 3
@@ -785,32 +787,45 @@ def _on_frames(ob, frames, given, anchor, scale=None):
     items = _elements(ob)
     if items is not None:
         _not_nested(items, "at")
-        return [c for i in items for c in _on_frames(i, frames, given, anchor, scale)]
-    if not isinstance(ob, (bpy.types.Object, Handle)):
-        if scale is not None:
-            _scaled(ob, scale, anchor)
-        return [_replaced(ob, f.matrix, given) for f in frames]
-    _anchor_point(Vector(), Vector(), anchor)          # a wrong word raises before anything is made
-    root = ob.root if isinstance(ob, Handle) else ob
-    from .joints import refuse_at
-    refuse_at(root)
-    children = _children() if root.children else {}
-    out = []
+    out, prepared, originals = [], [], {}
     try:
-        for f, factor in zip(frames, factors):
-            twin = _copy(ob, children)
-            out.append(twin)
-            placed_anchor = _scaled(twin, factor, anchor) if scale is not None else anchor
-            _posed(twin.root if isinstance(twin, Handle) else twin, f.matrix, given, placed_anchor)
-    except Exception:
-        for twin in out:
-            _delete_tree(twin.root if isinstance(twin, Handle) else twin)
+        for item in [ob] if items is None else items:
+            if not isinstance(item, (bpy.types.Object, Handle)):
+                if scale is not None:
+                    _scaled(item, scale, anchor)
+                out.extend(_replaced(item, f.matrix, given) for f in frames)
+                continue
+            _anchor_point(Vector(), Vector(), anchor)
+            root = item.root if isinstance(item, Handle) else item
+            if root in originals:
+                raise ValueError(f"at: {_core.given_name(root)!r} is passed more than once")
+            refuse_at(root)
+            children = _children() if root.children else {}
+            originals[root] = children
+            for f, factor in zip(frames, factors):
+                tree = {}
+                try:
+                    twin = _copy(item, children, seen=tree)
+                finally:
+                    prepared.extend(tree.values())
+                placed = twin.root if isinstance(twin, Handle) else twin
+                out.append(twin)
+                placed_anchor = _scaled(twin, factor, anchor) if scale is not None else anchor
+                _posed(placed, f.matrix, given, placed_anchor)
+    except Exception as error:
+        data = {part.data for part in prepared if part.type != "MESH" and part.data is not None}
+        delete(list(reversed(prepared)))
+        bpy.data.batch_remove([block for block in data if block.users == 0])
+        if items is not None and isinstance(error, (TypeError, ValueError)) and not _is_strict():
+            _warn(f"at: no copies placed: {error}", UserWarning)
+            return []
         raise
-    tree = [root]
-    for o in tree:
-        tree += children.get(o, [])
-    _guard.using_up(tree, root)
-    _delete_tree(root)
+    for root, children in originals.items():
+        tree = [root]
+        for o in tree:
+            tree += children.get(o, [])
+        _guard.using_up(tree, root)
+        _delete_tree(root)
     return out
 
 
@@ -1101,21 +1116,31 @@ def snap(targets, points, direction=None):
     Frames on the surface of `targets` (one object or several), one per point or
     frame of `points`: at the nearest spot, or where a line from it running along
     `direction` ("-Z", "+X"… or (x, y, z)) first meets the surface; each frame's normal
-    points out of it. Points a line misses are dropped."""
+    points out of it. Points a line misses are dropped. Meshes without faces
+    are skipped; if none has faces, warn and return no frames."""
+    from .edit import _is_strict, _warn
     ray = None if direction is None else _ray(direction)
     size = _core.in_mm(1.0)   # Blender's BVH pads its boxes in its own units, which breaks ties: search in mm
-    trees = [_core.mm_tree(ob, matrix) for ob, matrix in _surface_parts(targets, "snap")]
+    trees = [_core.mm_tree(ob, matrix) for ob, matrix in _surface_parts(targets, "snap") if ob.data.polygons]
+    message = ("snap: could not find a surface point on the target meshes" if trees
+               else "snap: target meshes have no faces")
+    warned = False
     out = []
     for p in points:
         p = Vector(p.origin if isinstance(p, Frame) else p) * size
-        if direction is None:
-            found = [t.find_nearest(p) for t in trees]
-            loc, normal, _, _ = min((f for f in found if f[0] is not None), key=lambda f: f[3])
+        if ray is None:
+            hits = (t.find_nearest(p) for t in trees)
         else:
-            found = [f for f in (t.ray_cast(p, ray) for t in trees) if f[0] is not None]
-            if not found:
-                continue
-            loc, normal, _, _ = min(found, key=lambda f: f[3])
+            hits = (t.ray_cast(p, ray) for t in trees)
+        found = [hit for hit in hits if hit[0] is not None]
+        if not found:
+            if ray is None and _is_strict():
+                raise ValueError(message)
+            if (ray is None or not trees) and not warned:
+                _warn(message, UserWarning)
+                warned = True
+            continue
+        loc, normal, _, _ = min(found, key=lambda f: f[3])
         out.append(Frame(loc / size, normal))
     return Frames(out)
 
