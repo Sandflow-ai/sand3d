@@ -100,8 +100,9 @@ snap(targets, points, direction=None)  # On a surface
 gear(name, teeth, module, width, bore=0, angle=20)  # Involute spur gear
 knurl(name, d, h, pitch=None, straight=False)  # Knurled grip; pitch 1 mm by default
 thread(name, d, length, pitch, left=False)  # Threaded rod
-# materials
+# materials, lights
 material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, emission=None)  # Kind: oak walnut pine birch steel brushed_steel chrome aluminium brass copper painted_metal plastic glossy_plastic rubber glass ceramic fabric velvet leather marble concrete light; color "#rrggbb"
+light(name, kind='point', lm=None, lux=None, color='#ffffff', angle=None, blend=None, shadow=True, size=None)  # Kind: point spot sun ambient; lm lumens (point, spot; 800), lux (sun 100 000, ambient 10 000); spot angle: full opening in degrees, at least 1 and under 180 (default 45); shines along its own -Z
 # articulation
 joint(name, child, on, kind='revolute', axis='normal', range=None, follows=None, ratio=1)  # How child moves on the part on was read on: revolute (range in degrees), continuous (no range), prismatic (range in the unit), free (no axis, no range); follows: a child or a joint name, and this joint's value is ratio × its (degrees per unit, or units per degree), no range; returns child
 pose(ob, value, joint=None)  # Move the mechanism: that joint to value (degrees or the unit), an error outside its range; what it carries follows; joint= when child has two
@@ -111,7 +112,7 @@ group(name, *children)  # Parent of children
 assembly(name, *children, **anchors)  # Parts and anchors
 attach(handle, name, *children)  # A detail, under a handle
 Handle(root, **anchors)  # Root and anchors
-export(root, path, trace=None)  # root and what hangs on it by its joints, in metres: .glb at the current pose, joints in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's tree as OpenUSD text, with the materials; .ifc the part tree as IFC4 at the current pose, no joints; GlobalIds can change with geometry or placement and may repeat across models; .obj and .stl its meshes at the current pose; trace=True or SAND3D_TRACE=1 (<stem>.trace.json beside it), or a path: also a JSON of what was built, in the world, nested as the GLB Meshes only: curves, text objects and anything else added with raw bpy are left out; convert them to meshes first, or use Blender's own exporters.
+export(root, path, trace=None)  # root and what hangs on it by its joints, in metres: .glb at the current pose, joints in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's tree as OpenUSD text, with the materials; .ifc the part tree as IFC4 at the current pose, no joints; GlobalIds can change with geometry or placement and may repeat across models; .obj and .stl its meshes at the current pose; trace=True or SAND3D_TRACE=1 (<stem>.trace.json beside it), or a path: also a JSON of what was built, in the world, nested as the GLB. Export writes meshes and sand3d lights where the format supports them. Curves, text objects and anything else added with raw bpy are left out. Convert them to meshes first, or use Blender's own exporters.
 empty_scene()  # Fresh scene
 units(name=None)  # Length unit: "mm" (default), "cm", "m"
 facets(n=None)  # Segments of a full circle, before the first verb: a whole number from 3 (8: low poly), or "auto" (default, by size)

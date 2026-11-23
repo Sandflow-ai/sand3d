@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from unittest import mock
 
@@ -61,6 +62,22 @@ class Trace(unittest.TestCase):
         self.assertEqual(t["faces"], {"bottom": 0.006, "side": 0.0032, "top": 0.006}, "box.top is top: once")
         self.assertEqual(t["edges"], ["bottom", "side", "top"])
         self.assertAlmostEqual(traced(s3d.cylinder("pin", 3, 10))["volume"], 6.988e-8, delta=1e-10)
+
+    def test_a_lamp_in_every_format(self):
+        lamp = s3d.group("lamp", s3d.box("base", 40, 40, 10), s3d.light("bulb"), s3d.light("spot", "spot"))
+        with tempfile.TemporaryDirectory() as tmp:
+            for suffix in ("glb", "ifc", "obj", "stl", "urdf", "usda"):
+                with self.subTest(suffix=suffix), warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", message="export: .* leaves out .*", category=UserWarning)
+                    path = Path(tmp) / f"lamp.{suffix}"
+                    s3d.export(lamp, path, trace=True)
+                    self.assertGreater(path.stat().st_size, 0)
+                    trace = json.loads(path.with_suffix(".trace.json").read_text(encoding="utf-8"))
+                    self.assertEqual([p["name"] for p in trace["parts"]], ["base", "bulb", "spot"])
+                    self.assertIsNotNone(trace["bbox"])
+                    for light in trace["parts"][1:]:
+                        self.assertIsNone(light["bbox"])
+                        self.assertIsNone(light["volume"])
 
     def test_in_metres_whatever_the_unit(self):
         s3d.units("cm")

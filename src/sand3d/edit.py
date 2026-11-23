@@ -659,10 +659,10 @@ def delete(ob):
     if _guard.removed(ob):
         return
     _guard.deleting(ob)
-    mesh = ob.data if ob.type == "MESH" else None
+    data = ob.data if ob.type in ("MESH", "LIGHT") else None
     bpy.data.objects.remove(ob)
-    if mesh is not None and mesh.users == 0:
-        bpy.data.meshes.remove(mesh)
+    if data is not None and data.users == 0:
+        (bpy.data.meshes if isinstance(data, bpy.types.Mesh) else bpy.data.lights).remove(data)
 
 
 # ---------------------------------------------------------------- holes and pockets

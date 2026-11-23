@@ -583,6 +583,20 @@ def bodies():
                     n=4)
     return [fuselage, s3d.at(hull, x=3000)]
 
+
+@case("light")
+def lit_room():
+    floor = s3d.box("floor", 4000, 3000, 20)
+    shade = s3d.at(s3d.box("shade", 300, 300, 200), z=1800)
+    bulb = s3d.at(s3d.light("bulb", lm=250, color="#ffb76c", size=40), z=1850)
+    lamps = s3d.at(s3d.group("lamp", shade, bulb), on=s3d.grid(2, 1, px=1500))
+    spot = s3d.at(s3d.light("spot", "spot", lm=1200, angle=50, blend=.4, color=(1, .9, .8), shadow=False),
+                  x=300, z=2200, ry=25)
+    sun = s3d.at(s3d.light("sun", "sun", angle=0), rx=40, rz=20)
+    sky = s3d.light("sky", "ambient", lux=8000, color="#cfe0ff")
+    return s3d.assembly("room", floor, lamps, spot, sun, sky)
+
+
 if os.environ.get("SAND3D_HARNESS_SELFTEST"):
     @case()
     def selftest_unseeded():
