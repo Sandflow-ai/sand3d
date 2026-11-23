@@ -1,13 +1,17 @@
 """Persistent construction labels and seating without a skeleton."""
 import unittest
 import math
+import sys
+import warnings
 import bpy
 import bmesh
 from mathutils import Vector
 from sand3d import _core
 import sand3d as s3d
 from sand3d import materials
+from sand3d import edit
 from sand3d._coordinates import face_u, NAMES
+from harness import _object_digest
 
 class Surfaces(unittest.TestCase):
     def setUp(self):
@@ -57,11 +61,63 @@ class Surfaces(unittest.TestCase):
     def test_lay_height_and_reach(self):
         support = s3d.box('support',20,20,5)
         patch = s3d.box('patch',4,4,2)
-        with self.assertRaisesRegex(ValueError,'beyond reach'):
-            s3d.lay(patch,support,reach=1)
+        with edit.strict():
+            with self.assertRaisesRegex(ValueError,'beyond reach'):
+                s3d.lay(patch,support,reach=1)
         s3d.lay(patch,support,step=2)
         self.assertAlmostEqual(min(v.co.z for v in patch.data.vertices),5)
         self.assertAlmostEqual(max(v.co.z for v in patch.data.vertices),7,places=5)
+
+    def test_lay_overhang_warns_and_keeps_nearest_point_geometry(self):
+        carrier = s3d.box("carrier", 50, 50, 10)
+        plate = s3d.at(s3d.box("plate", 100, 20, 2), z=30)
+        with edit.strict(False), warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter("always")
+            line = sys._getframe().f_lineno + 1
+            s3d.lay(plate, carrier, step=10)
+        # Recorded on the original nearest-point fallback, including subdivision.
+        self.assertEqual(_object_digest(plate),
+                         "8467be86280a04ac8806d566af6af088ffa2d088e2db9c21d8e03659c0339e94")
+        self.assertEqual(len(captured), 1)
+        self.assertEqual((captured[0].filename, captured[0].lineno), (__file__, line))
+        self.assertIs(captured[0].category, edit.LayWarning)
+        self.assertRegex(str(captured[0].message), "plate.*miss.*carrier")
+
+    def test_lay_strict_overhang_preserves_mesh(self):
+        carrier = s3d.box("carrier", 10, 10, 2)
+        patch = s3d.at(s3d.box("patch", 2, 2, 2), x=10)
+        with edit.strict(), self.assertRaisesRegex(ValueError, "patch.*miss.*carrier"):
+            s3d.lay(patch, carrier, step=1)
+        self.assertEqual(len(patch.data.vertices), 8)
+
+    def test_lay_reach_failure_is_atomic_for_nested_lists_and_subdivision(self):
+        carrier = s3d.box("carrier", 10, 10, 2)
+        a = s3d.box("A", 2, 2, 2)
+        b = s3d.at(s3d.box("B", 2, 2, 2), z=40)
+        lot = [a, (b,)]
+        a.data.polygons[0].use_smooth = True
+        meshes = a.data, b.data
+        snapshot = [tuple(v.co) for part in (a, b) for v in part.data.vertices]
+        with edit.strict(), self.assertRaisesRegex(ValueError, "B.*beyond reach"):
+            s3d.lay(lot, carrier, reach=3, step=1)
+        self.assertEqual(snapshot, [tuple(v.co) for part in (a, b) for v in part.data.vertices])
+        with edit.strict(False), s3d.facets(6), self.assertWarnsRegex(edit.LayWarning, "B.*beyond reach"):
+            self.assertIs(s3d.lay(lot, carrier, reach=3, step=1), lot)
+        self.assertEqual(snapshot, [tuple(v.co) for part in (a, b) for v in part.data.vertices])
+        self.assertEqual(meshes, (a.data, b.data))
+        self.assertTrue(a.data.polygons[0].use_smooth)
+
+    def test_lay_empty_carrier_warns_and_leaves_patch_unchanged(self):
+        carrier = s3d.tufts("vide", [], 1, 1)
+        patch = s3d.box("patch", 2, 2, 2)
+        with edit.strict(False), self.assertWarnsRegex(edit.LayWarning, "vide.*no faces"):
+            self.assertIs(s3d.lay(patch, carrier, step=1), patch)
+        self.assertEqual(len(patch.data.vertices), 8)
+        with edit.strict(), self.assertRaisesRegex(ValueError, "vide.*no faces"):
+            s3d.lay(patch, carrier, step=1)
+        solid = s3d.box("solid", 10, 10, 5)
+        s3d.lay(patch, [carrier, solid])
+        self.assertAlmostEqual(min(v.co.z for v in patch.data.vertices), 5)
 
     def test_flat_tip_retains_end_section(self):
         ob = s3d.loft('flat',s3d.station(0,4,2),s3d.station(10,0,0),tip='flat')
@@ -100,7 +156,7 @@ class Surfaces(unittest.TestCase):
             ball = s3d.at(s3d.sphere('ball', 200), z=-200)
             piece = s3d.at(s3d.extrude('patch', s3d.rect(20,20), 2), z=50)
             before = [tuple(v.co) for v in piece.data.vertices]
-            with self.assertRaisesRegex(ValueError, "patch.*distance.*reach"):
+            with edit.strict(), self.assertRaisesRegex(ValueError, "patch.*distance.*reach"):
                 s3d.lay(piece, ball, reach=10)
             self.assertEqual(before, [tuple(v.co) for v in piece.data.vertices])
             for kwargs in ({'reach':-1}, {'refine':-1}, {'reach':math.nan}, {'refine':True}):

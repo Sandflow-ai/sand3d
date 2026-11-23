@@ -12,6 +12,7 @@ import pathlib
 import sys
 
 from . import _core, _guard
+from . import edit as _edit
 
 from .assembly import Handle, assembly, attach, empty_scene, export, group, units, facets
 from .edit import (bend, blend, chamfer, copy, cut, delete, dent, displace, fillet, hole, intersect, join, merge,
@@ -55,11 +56,12 @@ __all__ = [
 ]
 
 
-def _verb(fn):
+def _verb(fn, implementation=None):
     """`fn`, fixing the program's unit the moment it is called — even if it raises
     before measuring anything: the unit is set before the first verb — and checking what
     the program hands it (`_guard`)."""
     name = fn.__name__
+    implementation = fn if implementation is None else implementation
     positional = fn.__code__.co_varnames[:fn.__code__.co_argcount]
 
     @functools.wraps(fn)
@@ -74,7 +76,12 @@ def _verb(fn):
         _guard.calls.append((name, line, set(positional[:len(args)]) | set(kwargs)))
         try:
             _guard.begin(name, args, kwargs)
-            result = fn(*args, **kwargs)
+            result = implementation(*args, **kwargs)
+        except _edit._LayFailure as error:
+            # As with an exception, leave the scene untouched, including its
+            # material and shading hooks.
+            _edit._warn_lay(error)
+            return args[0] if args else kwargs["ob"]
         finally:
             _guard.calls.pop()
         _core.touch(result)
@@ -117,7 +124,7 @@ def _placed(result, on):
 
 for _name in __all__:
     if _name not in ("units", "empty_scene", "fingerprint", "facets") and not isinstance(globals()[_name], type):
-        globals()[_name] = _verb(globals()[_name])
+        globals()[_name] = _verb(globals()[_name], _edit._lay if _name == "lay" else None)
 del _name
 
 

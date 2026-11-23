@@ -473,8 +473,13 @@ noise is refused with path coordinates.
 space the part is in, as `snap` and `scatter(part)` give them. `r` and `depth` stay local lengths.
 
 `lay` moves every point of a placed piece along its own Z onto `over`, keeping its height above the
-piece's Z = 0; a group uses its root frame, a list seats each item. `reach` bounds the travel (None:
-unbounded); on a reach failure nothing moves. Seating a piece on itself is refused.
+piece's Z = 0. A group uses its root frame, and a list seats each item. If a ray misses, seating
+uses the nearest surface point, which can also move the point laterally. `reach` bounds the
+distance from the base plane point to the surface (None is unbounded).
+If any part exceeds it or the carrier has no faces, the whole call leaves the original meshes
+unchanged, including when `step` is set. These cases and missed vertical projections emit
+`sand3d.edit.LayWarning` at the call, or raise in strict mode
+(`SAND3D_STRICT=1` or `sand3d.edit.strict()`). Seating a piece on itself is refused.
 
 ## Filling a container
 

@@ -317,6 +317,7 @@ def strict(on=True):
     NothingCut (on) or warns with MissedCut and leaves the part as it was (off); a corner
     radius too large for its side (`rect(r=)`, `poly(fillet=)`, `wire(fillet=)`) raises
     ValueError (on) or warns with ClampedRadius and is clamped to the largest that fits (off).
+    A missed projection or failed seating in lay raises (on) or gives LayWarning (off).
 
     Outside any block, SAND3D_STRICT in the environment decides: 1, true, yes or on make
     it raise; 0, false, no, off or nothing make it warn, as a boolean that misses does in
@@ -2747,25 +2748,92 @@ def _drop_tessellation_duplicates(bm):
         bpy.data.meshes.remove(probe)
 
 
+class LayWarning(UserWarning):
+    """A missed vertical projection or a seating that could not be applied."""
+
+
+class _LayFailure(ValueError):
+    """Abort the whole seating before writing any mesh."""
+
+
+def _warn_lay(error):
+    if _is_strict():
+        raise error
+    _warn(str(error), LayWarning)
+
+
 def lay(ob, over, reach=None, *, step=None):
     """Seat a placed part on a surface: every point keeps its height above the part's own
     Z = 0 plane, measured from the surface of `over` under it.
 
     A flat piece built on Z = 0 and placed on a frame of the carrier follows the carrier
     after it: its base lies on the skin, what was below stays buried, what was above
-    stands as proud. Points move along the part's own Z only, so nothing folds; a face
+    stands as proud. Hits move points along the part's own Z; a face
     stays flat between its points, so give a long piece points along its length. A group
-    is laid in its own frame.
+    is laid in its own frame. When a ray misses, use the nearest surface point and warn.
+    This fallback can move points laterally.
+
     A positive step subdivides faces before seating until every edge is at most that length;
     0 leaves the topology. reach bounds the travel from the base plane to the surface;
-    None has no limit. Projection and tessellation use the parts' own frames, so a
-    common translation and rotation do not change the result in the piece's frame.
+    None has no limit. A reach failure leaves all the pieces and their topology unchanged.
+    Projection and tessellation use the parts' own frames, so a common translation and
+    rotation do not change the result in the piece's frame.
     """
-    from .assembly import Handle
-    from ._surface import meshes
+    try:
+        return _lay(ob, over, reach, step=step)
+    except _LayFailure as error:
+        _warn_lay(error)
+        return ob
+
+
+def _lay_roots(ob):
     if isinstance(ob, (list, tuple)):
         for item in ob:
-            lay(item, over, reach=reach, step=step)
+            yield from _lay_roots(item)
+    else:
+        yield ob
+
+
+def _lay_refine(bm, matrix, back, step, name):
+    bm.transform(matrix)
+    bmesh.ops.triangulate(bm, faces=list(bm.faces), quad_method='FIXED', ngon_method='EAR_CLIP')
+    while not all(e.calc_length() <= step*(1+1e-6) for e in bm.edges):
+        edges = list(bm.edges)
+        if len(bm.faces)+8*len(edges) > 500000:
+            raise ValueError(f'lay: step on {name!r} would exceed 500000 faces')
+        bmesh.ops.subdivide_edges(bm, edges=edges, cuts=1, use_grid_fill=True)
+        bmesh.ops.triangulate(bm, faces=list(bm.faces), quad_method='FIXED', ngon_method='EAR_CLIP')
+    bm.transform(back)
+    bm.normal_update()
+
+
+@contextlib.contextmanager
+def _lay_carrier_mesh(carrier, inverse, size):
+    # Tessellate in the carrier's frame: a common rotation must not change
+    # the diagonal picked for a nonplanar face.
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(carrier.data)
+        bmesh.ops.triangulate(bm, faces=list(bm.faces), quad_method='FIXED', ngon_method='EAR_CLIP')
+        bm.transform(inverse @ _core.world(carrier))
+        if size != 1:
+            bmesh.ops.scale(bm, vec=(size,)*3, verts=list(bm.verts))
+        yield bm
+    finally:
+        bm.free()
+
+
+def _lay_hit(base, cast, up, size, trees):
+    ray = (base + up * cast) * size
+    hits = [h for h in (t.ray_cast(ray, -up) for t in trees) if h[0] is not None]
+    return min(hits, key=lambda h: h[3])[0] / size if hits else None
+
+
+def _lay(ob, over, reach=None, *, step=None):
+    from .assembly import Handle
+    from ._surface import meshes
+    roots = list(_lay_roots(ob))
+    if not roots:
         return ob
     step = 0 if step is None else _number('lay', 'step', step)
     if step < 0:
@@ -2777,78 +2845,77 @@ def lay(ob, over, reach=None, *, step=None):
     carriers = meshes(over)
     if not carriers:
         raise TypeError("lay: over must contain mesh parts")
-    parts = _deform_parts(ob, "lay")
-    root = ob.root if isinstance(ob, Handle) else ob
-    if any(part in carriers for part, _ in parts):
-        raise ValueError("lay: a part cannot be laid on itself")
-    if step:
-        for part, matrix in parts:
-            bm = bmesh.new()
-            bm.from_mesh(part.data)
-            try:
-                bm.transform(matrix)
-                bmesh.ops.triangulate(bm, faces=list(bm.faces), quad_method='FIXED', ngon_method='EAR_CLIP')
-                while True:
-                    if all(e.calc_length() <= step*(1+1e-6) for e in bm.edges):
-                        break
-                    edges = list(bm.edges)
-                    if len(bm.faces)+8*len(edges) > 500000:
-                        raise ValueError(f'lay: step on {_core.given_name(part)!r} would exceed 500000 faces')
-                    bmesh.ops.subdivide_edges(bm, edges=edges, cuts=1, use_grid_fill=True)
-                    bmesh.ops.triangulate(bm, faces=list(bm.faces), quad_method='FIXED', ngon_method='EAR_CLIP')
-                bm.transform(matrix.inverted())
-                bm.normal_update()
-                _core.own_mesh(part)
-                bm.to_mesh(part.data)
-                part.data.update()
-            finally:
-                bm.free()
+    surfaces = [c for c in carriers if len(c.data.polygons)]
+    carrier_names = ", ".join(repr(_core.given_name(c)) for c in carriers)
+    if not surfaces:
+        raise _LayFailure(f"lay: carrier {carrier_names} has no faces")
     size = _core.in_mm(1.0)
-    place = _core.world(root)
-    inverse = place.inverted()
-    trees = []
-    for carrier in carriers:
-        bm = bmesh.new()
-        bm.from_mesh(carrier.data)
-        # Tessellate in the carrier's frame: BVH tessellation in scene space can
-        # choose another diagonal of a nonplanar face after a common rotation.
-        bmesh.ops.triangulate(bm, faces=list(bm.faces), quad_method='FIXED', ngon_method='EAR_CLIP')
-        bm.transform(inverse @ _core.world(carrier))
-        if size != 1:
-            bmesh.ops.scale(bm, vec=(size,)*3, verts=list(bm.verts))
-        trees.append(BVHTree.FromBMesh(bm))
-        bm.free()
     up = Vector((0, 0, 1))
-    origin = Vector()
-    moved = []
-    for part, matrix in parts:
-        to_scene = matrix
-        points = [to_scene @ v.co for v in part.data.vertices]
-        moved.append((part, to_scene.inverted(), points))
-    every = [p for _, _, points in moved for p in points]
-    if not every:
-        return ob
-    carrier_points = [inverse @ _core.world(c) @ v.co for c in carriers for v in c.data.vertices]
-    cast = max((p - origin).length for p in every + carrier_points) + _core.mm(1e-3)
-    seated = []
-    for part, back, points in moved:
-        positions = []
-        for v, p in zip(part.data.vertices, points):
-            height = (p - origin).dot(up)
-            base = p - up * height
-            hits = [h for h in (t.ray_cast((base + up * cast) * size, -up) for t in trees) if h[0] is not None]
-            if not hits:
-                hits = [h for h in (t.find_nearest(base * size) for t in trees) if h[0] is not None]
-            spot = min(hits, key=lambda h: h[3])[0] / size
-            distance = (spot-base).length
-            if reach is not None and distance > reach + _core.mm(1e-6):
-                raise ValueError(f'lay: {_core.given_name(part)!r} needs distance {distance:g}, beyond reach {reach:g}')
-            positions.append(back @ (spot + up * height))
-        seated.append((part, positions))
-    for part, positions in seated:
-        _core.own_mesh(part)
-        for v, co in zip(part.data.vertices, positions):
-            v.co = co
-        part.data.update()
-        _core.shade_mesh(part)
+    # Retain each refinement in a detached BMesh. Keep the projected positions
+    # separately, so a successful write follows the same mesh conversion as before.
+    staged = {}
+    with contextlib.ExitStack() as cleanup:
+        for target in roots:
+            parts = _deform_parts(target, "lay")
+            root = target.root if isinstance(target, Handle) else target
+            if any(part in carriers for part, _ in parts):
+                raise ValueError("lay: a part cannot be laid on itself")
+            inverse = _core.world(root).inverted()
+            prepared = []
+            for part, matrix in parts:
+                back = matrix.inverted()
+                bm, coords = staged.get(part, (None, None))
+                if step:
+                    if bm is None:
+                        bm = bmesh.new()
+                        cleanup.callback(bm.free)
+                        bm.from_mesh(part.data)
+                    if coords is not None:
+                        for vert, co in zip(bm.verts, coords):
+                            vert.co = co
+                    _lay_refine(bm, matrix, back, step, _core.given_name(part))
+                    coords = [v.co for v in bm.verts]
+                elif coords is None:
+                    coords = [v.co for v in part.data.vertices]
+                prepared.append((part, bm, back, [matrix @ co for co in coords]))
+            if not any(points for _, _, _, points in prepared):
+                continue
+            carrier_points = [inverse @ _core.world(c) @ v.co for c in carriers for v in c.data.vertices]
+            cast = max(max(p.length for p in carrier_points),
+                       max(p.length for _, _, _, points in prepared for p in points)) + _core.mm(1e-3)
+            trees = []
+            for carrier in surfaces:
+                with _lay_carrier_mesh(carrier, inverse, size) as bm:
+                    trees.append(BVHTree.FromBMesh(bm))
+            for part, bm, back, points in prepared:
+                positions = []
+                misses = 0
+                for p in points:
+                    height = p.dot(up)
+                    base = p - up * height
+                    spot = _lay_hit(base, cast, up, size, trees)
+                    if spot is None:
+                        misses += 1
+                        hits = [h for h in (t.find_nearest(base * size) for t in trees) if h[0] is not None]
+                        if not hits:
+                            raise _LayFailure(f"lay: carrier {carrier_names} has no nearest surface point")
+                        spot = min(hits, key=lambda h: h[3])[0] / size
+                    distance = (spot-base).length
+                    if reach is not None and distance > reach + _core.mm(1e-6):
+                        name = _core.given_name(part)
+                        raise _LayFailure(f'lay: {name!r} needs distance {distance:g}, beyond reach {reach:g}')
+                    positions.append(back @ (spot + up * height))
+                if misses:
+                    name = _core.given_name(part)
+                    _warn_lay(_LayFailure(f"lay: {name!r}: {misses} point(s) miss carrier {carrier_names} "
+                                          "along Z; using nearest surface points"))
+                staged[part] = bm, positions
+        for part, (bm, positions) in staged.items():
+            mesh = _core.own_mesh(part)
+            if bm is not None:
+                bm.to_mesh(mesh)
+            for v, co in zip(mesh.vertices, positions):
+                v.co = co
+            mesh.update()
+            _core.shade_mesh(part)
     return ob
