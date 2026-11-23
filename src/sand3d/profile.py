@@ -309,17 +309,33 @@ def _clean(pts, sharp):
     return out, flags
 
 
+def _segment_crossing(a, b, c, d):
+    """Intersection of nonparallel segments, in the precision of the drawing."""
+    ax, ay = a
+    bx, by = b
+    cx, cy = c
+    dx, dy = d
+    ux, uy = bx - ax, by - ay
+    vx, vy = dx - cx, dy - cy
+    det = ux * vy - uy * vx
+    if not det:
+        return None
+    wx, wy = cx - ax, cy - ay
+    t = (wx * vy - wy * vx) / det
+    if 0 <= t <= 1 and 0 <= (wx * uy - wy * ux) / det <= 1:
+        return ax + t * ux, ay + t * uy
+    return None
+
+
 def _crossing(pts):
     """The first point where a closed polyline crosses itself, or None."""
     n = len(pts)
-    for i in range(n):
-        a, b = Vector(pts[i]), Vector(pts[(i + 1) % n])
-        for j in range(i + 2, n):
-            if i == 0 and j == n - 1:
-                continue
-            q = geometry.intersect_line_line_2d(a, b, Vector(pts[j]), Vector(pts[(j + 1) % n]))
+    for i, a in enumerate(pts):
+        b = pts[(i + 1) % n]
+        for j in range(i + 2, n - (i == 0)):
+            q = _segment_crossing(a, b, pts[j], pts[(j + 1) % n])
             if q is not None:
-                return (q.x, q.y)
+                return q
     return None
 
 

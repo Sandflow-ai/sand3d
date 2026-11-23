@@ -169,6 +169,19 @@ class LoftSection(unittest.TestCase):
             s3d.loft("spline", s3d.at(p), s3d.at(p, z=10))
         self.assertNotIn("poly", str(caught.exception))
 
+    def test_thin_translated_section_does_not_cross_itself(self):
+        pts = [(0, 0), (3, 0), (3, 2), (7, 2), (7, 0), (10, 0),
+               (10, 5), (7, 5), (7, 2.00002), (3, 2.00002), (3, 5), (0, 5)]
+        for dy in (0, 1000):
+            with self.subTest(dy=dy):
+                p = s3d.poly([(x, y + dy) for x, y in pts])
+                self.assertEqual(len(p.loops), 1)
+                for follow in (False, True):
+                    ob = s3d.loft("thin", s3d.at(p), s3d.at(p, z=10), follow=follow)
+                    closed, volume = closed_volume(ob)
+                    self.assertTrue(closed)
+                    self.assertAlmostEqual(volume, 300.0008, places=4)
+
     def test_a_section_with_a_hole_says_so_as_before(self):
         with self.assertRaises(ValueError) as caught:
             s3d.loft("h", s3d.at(s3d.rect(100, 100) - s3d.circle(20)), s3d.at(s3d.rect(100, 100), z=50))

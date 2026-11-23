@@ -813,6 +813,31 @@ def _catmull(values, steps, closed):
     return out if closed else out + [values[-1]]
 
 
+def _loft_local_shapes(shapes):
+    """Recenter the mesh if distinct points in a drawing collapse in a Vector."""
+    for outline in dict.fromkeys(outline for outline, _ in shapes):
+        count = len({tuple(Vector(p)) for p in outline.pts})
+        if count < len(outline.pts) and count < len(set(outline.pts)):
+            break
+    else:
+        return shapes, Matrix.Identity(4), None
+
+    def placed_origin(mat, x, y):
+        return [math.fsum((mat[k][0] * x, mat[k][1] * y, mat[k][3])) for k in range(3)]
+
+    first, mat = shapes[0]
+    origin = placed_origin(mat, *first.pts[0])
+    local, offsets = [], []
+    for loop, mat in shapes:
+        x, y = loop.pts[0]
+        offsets.append(Vector((x, y)))
+        shift = placed_origin(mat, x, y)
+        mat = mat.copy()
+        mat.translation = Vector([a - b for a, b in zip(shift, origin)])
+        local.append((Loop([(a - x, b - y) for a, b in loop.pts], loop.sharp), mat))
+    return local, Matrix.Translation(origin), offsets
+
+
 def loft(name, *sections, follow=False, loop=False):
     """Through placed sections, capped; loop: a ring.
 
@@ -841,10 +866,11 @@ def loft(name, *sections, follow=False, loop=False):
                                  f"so that its sides do not cross")
             raise ValueError("loft: each section must be one outline, without holes")
         shapes.append((prof.loops[0], mat))
+    shapes, frame, offsets = _loft_local_shapes(shapes)
     rings2d, flags = _correspond(shapes)
     n = len(rings2d[0])
     steps = 1 if len(sections) == 2 and not loop else LOFT_STEPS
-    origins = [mat.to_translation() for _, mat in shapes]
+    origins = [mat.to_translation() for _, mat in placed]
     xs = [mat.to_3x3() @ Vector((1, 0, 0)) for _, mat in shapes]
     ys = [mat.to_3x3() @ Vector((0, 1, 0)) for _, mat in shapes]
     dense_o = _catmull(origins, steps, loop)
@@ -852,6 +878,9 @@ def loft(name, *sections, follow=False, loop=False):
         dense_x = _catmull(xs, steps, loop)
         dense_y = _catmull(ys, steps, loop)
         dense_pts = [_catmull([ring[k] for ring in rings2d], steps, loop) for k in range(n)]
+        if offsets is not None:
+            dense_offsets = _catmull(offsets, steps, loop)
+            world_origin = frame.translation
     count = len(dense_o)
     b = _core.Builder(name)
     rings = []
@@ -886,6 +915,9 @@ def loft(name, *sections, follow=False, loop=False):
             z = x.cross(y).normalized()
             x = x.normalized()
             y = z.cross(x)
+        if offsets is not None:
+            shift = dense_offsets[i]
+            o = Vector([math.fsum((o[j], shift.x * x[j], shift.y * y[j], -world_origin[j])) for j in range(3)])
         rings.append([b.vert(o + dense_pts[k][i].x * x + dense_pts[k][i].y * y) for k in range(n)])
     runs = _runs(flags, list(range(n)))
     for i in range(count if loop else count - 1):
@@ -899,7 +931,7 @@ def loft(name, *sections, follow=False, loop=False):
             for t in _cap(ring):
                 caps.append(b.face([rings[k][v] for v in (reversed(t) if flip else t)], -1 - (k > 0), (tag,)))
         b.dissolve(caps)
-    return _object(b, Matrix.Identity(4), "seam")
+    return _object(b, frame, "seam")
 
 
 # ---------------------------------------------------------------- body
