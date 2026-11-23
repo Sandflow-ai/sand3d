@@ -581,7 +581,8 @@ def field(name, size, density, *, cell, level=0, min_component_cells=3):
     balance = np.bincount(inverse, weights=np.where(ee[:, 0] < ee[:, 1], 1, -1))
     if np.any(counts != 2) or np.any(balance != 0):
         raise ValueError("field: singular surface at level; change level or cell")
-    del inverse, counts, balance, ordered
+    corner_edges = inverse.reshape(3, -1).T
+    del inverse, counts, balance, ordered, ee
     # Exact-level lattice points must have one circular incident fan.
     if len(zero_vertices):
         row, corner = np.nonzero(np.isin(faces, zero_vertices))
@@ -634,16 +635,25 @@ def field(name, size, density, *, cell, level=0, min_component_cells=3):
         keep = np.max(high - low, axis=1) >= min_component_cells * cell
         # Always retain the largest component, even for a sub-cell object.
         keep[np.argmax(np.bincount(comp))] = True
-        faces = faces[keep[comp[faces[:, 0]]]]
-    del ee
+        keep_faces = keep[comp[faces[:, 0]]]
+        if not np.all(keep_faces):
+            faces = faces[keep_faces]
+            used_edges, inverse = np.unique(corner_edges[keep_faces], return_inverse=True)
+            edge_keys = edge_keys[used_edges]
+            corner_edges = inverse.reshape(-1, 3)
     used, inv = np.unique(faces, return_inverse=True)
+    edges = np.searchsorted(used, np.column_stack((edge_keys // len(verts), edge_keys % len(verts))))
     verts = verts[used]
     faces = inv.reshape(-1, 3)
     mesh = bpy.data.meshes.new(name)
     mesh.vertices.add(len(verts))
     mesh.vertices.foreach_set("co", verts.astype(np.float32).ravel())
+    # Blender's implicit edge creation orders edges by its thread count.
+    mesh.edges.add(len(edges))
+    mesh.edges.foreach_set("vertices", edges.astype(np.int32).ravel())
     mesh.loops.add(faces.size)
     mesh.loops.foreach_set("vertex_index", faces.astype(np.int32).ravel())
+    mesh.loops.foreach_set("edge_index", corner_edges.astype(np.int32).ravel())
     mesh.polygons.add(len(faces))
     mesh.polygons.foreach_set("loop_start", np.arange(len(faces), dtype=np.int32) * 3)
     mesh.polygons.foreach_set("loop_total", np.full(len(faces), 3, dtype=np.int32))
