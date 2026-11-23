@@ -24,7 +24,7 @@ import xml.etree.ElementTree as ET
 import bpy
 from mathutils import Matrix, Vector
 
-from . import _core, joints as J, materials
+from . import _core, joints as J, lights, materials
 
 #: URDF's word for each kind.
 TYPES = {"revolute": "revolute", "continuous": "continuous", "prismatic": "prismatic", "free": "floating"}
@@ -129,6 +129,10 @@ class Mechanism:
     def meshes(self, b):
         """The mesh objects of body `b` (None: the root's), in a fixed order."""
         return _order(ob for ob in self.members if ob.type == "MESH" and self.body(ob) == b)
+
+    def lights(self, b=...):
+        """The lights of body `b` (None: the root's; every body's when not given), in a fixed order."""
+        return _order(ob for ob in lights.lights(self.members) if b is ... or self.body(ob) == b)
 
     def check(self):
         top = _core.given_name(self.root)
@@ -387,9 +391,10 @@ def glb_tree(root, coll):
         mech = Mechanism(root)
         mech.check()
         renamed += [(ob, ob.name) for ob in mech.members]
+        renamed += [(ob.data, ob.data.name) for ob in mech.lights()]   # a light is named after its data
         for i, (ob, _) in enumerate(renamed):
             ob.name = f"s3d~export~{i}"
-        _twins(mech, renamed, coll)
+        _twins(mech, [(ob, name) for ob, name in renamed if isinstance(ob, bpy.types.Object)], coll)
     except BaseException:
         undo((renamed, list(coll.objects)), coll)
         raise
@@ -399,8 +404,16 @@ def glb_tree(root, coll):
 def _twins(mech, renamed, coll):
     root, k = mech.root, mech.k
     made = {}
+    sky = {ob.as_pointer() for ob in lights.lights(o for o, _ in renamed) if lights.kind(ob) == "ambient"
+           and ob is not root}
     for ob, name in renamed:
-        twin = bpy.data.objects.new(name, ob.data if ob.type == "MESH" else None)
+        if ob.as_pointer() in sky:
+            continue                                     # glTF has no word for the sky: `export` says so
+        lit = lights.is_light(ob) and lights.kind(ob) != "ambient"
+        carried = ob.type == "MESH" or lit
+        twin = bpy.data.objects.new(name, ob.data if carried else None)
+        if lit:
+            ob.data.name = name                          # its node's: KHR_lights_punctual names it after its data
         coll.objects.link(twin)
         made[ob.as_pointer()] = twin
     world = {ob.as_pointer(): _core.world(ob) for ob, _ in renamed}
@@ -414,7 +427,7 @@ def _twins(mech, renamed, coll):
     top.matrix_basis = Matrix.Scale(_metres(), 4) @ world[root.as_pointer()]   # the whole placement: offset, mirror
     jointed = {c.as_pointer() for c in mech.bodies}
     for ob, _ in renamed:
-        if ob is root:
+        if ob is root or ob.as_pointer() in sky:
             continue
         twin = made[ob.as_pointer()]
         if ob.as_pointer() in jointed:
@@ -452,5 +465,7 @@ def undo(state, coll):
     for t in temps:
         bpy.data.objects.remove(t)
     bpy.data.collections.remove(coll)
+    for i, (ob, _) in enumerate(renamed):                # a light's data holds a name another may take back
+        ob.name = f"s3d~export~{i}"
     for ob, name in renamed:
         ob.name = name

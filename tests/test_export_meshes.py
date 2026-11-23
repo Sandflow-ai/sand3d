@@ -91,6 +91,16 @@ class ExportMeshes(unittest.TestCase):
             self.assertAlmostEqual(max(c[axis] for c in corners), max(p[axis] for p in world) / 1000, places=6)
         self.assertGreater(volume([(r[3:6], r[6:9], r[9:12]) for r in rows]), 0)
 
+    def test_stl_header_does_not_start_with_solid(self):
+        s3d.empty_scene()
+        root = s3d.box("solid block", 10, 10, 10)
+        path = self.tmp / "block.stl"
+        s3d.export(root, path)
+        self.assertNotEqual(path.read_bytes()[:5].lower(), b"solid")
+        rows, size = read_stl(path)
+        self.assertEqual(len(rows), triangles(root))
+        self.assertEqual(size, 84 + 50 * len(rows))
+
     def test_the_unit_becomes_metres(self):
         s3d.empty_scene()
         s3d.units("cm")

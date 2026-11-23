@@ -4,6 +4,7 @@ Each case builds in an empty scene and may return a non-geometric value
 (points, frames, a digest), which the harness hashes with the scene.
 """
 import hashlib
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -445,6 +446,20 @@ def export_ifc():
 
 
 @case("export")
+def export_trace():
+    """A drilled box with a lid hinged on its +X face, posed, traced."""
+    box = s3d.box("box", 100, 60, 30)
+    s3d.hole(box, 8, on=box.face("top"), depth=12)
+    lid = s3d.at(s3d.box("lid", 100, 60, 4), z=30)
+    s3d.joint("hinge", lid, box.face("+X").move(z=15), range=(0, 90))
+    s3d.material(lid, "oak")
+    s3d.pose(lid, 30)
+    with tempfile.TemporaryDirectory() as tmp:
+        s3d.export(s3d.group("chest", box, lid), Path(tmp) / "chest.glb", trace=Path(tmp) / "chest.json")
+        return json.loads((Path(tmp) / "chest.json").read_text(encoding="utf-8"))
+
+
+@case("export")
 def export_meshes():
     """A cabinet, a door posed open and its mirror image: the OBJ and the STL at the pose."""
     cab = s3d.box("cab", 600, 600, 850)
@@ -567,6 +582,20 @@ def bodies():
     hull = s3d.body("hull", [(0, 0), (600, 900), (2400, 1000), (3000, 840)], 800, [(0, 800), (600, 120), (3000, 200)],
                     n=4)
     return [fuselage, s3d.at(hull, x=3000)]
+
+
+@case("light")
+def lit_room():
+    floor = s3d.box("floor", 4000, 3000, 20)
+    shade = s3d.at(s3d.box("shade", 300, 300, 200), z=1800)
+    bulb = s3d.at(s3d.light("bulb", lm=250, color="#ffb76c", size=40), z=1850)
+    lamps = s3d.at(s3d.group("lamp", shade, bulb), on=s3d.grid(2, 1, px=1500))
+    spot = s3d.at(s3d.light("spot", "spot", lm=1200, angle=50, blend=.4, color=(1, .9, .8), shadow=False),
+                  x=300, z=2200, ry=25)
+    sun = s3d.at(s3d.light("sun", "sun", angle=0), rx=40, rz=20)
+    sky = s3d.light("sky", "ambient", lux=8000, color="#cfe0ff")
+    return s3d.assembly("room", floor, lamps, spot, sun, sky)
+
 
 if os.environ.get("SAND3D_HARNESS_SELFTEST"):
     @case()
