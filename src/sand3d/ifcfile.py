@@ -118,10 +118,9 @@ def _refs(items):
     return "(" + ",".join(items) + ")"
 
 
-def _srgb(hex_color):
-    """'#rrggbb' as the three numbers of an `IfcColourRGB`: sRGB, the hex over 255, as
-    Revit reads a colour and the URDF writes one."""
-    return [int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+def _srgb(color):
+    """Hex or an sRGB triplet as the three numbers of an IfcColourRGB."""
+    return [int(color[i:i + 2], 16) / 255 for i in (1, 3, 5)] if isinstance(color, str) else color
 
 
 def _kelvin(hex_color):
@@ -278,7 +277,9 @@ def write_ifc(root, path):
         source, for a light fixture — its look on both the geometry (a style) and the product
         (a material), and its reference. `key` is what its id digests, besides its name."""
         name = names.unique("element", _core.given_name(ob))
-        tag = materials._nearest(ob) if ob.type != "LIGHT" else None
+        tag = None
+        if ob.type != "LIGHT":
+            tag = materials.mean_tag(ob, fallback=True) if geometry is not None else materials._nearest(ob)
         shape = "$"
         if kind == "IFCLIGHTFIXTURE":
             shape = step("IFCPRODUCTDEFINITIONSHAPE", "$", "$", _refs([

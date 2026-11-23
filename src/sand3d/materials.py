@@ -18,6 +18,7 @@ import difflib
 import json
 import inspect
 import math
+from collections import Counter
 from contextlib import contextmanager
 
 import bpy
@@ -97,7 +98,8 @@ def material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, 
     units), following Beer-Lambert attenuation. Zero distance disables absorption.
     thickness is the constant depth glTF viewers assume: "auto" (the default) estimates
     it at export from the meshes that wear the material, 2 x volume / area; a length
-    sets it. Cycles uses the closed mesh's actual depth. ior is 1..1000, transmission 0..1.
+    sets it, and zero omits glTF volume. Cycles uses the closed mesh's actual depth.
+    ior is 1..1000, transmission 0..1.
     None inherits the preset. Water absorbs over one metre with IOR 1.333.
 
     scatter is the sRGB colour the medium inside the closed mesh sends light back in:
@@ -242,7 +244,7 @@ def _material(tag, made):
                           ("Emission Color", rgba), ("Emission Strength", v["emission"])):
         bsdf.inputs[socket].default_value = value
     medium = v["absorb_distance"] > 0 or v["scatter_distance"] > 0
-    if medium and (v["thickness"] == "auto" or v["thickness"] > 0):
+    if medium:
         node = mat.node_tree.nodes.new("ShaderNodeVolumeAbsorption")
         node.name = "Absorption"
         # Cycles uses sigma = (1 - colour) * density, not -log(colour)/distance.
@@ -280,6 +282,7 @@ def _material(tag, made):
             clear.inputs["Color"].default_value = (*(v["opacity"] * c + 1 - v["opacity"] for c in rgba[:3]), 1)
             mat.node_tree.links.new(clear.outputs["BSDF"], output.inputs["Surface"])
             mat.node_tree.links.new(volume, output.inputs["Volume"])
+    if medium and v["thickness"] != 0:
         group = bpy.data.node_groups.get("glTF Material Output")
         if group is None:
             group = bpy.data.node_groups.new("glTF Material Output", "ShaderNodeTree")
@@ -441,11 +444,23 @@ def face_colors(ob):
     return result
 
 
-def mean_tag(ob, colors=None):
+def _export_face_colors(ob):
+    """Keep the preset where a format newly evaluates a function it used to ignore."""
+    try:
+        return face_colors(ob)
+    except Exception as exc:
+        from .edit import _is_strict, _warn
+        if _is_strict():
+            raise
+        _warn(f"export: cannot evaluate colours on {_core.given_name(ob)!r}: {exc}", RuntimeWarning)
+        return None
+
+
+def mean_tag(ob, colors=None, *, fallback=False):
     """Area-weighted linear mean, encoded as sRGB for single-colour readers."""
     tag = _nearest(ob)
     if colors is None:
-        colors = face_colors(ob)
+        colors = _export_face_colors(ob) if fallback else face_colors(ob)
     if colors is None:
         return tag
     mesh = ob.data
@@ -474,7 +489,7 @@ def put_colors(mesh, colors):
 
 
 @contextmanager
-def exporting(root, mode="material"):
+def exporting(root, mode="material", *, members=None):
     """Lend one corner-coloured mesh per source and material.
 
     A surface that gives light keeps its colour in its material, where its emission
@@ -483,7 +498,11 @@ def exporting(root, mode="material"):
     from .meshfile import _meshes
     saved, made = [], {}
     shared = {}
-    parts = _meshes(root)
+    tree = _meshes(root)
+    in_tree = set(tree)
+    # Keep tree order for existing material names. Append parts reached through joints.
+    joint_parts = [ob for ob in members or () if ob.type == "MESH" and ob not in in_tree]
+    parts = tree + joint_parts
     before = set(bpy.data.materials)
     was_dressed = _core.dressed
     try:
@@ -494,7 +513,7 @@ def exporting(root, mode="material"):
                 ob.data = shared[key]
                 saved.append((ob, original, ob.data))
                 continue
-            colors = face_colors(ob)
+            colors = face_colors(ob) if ob in in_tree else _export_face_colors(ob)
             if colors is None and mode == "material":
                 continue
             source = _nearest(ob) or '{"kind":"plastic", "color":"#cccccc"}'
@@ -534,7 +553,7 @@ def exporting(root, mode="material"):
 
 
 @contextmanager
-def volume_export():
+def volume_export(parts):
     """Lend glTF's attenuation parameters; restore Cycles even on export failure.
 
     The exporter copies colour and reciprocal density literally. Distance is in
@@ -542,15 +561,21 @@ def volume_export():
     glTF has no scattering: a scattering medium lends its total attenuation,
     absorption plus scattering, over the distance that dims its densest channel to 1/e.
     """
+    meshes = {}
+    for ob in parts:
+        if ob.type == "MESH":
+            for mat in set(ob.data.materials):
+                if mat is not None and TAG in mat and mat.use_nodes:
+                    meshes.setdefault(mat, Counter())[ob.data] += 1
     saved = []
     try:
-        for mat in bpy.data.materials:
-            if TAG not in mat or not mat.use_nodes:
-                continue
+        for mat, instances in meshes.items():
             node = mat.node_tree.nodes.get("Absorption")
             if node is None:
                 continue
             v = look(mat[TAG])
+            if v["thickness"] == 0:
+                continue
             color, density = node.inputs["Color"], node.inputs["Density"]
             saved.append((color, tuple(color.default_value)))
             saved.append((density, density.default_value))
@@ -570,28 +595,26 @@ def volume_export():
                               if n.type == "GROUP" and n.node_tree and n.node_tree.name == "glTF Material Output")
                 socket = output.inputs["Thickness"]
                 saved.append((socket, socket.default_value))
-                socket.default_value = _auto_thickness(mat)
+                socket.default_value = _auto_thickness(instances)
         yield
     finally:
         for socket, value in saved:
             socket.default_value = value
 
 
-def _auto_thickness(mat):
+def _auto_thickness(instances):
     """2 x volume / area of the meshes wearing `mat`, in mesh units: a slab's thickness.
 
-    Summed over every mesh with the material, so one value per material; a mesh
+    Summed over exported instances with the material, so one value per material; a mesh
     without volume (open or empty) contributes nothing. Falls back to one metre."""
     import bmesh
     volume = area = 0.0
-    for me in sorted({ob.data for ob in bpy.data.objects
-                      if ob.type == "MESH" and any(s.material == mat for s in ob.material_slots)},
-                     key=lambda m: m.name):
+    for me, count in sorted(instances.items(), key=lambda pair: pair[0].name):
         bm = bmesh.new()
         bm.from_mesh(me)
         v = abs(bm.calc_volume(signed=False))
         if v > 0:
-            volume += v
-            area += sum(f.calc_area() for f in bm.faces)
+            volume += count * v
+            area += count * sum(f.calc_area() for f in bm.faces)
         bm.free()
     return 2 * volume / area if volume > 0 and area > 0 else _core.mm(1000)

@@ -75,7 +75,7 @@ def export(root, path, trace=None, *, colors="material"):
     own colour (the mean of a colour function's), which its emission reads.
     colors="material" keeps plain colours on materials, as before.
 
-    Function colours use an area-weighted mean in .usda, .urdf and .obj; STL has no colours.
+    Function colours use an area-weighted mean in .usda, .urdf, .ifc and .obj; STL has no colours.
 
     The program's unit to metres, then one file, its extension the format: a GLB — with
     the materials the program set, if it set any; nested by the joints, each in its
@@ -110,17 +110,13 @@ def export(root, path, trace=None, *, colors="material"):
     if trace and os.path.exists(trace):
         os.remove(trace)                    # no stale trace beside a failed export
     materials.resolve()
-    if suffix == ".glb":
-        with materials.exporting(root, colors), materials.volume_export():
-            _export(root, path)
-    else:
-        _export(root, path)
+    _export(root, path, colors)
     if trace:
         from . import trace as tracefile
         tracefile.write(root, trace)
 
 
-def _export(root, path):
+def _export(root, path, colors):
     from . import ifcfile, lights, meshfile, urdf, usd
     suffix = os.path.splitext(str(path))[1].lower()
     if suffix in (".usd", ".usdc", ".usdz"):
@@ -151,14 +147,24 @@ def _export(root, path):
     if suffix == ".usda":
         usd.write_usda(root, path)
         return
-    lights.left_out([ob for ob in urdf.Mechanism(root).lights() if lights.kind(ob) == "ambient"], path,
+    mech = urdf.Mechanism(root)
+    lights.left_out([ob for ob in mech.lights() if lights.kind(ob) == "ambient"], path,
                     "glTF has no ambient light")
+    with materials.exporting(root, colors, members=mech.members):
+        with materials.volume_export(mech.members):
+            return _write_glb(mech, path)
+
+
+def _write_glb(mech, path):
+    from . import lights, urdf
+
+    root = mech.root
     lent = _lend_meshes()
     try:
         name = root.name                                   # the GLB's scene: the exporter names it after coll
         coll = bpy.data.collections.new("s3d~export")      # the exporter writes this, not the whole scene
         bpy.context.scene.collection.children.link(coll)
-        state = urdf.glb_tree(root, coll)
+        state = urdf.glb_tree(mech, coll)
         lit = [ob for ob in coll.objects if ob.type == "LIGHT"]
         dressed = materials.dressed()           # asked before the tags come off: it reads them
         tags = {m: m.pop(materials.TAG) for m in bpy.data.materials if materials.TAG in m}   # extras: joints only

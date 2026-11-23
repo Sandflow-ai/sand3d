@@ -341,9 +341,9 @@ Natural presets are average untextured colours, nonmetallic, alpha 1: `bark` (ou
 
 Water is a volume bounded by a **closed mesh**: model its bottom and sides as well as its top, with
 outward normals. Cycles absorbs along the actual ray length. `thickness` is the constant depth glTF
-raster viewers assume instead: `"auto"` estimates it at export as 2 × volume / area of the meshes that
-wear the material (D/3 for a sphere), one value per material; a length sets it; 0 disables absorption
-in those viewers and omits the glTF volume extension. It creates no geometry.
+raster viewers assume: `"auto"` estimates it at export as 2 × volume / area over the exported mesh
+instances that wear the material (D/3 for a sphere), one value per material. A length sets it.
+Zero omits the glTF volume extension. Cycles still uses the medium. It creates no geometry.
 
 Export: GLB carries `KHR_materials_volume`, `KHR_materials_ior` and transmission (distances in world
 metres, thickness in mesh units). **glTF has no ratified scattering**: a scattering medium exports its
@@ -351,7 +351,7 @@ total extinction as volume attenuation, so a GLB viewer, and Blender after reimp
 as a dark medium. USD Preview Surface carries IOR and coat, transmission as `opacity * (1 -
 transmission)`, no volume or sheen: fully transmitting water, glass, smoke or fog can be invisible.
 IFC carries surface colour, transparency `max(1-opacity, .85*transmission)` and GLASS reflectance. OBJ
-carries vertex colour, URDF colour and opacity, STL nothing.
+carries diffuse colours in a companion MTL, URDF colour and opacity, STL nothing.
 
 ## Colour functions
 
@@ -379,7 +379,8 @@ object's; functions are session-local, not saved in Blender files.
 
 GLB always exports callable colours on face corners (COLOR_0); `colors="vertex"`, GLB only, also puts
 plain colours on corners and shares white materials, an emissive material keeping its colour (the
-area-weighted mean for a function). OBJ, URDF and USD use the area-weighted linear mean.
+area-weighted mean for a function). OBJ, URDF, IFC and USD use the area-weighted linear mean.
+When the OBJ has an MTL, each part gets its own colour or a neutral grey.
 
 Placement, copy, merge, displace, bend, twist, taper, scale, lay and interpolating mesh edits keep the
 construction labels behind `u` and `coords="path"`; a join between parameterized parts transfers them

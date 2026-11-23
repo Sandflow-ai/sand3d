@@ -381,14 +381,13 @@ def write_urdf(root, path):
 
 # ---------------------------------------------------------------- GLB, nested by the joints
 
-def glb_tree(root, coll):
-    """Temporary objects in `coll` that the glTF exporter writes for `root`: its parts at
+def glb_tree(mech, coll):
+    """Temporary objects in `coll` that the glTF exporter writes for the mechanism: its parts at
     their current pose, nested by the joints, a node per joint carrying it in its extras.
     The program's objects are renamed meanwhile, so the nodes keep their names; returns
     what `undo` needs; on an error, undoes what it did before raising it."""
     renamed = []
     try:
-        mech = Mechanism(root)
         mech.check()
         renamed += [(ob, ob.name) for ob in mech.members]
         renamed += [(ob.data, ob.data.name) for ob in mech.lights()]   # a light is named after its data
