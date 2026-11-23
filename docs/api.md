@@ -507,6 +507,7 @@ surfaces it means a target edge `L = π D / n`, invariant under placement: `fiel
 `blend` keeps its voxel closing, then collapses toward `4 area / (√3 L²)` triangles (at least four,
 the original kept if collapse breaks manifoldness); `hull` keeps its points. Use a larger n when thin
 branches or cavities vanish. Fixed counts shade flat unless `smooth=True` (chosen at the first `facets`
-call) or a part has a `smooth` override; `"auto"`, the default, is a 0.05 mm chord tolerance with usual
-shading. `with facets(n):` restores the previous count, even on error. `smooth(ob, angle)` persists
-through edits and copies. Triangle budgets: guide `resolution`.
+call). `"auto"`, the default, is a 0.05 mm chord tolerance with usual shading.
+`with facets(n):` restores the previous count, even on error. A part keeps its construction
+shading through placement, grouping, material changes, copies and mesh edits.
+`smooth(ob, angle)` overrides that choice and persists through edits and copies. Triangle budgets: guide `resolution`.

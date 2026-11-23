@@ -361,7 +361,7 @@ class Builder:
         mesh = bpy.data.meshes.new(name)
         bm.to_mesh(mesh)
         bm.free()
-        ob = link(bpy.data.objects.new(name, mesh))
+        ob = new_mesh_object(name, mesh)
         ob[NAME] = name
         return ob
 
@@ -403,7 +403,7 @@ def new_object(name, bm):
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     bm.free()
-    return link(bpy.data.objects.new(name, mesh))
+    return new_mesh_object(name, mesh)
 
 
 def extent(ob, axis):
@@ -546,34 +546,41 @@ SHADE = "s3d~smooth"
 CREASE = "s3d~crease"
 
 
-def shade_meshes(objects=None):
-    """Enforce program shading after a verb, including rebuilt meshes: flat under a fixed
-    facet count, and by its own angle for a part `smooth` shaded."""
-    all_meshes = objects is None
-    objects = list(bpy.data.objects if all_meshes else objects)
-    own = {ob.data.as_pointer(): ob[SHADE] for ob in objects if ob.type == "MESH" and SHADE in ob}
-    flat = FACETS is not None and not FACET_SMOOTH
-    if not own and not flat:
+#: Object property: a fixed count chose flat faces when the part was built.
+FACET_FLAT = "s3d~facets.flat"
+#: Object property: a merge kept the individual parts' per-face shading.
+MERGED_SHADING = "s3d~merged.shading"
+
+
+def new_mesh_object(name, mesh):
+    """Link newly built geometry and record the flat default on the part."""
+    ob = link(bpy.data.objects.new(name, mesh))
+    if FACETS is not None and not FACET_SMOOTH:
+        ob[FACET_FLAT] = True
+        shade_mesh(ob)
+    return ob
+
+
+def shade_mesh(ob):
+    """Apply the part's shading choice after construction or an edit to its mesh."""
+    if ob.get(MERGED_SHADING):
         return
-    kept = {ob.data.as_pointer() for ob in objects if ob.type == "MESH" and ob.get("s3d~merged.shading")}
-    meshes = bpy.data.meshes if all_meshes else dict.fromkeys(ob.data for ob in objects if ob.type == "MESH")
-    for mesh in meshes:
-        if mesh.as_pointer() in kept:
-            continue
-        angle = own.get(mesh.as_pointer())
-        if angle is not None:
-            mesh.polygons.foreach_set("use_smooth", [angle > 0] * len(mesh.polygons))
-            mesh.set_sharp_from_angle(angle=math.radians(angle))
-            crease = mesh.attributes.get(CREASE)
-            if crease is not None and angle > 0 and len(crease.data) == len(mesh.edges):
-                forced = [False] * len(mesh.edges)
-                crease.data.foreach_get("value", forced)
-                sharp = mesh.attributes.get("sharp_edge") or mesh.attributes.new("sharp_edge", "BOOLEAN", "EDGE")
-                now = [False] * len(mesh.edges)
-                sharp.data.foreach_get("value", now)
-                sharp.data.foreach_set("value", [a or b for a, b in zip(now, forced)])
-        elif flat:
+    mesh = ob.data
+    angle = ob.get(SHADE)
+    if angle is None:
+        if ob.get(FACET_FLAT):
             mesh.polygons.foreach_set("use_smooth", [False] * len(mesh.polygons))
+        return
+    mesh.polygons.foreach_set("use_smooth", [angle > 0] * len(mesh.polygons))
+    mesh.set_sharp_from_angle(angle=math.radians(angle))
+    crease = mesh.attributes.get(CREASE)
+    if crease is not None and angle > 0 and len(crease.data) == len(mesh.edges):
+        forced = [False] * len(mesh.edges)
+        crease.data.foreach_get("value", forced)
+        sharp = mesh.attributes.get("sharp_edge") or mesh.attributes.new("sharp_edge", "BOOLEAN", "EDGE")
+        now = [False] * len(mesh.edges)
+        sharp.data.foreach_get("value", now)
+        sharp.data.foreach_set("value", [a or b for a, b in zip(now, forced)])
 
 
 def turn_steps(paths):

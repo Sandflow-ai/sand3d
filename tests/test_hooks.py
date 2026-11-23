@@ -1,4 +1,4 @@
-"""Per-call hooks process the changed part, independent of scene size."""
+"""Material and shading updates process the changed part, independent of scene size."""
 import unittest
 from unittest.mock import patch
 
@@ -39,15 +39,10 @@ class Hooks(unittest.TestCase):
 
     def test_fixed_shading_work_is_linear(self):
         s3d.facets(8)
-        inspected = []
-        shade = _core.shade_meshes
-        def counted(objects=None):
-            inspected.extend(bpy.data.objects if objects is None else objects)
-            return shade(objects)
-        with patch.object(_core, 'shade_meshes', side_effect=counted):
+        with patch.object(_core, 'shade_mesh', wraps=_core.shade_mesh) as shade:
             for i in range(80):
                 s3d.box(f'part{i}', 1, 1, 1)
-        self.assertEqual(len(inspected), 80)
+        self.assertEqual(shade.call_count, 80)
 
     def test_smooth_survives_rebuild_and_copy(self):
         part = s3d.smooth(s3d.box('part', 4, 4, 4))
@@ -59,7 +54,8 @@ class Hooks(unittest.TestCase):
                      [e.use_edge_sharp for e in ob.data.edges])
                     for ob in bpy.data.objects if ob.type == 'MESH']
         before = state()
-        _core.shade_meshes()
+        _core.shade_mesh(part)
+        _core.shade_mesh(twin)
         self.assertEqual(before, state())
 
     def test_hooks_do_not_traverse_unchanged_scene_collections(self):
@@ -101,6 +97,6 @@ class Hooks(unittest.TestCase):
             s3d.material(child, 'oak')
             deform(root)
             before = state()
-            _core.shade_meshes()
+            _core.shade_mesh(child)
             materials.resolve()
             self.assertTrue(before == state(), "a child deformed through its parent kept stale shading")

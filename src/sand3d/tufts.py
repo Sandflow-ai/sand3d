@@ -99,6 +99,6 @@ def tufts(name, sites, height, width, blades=5, lean=20, direction=None, shape="
     mesh.polygons.foreach_set('loop_start', np.arange(len(faces), dtype=np.int32) * 3)
     mesh.polygons.foreach_set('loop_total', np.full(len(faces), 3, dtype=np.int32))
     mesh.update(calc_edges=True)
-    ob = _core.link(bpy.data.objects.new(name, mesh))
+    ob = _core.new_mesh_object(name, mesh)
     ob[_core.NAME] = name
     return ob

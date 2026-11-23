@@ -283,7 +283,8 @@ def facets(n=None, smooth=_FACET_DEFAULT):
     `facets(8)` builds an octagonal cylinder and a quarter-round fillet in 2, for
     low-poly or faceted assets. A fixed count rules every turn, round a section and along
     a solid alike: a loft, a body or a wire gets about n × a / 360 pieces where it turns
-    by a degrees, and a straight span only its sections. Its faces are flat;
+    by a degrees, and a straight span only its sections. Parts built at a fixed count have
+    flat faces by default and carry their shading through edits and copies.
     Axisless field/blend surfaces and displace refinement use target edge π D / n,
     D the largest local box dimension; hull preserves its explicit points.
     `smooth=True` keeps the usual shading. "auto", the default, sets the count by the
