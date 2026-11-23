@@ -60,12 +60,13 @@ def attach(handle, name, *children):
     return detail
 
 
-def export(root, path):
+def export(root, path, trace=None):
     """root and what hangs on it by its joints, in metres: .glb at the current pose, joints
     in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's
     tree as OpenUSD text, with the materials; .ifc the part tree as IFC4, the open standard
-    Revit opens and links (.rvt only Revit writes); .obj and .stl its meshes at the current pose;
-    the lights where the format has words for them.
+    Revit opens and links (.rvt only Revit writes); .obj and .stl its meshes at the current pose.
+    Meshes only: curves, text objects and anything else a program adds with raw bpy are
+    left out; convert them to meshes first, or use Blender's own exporters.
 
     The program's unit to metres, then one file, its extension the format: a GLB — with
     the materials the program set, if it set any; nested by the joints, each in its
@@ -82,10 +83,26 @@ def export(root, path):
     or a spot in candela and a sun in lux (KHR_lights_punctual), and in each light's extras
     (`s3d_light`) what glTF has no word for, its size and its shadow; the USDA all four, in UsdLux;
     the IFC a point or a spot as an `IfcLightFixture`, in lumens. The URDF, the OBJ and the STL
-    have none. A light a format has no word for is left out, with a warning."""
-    from . import ifcfile, lights, meshfile, urdf, usd
-    from .assembly import Handle
+    have none. A light a format has no word for is left out, with a warning.
+
+    `trace=True` or `SAND3D_TRACE=1` (`<stem>.trace.json` beside it), or a path: also a JSON of
+    what was built, in the world in metres: boxes (with the parts under them), volumes, names,
+    joints, materials, nested as the GLB nests them."""
     root = root.root if isinstance(root, Handle) else root
+    if trace is None:
+        trace = os.environ.get("SAND3D_TRACE") == "1"
+    if trace and not isinstance(trace, (str, os.PathLike)):
+        trace = os.path.splitext(str(path))[0] + ".trace.json"
+    if trace and os.path.exists(trace):
+        os.remove(trace)                    # no stale trace beside a failed export
+    _export(root, path)
+    if trace:
+        from . import trace as tracefile
+        tracefile.write(root, trace)
+
+
+def _export(root, path):
+    from . import ifcfile, lights, meshfile, urdf, usd
     suffix = os.path.splitext(str(path))[1].lower()
     if suffix in (".usd", ".usdc", ".usdz"):
         tool = "usdzip" if suffix == ".usdz" else f"usdcat x.usda -o x{suffix}"

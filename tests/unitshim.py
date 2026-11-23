@@ -115,7 +115,7 @@ LENGTHS = {
     "assembly": {"name": "-", "children": "-", "anchors": "-"},
     "attach": {"handle": "-", "name": "-", "children": "-"},
     "Handle": {"root": "-", "anchors": "-"},
-    "export": {"root": "-", "path": "-"},
+    "export": {"root": "-", "path": "-", "trace": "-"},
     "empty_scene": {},
     "fingerprint": {},
     "units": {"name": "-"},

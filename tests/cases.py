@@ -4,6 +4,7 @@ Each case builds in an empty scene and may return a non-geometric value
 (points, frames, a digest), which the harness hashes with the scene.
 """
 import hashlib
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -442,6 +443,20 @@ def export_ifc():
     with tempfile.TemporaryDirectory() as tmp:
         s3d.export(root, Path(tmp) / "washer.ifc")
         return hashlib.sha256((Path(tmp) / "washer.ifc").read_bytes()).hexdigest()
+
+
+@case("export")
+def export_trace():
+    """A drilled box with a lid hinged on its +X face, posed, traced."""
+    box = s3d.box("box", 100, 60, 30)
+    s3d.hole(box, 8, on=box.face("top"), depth=12)
+    lid = s3d.at(s3d.box("lid", 100, 60, 4), z=30)
+    s3d.joint("hinge", lid, box.face("+X").move(z=15), range=(0, 90))
+    s3d.material(lid, "oak")
+    s3d.pose(lid, 30)
+    with tempfile.TemporaryDirectory() as tmp:
+        s3d.export(s3d.group("chest", box, lid), Path(tmp) / "chest.glb", trace=Path(tmp) / "chest.json")
+        return json.loads((Path(tmp) / "chest.json").read_text(encoding="utf-8"))
 
 
 @case("export")
