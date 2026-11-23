@@ -1,5 +1,6 @@
 """Explicit poles and longitudinal colour bands."""
 import unittest
+import warnings
 import bmesh
 import sand3d as s3d
 
@@ -85,6 +86,48 @@ class Tips(unittest.TestCase):
         ob = s3d.sweep('turn',s3d.ellipse(20,10),[(0,0,0),(0,0,200)],twist=[(0,0),(1,360)])
         self.assertGreaterEqual(len(ob.data.vertices),110)
         valid(self,ob)
+
+    def test_sweep_extra_ring_uses_intermediate_twist(self):
+        path = [(0, 0, 0), (0, 0, 10)]
+        for twist, rings, scale, offset, centre, half_width, half_depth in (
+            (180, 1, 1, 0, 0, 1, 2),
+            (-180, 1, (2, 3), 0, 0, 2, 3),
+            (360, 3, 1, 3, -3, 2, 1),
+        ):
+            with self.subTest(twist=twist, scale=scale):
+                profile = s3d.at(s3d.rect(4, 2), x=offset)
+                ob = s3d.sweep("ribbon", profile, path, twist=twist, scale=scale, rings=rings)
+                middle = [(round(v.co.x, 5), round(v.co.y, 5))
+                          for v in ob.data.vertices if abs(v.co.z - 5) < 1e-5]
+                self.assertCountEqual(middle, [(centre + x, y) for x in (-half_width, half_width)
+                                               for y in (-half_depth, half_depth)])
+                valid(self, ob)
+
+    def test_closed_sweep_extra_rings_follow_twist_across_seam(self):
+        path = s3d.poly([(0, 0), (30, 0), (30, 30), (0, 30)])
+        ob = s3d.sweep("loop", s3d.rect(4, 2), path, twist=180, frenet=True, rings=1)
+        self.assertEqual(len(ob.data.vertices), 32)
+        # On the closing segment the last section unwinds to the first
+        # through 90 degrees. The mitered, interpolated X axis lies in XY.
+        seam = [v.co for v in ob.data.vertices if abs(v.co.y - 15) < 1e-5 and v.co.x < 5]
+        self.assertCountEqual([round(abs(q.z), 5) for q in seam], [2] * 4)
+        valid(self, ob)
+
+    def test_sweep_undersampled_twist_warns_at_call(self):
+        from sand3d.edit import strict
+        from sand3d.solids import UndersampledTwist
+
+        path = [(0, 0, 0), (0, 0, 10)]
+        with strict(False), warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter("always", UndersampledTwist)
+            ob = s3d.sweep("ribbon", s3d.rect(4, 2), path, twist=360, rings=1)
+        self.assertEqual(len(captured), 1)
+        self.assertIs(captured[0].category, UndersampledTwist)
+        self.assertEqual(captured[0].filename, __file__)
+        self.assertEqual(len(ob.data.vertices), 12)
+        valid(self, ob)
+        with strict(), self.assertRaisesRegex(ValueError, "increase rings"):
+            s3d.sweep("ribbon", s3d.rect(4, 2), path, twist=360, rings=1)
 
     def test_auto_sharp_sweep_has_no_cap_rings(self):
         ob=s3d.sweep('cone',s3d.circle(20),[(0,0,0),(0,0,100)],scale=[(0,1),(1,0)],tip='sharp')
