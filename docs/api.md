@@ -480,9 +480,11 @@ walls, not missing faces. Waves on the surface alone, shore fixed:
 `displace(water, 2, 20, noise=waves(100), direction="+Z", faces="top")`.
 
 `clearance=None` overlaps the walls by about 0.04 mm (no coincident transmissive surfaces); an explicit
-clearance is in program units: > 0 a gap, < 0 an overlap, 0 exact contact. It offsets the walls, not
-the level, and is a small allowance: large values self-intersect or collapse thin features. A level
-below the floor, above an open rim or reaching a leak retains nothing and raises `ValueError`; leaking
+clearance is in program units: > 0 a gap, < 0 an overlap, 0 exact contact. The allowance moves the
+walls while keeping the free surface at its level. If the offset check finds a collapse, fold or
+crossing, `fill` returns the zero-clearance solid and emits `sand3d.filling.InvalidFillClearance`.
+In strict mode the invalid offset raises `ValueError`. A level below the floor, above an open rim or
+reaching a leak retains nothing and raises `ValueError`; leaking
 pockets are dropped when others retain material. Static geometry: no flow, meniscus, trapped air or
 spill search; a tilted channel needs closed ends below its plane.
 

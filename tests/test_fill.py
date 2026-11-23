@@ -1,12 +1,15 @@
 """Retained voids, placement, contact and dense boolean operands."""
 
+import inspect
 import unittest
+import warnings
 import bpy
 import bmesh
 import numpy as np
 import sand3d as s3d
 from mathutils import Matrix
 from sand3d import _core
+from sand3d.edit import strict
 
 
 def vessel(name="vessel"):
@@ -57,6 +60,54 @@ class Fill(unittest.TestCase):
         self.assertEqual(len(glass.data.vertices), len(vessel("other").data.vertices))
         gap = s3d.fill("gap", glass, 22, clearance=0.1)
         self.assertLess(volume(gap), volume(exact))
+
+    def test_clearance_collapses_or_inverts_pocket(self):
+        cup = s3d.box("cup", 10, 10, 10)
+        s3d.cut(cup, s3d.at(s3d.box("cavity", 4, 4, 10), z=2))
+        near = s3d.fill("near", cup, 8, clearance=1.9)
+        self.closed(near)
+        self.assertAlmostEqual(volume(near), (4 - 2 * 1.9)**2 * (6 - 1.9), places=5)
+        for clearance in (2, 3, 6, 1e40):
+            with self.subTest(clearance=clearance), warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                line = inspect.currentframe().f_lineno + 1
+                water = s3d.fill("water", cup, 8, clearance=clearance)
+                self.assertEqual(len(caught), 1)
+                self.assertEqual(caught[0].category.__name__, "InvalidFillClearance")
+                self.assertEqual(caught[0].filename, __file__)
+                self.assertEqual(caught[0].lineno, line)
+                self.closed(water)
+                self.assertAlmostEqual(volume(water), 96)
+                self.assertAlmostEqual(water.face("top").origin.z, 8)
+
+        with strict(), self.assertRaisesRegex(ValueError, "clearance"):
+            s3d.fill("water", cup, 8, clearance=3)
+
+    def test_clearance_collapses_a_concave_pockets_neck(self):
+        outline = s3d.poly([
+            (-8, -4), (-3, -4), (-3, -1), (3, -1), (3, -4), (8, -4),
+            (8, 4), (3, 4), (3, 1), (-3, 1), (-3, 4), (-8, 4),
+        ])
+        cup = s3d.box("cup", 20, 12, 10)
+        s3d.cut(cup, s3d.at(s3d.extrude("cavity", outline, 10), z=2))
+        exact = s3d.fill("exact", cup, 8, clearance=0)
+        near = s3d.fill("near", cup, 8, clearance=0.9)
+        self.assertLess(volume(near), volume(exact))
+        for clearance in (1, 1.1):
+            with self.subTest(clearance=clearance), self.assertWarnsRegex(UserWarning, "clearance"):
+                water = s3d.fill("water", cup, 8, clearance=clearance)
+                self.assertAlmostEqual(volume(water), volume(exact))
+
+    def test_clearance_crosses_submerged_obstacle(self):
+        cup = s3d.shell(s3d.box("cup", 30, 30, 30), 2, open="top")
+        stone = s3d.at(s3d.box("stone", 4, 4, 4), x=10, z=5)
+        level = s3d.Frame((0, 0, 20))
+        exact = s3d.fill("exact", [cup, stone], level, clearance=0)
+        for clearance in (0.5, 0.6):
+            with self.subTest(clearance=clearance), self.assertWarnsRegex(UserWarning, "clearance"):
+                water = s3d.fill("water", [cup, stone], level, clearance=clearance)
+                self.closed(water)
+                self.assertAlmostEqual(volume(water), volume(exact))
 
     def test_mug_handle(self):
         mug = vessel()
