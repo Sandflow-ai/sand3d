@@ -7,6 +7,7 @@ import os
 import sys
 import unittest
 import warnings
+from pathlib import Path
 from unittest import mock
 
 import sand3d as s3d
@@ -198,6 +199,20 @@ class LoftSection(unittest.TestCase):
         with self.assertRaises(ValueError) as caught:
             s3d.loft("h", s3d.at(s3d.rect(100, 100) - s3d.circle(20)), s3d.at(s3d.rect(100, 100), z=50))
         self.assertEqual(str(caught.exception), "loft: each section must be one outline, without holes")
+
+
+class Contract(unittest.TestCase):
+    def test_radius_clamping_is_documented(self):
+        root = Path(__file__).resolve().parents[1]
+        for name in ("docs/api.md", "site/api.md", "site/api.html", "site/quickstart.html"):
+            with self.subTest(name=name):
+                doc = (root / name).read_text(encoding="utf-8")
+                self.assertTrue("sand3d.edit.ClampedRadius" in doc)
+                self.assertTrue("SAND3D_STRICT=1" in doc)
+                self.assertTrue("sand3d.edit.strict()" in doc)
+        self.assertIn("clamped", s3d.rect.__doc__)
+        self.assertIn("sand3d.edit.ClampedRadius", s3d.rect.__doc__)
+        self.assertIn("SAND3D_STRICT=1", s3d.rect.__doc__)
 
 
 if __name__ == "__main__":

@@ -406,7 +406,9 @@ def rect(w, d, r=0, chamfer=0):
     """Centred; corners rounded or cut.
 
     A rectangle `w` wide (X) and `d` deep (Y), centred; its corners rounded by
-    `r` or cut by `chamfer`."""
+    `r` or cut by `chamfer`. An oversized radius is clamped to fit the sides
+    and emits `sand3d.edit.ClampedRadius`. Set `SAND3D_STRICT=1` or use
+    `with sand3d.edit.strict():` to raise instead."""
     return _poly([(-w / 2, -d / 2), (w / 2, -d / 2), (w / 2, d / 2), (-w / 2, d / 2)], r, chamfer, ("rect", "r"))
 
 
