@@ -76,8 +76,9 @@ s3d.export(machine, "washer.glb")    # or .urdf, .usda, .ifc, .obj, .stl
 `usdzip`). Revit's own `.rvt` is written by Revit alone — no library writes one — so
 `export` names `.ifc` for it, the open standard (ISO 16739) Revit opens and links.
 
-`export` writes meshes only: curves, text objects and anything else a program adds with
-raw `bpy` are left out. Convert them to meshes first, or use Blender's own exporters.
+`export` writes meshes and sand3d lights where the format supports them. Curves, text
+objects and anything else added with raw `bpy` are left out. Convert them to meshes first,
+or use Blender's own exporters.
 
 IFC exports the current pose, without joints. Its `GlobalId` values depend on geometry
 and placement: editing or moving a part can change its ID, and identical parts in separate

@@ -65,8 +65,9 @@ def export(root, path, trace=None):
     in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's
     tree as OpenUSD text, with the materials; .ifc the part tree as IFC4, the open standard
     Revit opens and links (.rvt only Revit writes); .obj and .stl its meshes at the current pose.
-    Meshes only: curves, text objects and anything else a program adds with raw bpy are
-    left out; convert them to meshes first, or use Blender's own exporters.
+    Export writes meshes and sand3d lights where the format supports them. Curves, text
+    objects and anything else added with raw bpy are left out. Convert them to meshes
+    first, or use Blender's own exporters.
 
     The program's unit to metres, then one file, its extension the format: a GLB — with
     the materials the program set, if it set any; nested by the joints, each in its

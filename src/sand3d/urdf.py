@@ -132,7 +132,7 @@ class Mechanism:
 
     def lights(self, b=...):
         """The lights of body `b` (None: the root's; every body's when not given), in a fixed order."""
-        return _order(ob for ob in self.members if ob.type == "LIGHT" and (b is ... or self.body(ob) == b))
+        return _order(ob for ob in lights.lights(self.members) if b is ... or self.body(ob) == b)
 
     def check(self):
         top = _core.given_name(self.root)
@@ -409,9 +409,10 @@ def _twins(mech, renamed, coll):
     for ob, name in renamed:
         if ob.as_pointer() in sky:
             continue                                     # glTF has no word for the sky: `export` says so
-        carried = ob.type == "MESH" or (ob.type == "LIGHT" and lights.kind(ob) != "ambient")   # a sky root: a node
+        lit = lights.is_light(ob) and lights.kind(ob) != "ambient"
+        carried = ob.type == "MESH" or lit
         twin = bpy.data.objects.new(name, ob.data if carried else None)
-        if ob.type == "LIGHT" and carried:
+        if lit:
             ob.data.name = name                          # its node's: KHR_lights_punctual names it after its data
         coll.objects.link(twin)
         made[ob.as_pointer()] = twin

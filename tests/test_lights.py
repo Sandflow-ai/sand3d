@@ -268,6 +268,21 @@ class Export(unittest.TestCase):
             raw = f.read()
         self.assertNotIn(b"KHR_lights_punctual", raw)
 
+    def test_a_raw_bpy_light_is_left_out_in_every_format(self):
+        light = bpy.data.objects.new("raw", bpy.data.lights.new("raw", "AREA"))
+        bpy.context.scene.collection.objects.link(light)
+        root = s3d.group("fixture", s3d.box("base", 40, 40, 10), light)
+        markers = {"glb": b"KHR_lights_punctual", "ifc": b"IFCLIGHTFIXTURE", "usda": b'Light "'}
+        for suffix in ("glb", "ifc", "obj", "stl", "urdf", "usda"):
+            with self.subTest(suffix=suffix):
+                path, said = self.export(root, f"fixture.{suffix}")
+                self.assertEqual(said, [])
+                with open(path, "rb") as f:
+                    data = f.read()
+                self.assertTrue(data)
+                if suffix in markers:
+                    self.assertNotIn(markers[suffix], data)
+
     def test_a_usda_carries_every_light_in_usdlux_units(self):
         path, said = self.export(room(), "room.usda")
         self.assertEqual(said, [])

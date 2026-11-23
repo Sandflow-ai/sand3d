@@ -146,9 +146,14 @@ def _number(what, value):
     return float(value)
 
 
+def is_light(ob):
+    """Whether this is a light made by sand3d."""
+    return ob.type == "LIGHT" and SAID in ob.data
+
+
 def lights(obs):
-    """The lights among `obs`, in their order."""
-    return [ob for ob in obs if ob.type == "LIGHT"]
+    """The sand3d lights among `obs`, in their order."""
+    return [ob for ob in obs if is_light(ob)]
 
 
 def kind(ob):

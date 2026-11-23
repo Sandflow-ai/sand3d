@@ -278,7 +278,7 @@ def write_ifc(root, path):
         name = names.unique("element", _core.given_name(ob))
         tag = materials._nearest(ob) if ob.type != "LIGHT" else None
         shape = "$"
-        if ob.type == "LIGHT":
+        if kind == "IFCLIGHTFIXTURE":
             shape = step("IFCPRODUCTDEFINITIONSHAPE", "$", "$", _refs([
                 step("IFCSHAPEREPRESENTATION", lighting, _text("Lighting"), _text("LightSource"), _refs([geometry]))]))
         elif geometry is not None:
