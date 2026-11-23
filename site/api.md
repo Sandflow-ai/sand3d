@@ -35,6 +35,12 @@ plate.top).
 
 ## Profiles and outlines
 
+A corner radius too large for its sides (`rect(r=)`, `poly(fillet=)`, `wire(fillet=)`) is
+clamped to the largest that fits and warns with `sand3d.edit.ClampedRadius`;
+`SAND3D_STRICT=1` or `with sand3d.edit.strict():` raises instead. A wire still raises when
+a bend would be tighter than `d / 2`. A loft section whose outline crosses itself says where.
+If the section still has one outline, loft warns and builds it (strict mode raises).
+
 ```python
 rect(w, d, r=0, chamfer=0)  # Centred; corners rounded or cut
 circle(d)  # Centred
@@ -150,6 +156,7 @@ gear(name, teeth, module, width, bore=0, angle=20)  # Involute spur gear
 knurl(name, d, h, pitch=None, straight=False)  # Knurled grip; pitch 1 mm by default
 thread(name, d, length, pitch, left=False)  # Threaded rod
 material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, emission=None, absorb=None, absorb_distance=None, thickness="auto", ior=None, transmission=None, scatter=None, scatter_distance=None, scatter_anisotropy=None)  # Kind: oak walnut pine birch steel brushed_steel chrome aluminium brass copper painted_metal plastic glossy_plastic rubber glass ceramic fabric velvet leather marble concrete bark leaf moss grass rock soil sand water snow foam smoke fog light; color "#rrggbb" or color(x,y,z[,n[,u]])
+light(name, kind='point', lm=None, lux=None, color='#ffffff', angle=None, blend=None, shadow=True, size=None)  # Kind: point spot sun ambient; lm lumens (point, spot; 800), lux (sun 100 000, ambient 10 000); spot angle: full opening in degrees, at least 1 and under 180 (default 45); shines along its own -Z
 joint(name, child, on, kind='revolute', axis='normal', range=None, follows=None, ratio=1)  # How child moves on the part on was read on: revolute (range in degrees), continuous (no range), prismatic (range in the unit), free (no axis, no range); follows: a child or a joint name, and this joint's value is ratio × its (degrees per unit, or units per degree), no range; returns child
 pose(ob, value, joint=None)  # Move the mechanism: that joint to value (degrees or the unit), an error outside its range; what it carries follows; joint= when child has two
 seat(host, part)  # Take out of host the volume part fills, as it sits at rest; part untouched
@@ -157,7 +164,7 @@ group(name, *children)  # Parent of children
 assembly(name, *children, **anchors)  # Parts and anchors
 attach(handle, name, *children)  # A detail, under a handle
 Handle(root, **anchors)  # Root and anchors
-export(root, path, colors="material")  # Metres. GLB, URDF and USDA follow parenting and joints; IFC, OBJ and STL follow parenting only. GLB, IFC, OBJ and STL write the current pose; URDF and USDA write the mechanism at rest.
+export(root, path, trace=None, *, colors="material")  # Metres. GLB, URDF and USDA follow parenting and joints; IFC, OBJ and STL follow parenting only. GLB, IFC, OBJ and STL write the current pose; URDF and USDA write the mechanism at rest.
 empty_scene()  # Fresh scene
 facets(n=None, smooth=...)  # Read count, or set segments per turn (integer >=3 or "auto") at any point; with facets(n): one part, then the previous count
 units(name=None)  # Length unit: "mm" (default), "cm", "m"
@@ -296,7 +303,9 @@ the end interval without overshooting the neighbouring sections.
 
 `tip` (loft, wire, sweep) is "round", "sharp" (the end span linear), "flat" (a zero end takes its
 neighbour's size, capped in the end plane), or a `(start, end)` pair; nonzero ends are always capped.
-`rings` adds that many rings per span; `wire` also takes explicit arc-length fractions strictly inside
+`rings` adds that many rings per span. In a numeric sweep, if a span would turn at least 180°
+between rings, it keeps chord interpolation and emits `sand3d.solids.UndersampledTwist`
+(an error in strict mode). `wire` also takes explicit arc-length fractions strictly inside
 (0, 1). `wire(d=(width, thickness))` is a constant elliptical section; laws describe circular
 diameters.
 
@@ -333,9 +342,9 @@ Natural presets are average untextured colours, nonmetallic, alpha 1: `bark` (ou
 
 Water is a volume bounded by a **closed mesh**: model its bottom and sides as well as its top, with
 outward normals. Cycles absorbs along the actual ray length. `thickness` is the constant depth glTF
-raster viewers assume instead. `"auto"` estimates it at export as 2 × volume / area of the meshes that
-wear the material (D/3 for a sphere), one value per material. A positive length sets it; 0 disables
-the medium in Cycles and omits the glTF volume extension.
+raster viewers assume: `"auto"` estimates it at export as 2 × volume / area over the exported mesh
+instances that wear the material (D/3 for a sphere), one value per material. A length sets it.
+Zero omits the glTF volume extension. Cycles still uses the medium. It creates no geometry.
 
 Export: GLB carries `KHR_materials_volume`, `KHR_materials_ior` and transmission (distances in world
 metres, thickness in mesh units). **glTF has no ratified scattering**: a scattering medium exports its
@@ -343,13 +352,17 @@ total extinction as volume attenuation, so a GLB viewer, and Blender after reimp
 as a dark medium. USD Preview Surface carries IOR and coat, transmission as `opacity * (1 -
 transmission)`, no volume or sheen: fully transmitting water, glass, smoke or fog can be invisible.
 IFC carries surface colour, transparency `max(1-opacity, .85*transmission)` and GLASS reflectance. OBJ
-writes a companion MTL with the mean colour of each part that has a colour function. Plain material
-colours are omitted from the MTL. URDF carries colour and opacity. STL carries geometry only.
+carries diffuse colours in a companion MTL, URDF colour and opacity, STL nothing.
 
 GLB puts joints in node extras. URDF writes a link per moving part with OBJ meshes beside it. USDA
 writes that tree with materials. IFC writes the part tree as IFC4 without joints; its GlobalIds can
 change with geometry or placement and may repeat across models. OBJ is Y up; binary STL is Z up.
 Convert raw Blender curves and text to meshes before export.
+
+Trace: `trace=True` or `SAND3D_TRACE=1` writes `<stem>.trace.json` beside the export. Pass a path
+to name it. The JSON records world-space bounds and volumes, names, materials and joints, nested
+as in the GLB. GLB writes points, spots and suns, USDA all four light kinds, and IFC points and
+spots. OBJ, STL and URDF carry meshes without lights. An unsupported light warns.
 
 ## Colour functions
 
@@ -376,7 +389,8 @@ object's; functions are session-local, not saved in Blender files.
 
 GLB always exports callable colours on face corners (COLOR_0); `colors="vertex"`, GLB only, also puts
 plain colours on corners and shares white materials, an emissive material keeping its colour (the
-area-weighted mean for a function). OBJ, URDF and USD use the area-weighted linear mean.
+area-weighted mean for a function). OBJ, URDF, IFC and USD use the area-weighted linear mean.
+When the OBJ has an MTL, each part gets its own colour or a neutral grey.
 
 Placement, copy, merge, displace, bend, twist, taper, scale, lay and interpolating mesh edits keep the
 construction labels behind `u` and `coords="path"`; a join between parameterized parts transfers them
@@ -460,8 +474,13 @@ noise is refused with path coordinates.
 space the part is in, as `snap` and `scatter(part)` give them. `r` and `depth` stay local lengths.
 
 `lay` moves every point of a placed piece along its own Z onto `over`, keeping its height above the
-piece's Z = 0; a group uses its root frame, a list seats each item. `reach` bounds the travel (None:
-unbounded); on a reach failure nothing moves. Seating a piece on itself is refused.
+piece's Z = 0. A group uses its root frame, and a list seats each item. If a ray misses, seating
+uses the nearest surface point, which can also move the point laterally. `reach` bounds the
+distance from the base plane point to the surface (None is unbounded).
+If any part exceeds it or the carrier has no faces, the whole call leaves the original meshes
+unchanged, including when `step` is set. These cases and missed vertical projections emit
+`sand3d.edit.LayWarning` at the call, or raise in strict mode
+(`SAND3D_STRICT=1` or `sand3d.edit.strict()`). Seating a piece on itself is refused.
 
 ## Filling a container
 
@@ -477,9 +496,11 @@ walls, not missing faces. Waves on the surface alone, shore fixed:
 `displace(water, 2, 20, noise=waves(100), direction="+Z", faces="top")`.
 
 `clearance=None` overlaps the walls by about 0.04 mm (no coincident transmissive surfaces); an explicit
-clearance is in program units: > 0 a gap, < 0 an overlap, 0 exact contact. It offsets the walls, not
-the level, and is a small allowance: large values self-intersect or collapse thin features. A level
-below the floor, above an open rim or reaching a leak retains nothing and raises `ValueError`; leaking
+clearance is in program units: > 0 a gap, < 0 an overlap, 0 exact contact. The allowance moves the
+walls while keeping the free surface at its level. If the offset check finds a collapse, fold or
+crossing, `fill` returns the zero-clearance solid and emits `sand3d.filling.InvalidFillClearance`.
+In strict mode the invalid offset raises `ValueError`. A level below the floor, above an open rim or
+reaching a leak retains nothing and raises `ValueError`; leaking
 pockets are dropped when others retain material. Static geometry: no flow, meniscus, trapped air or
 spill search; a tilted channel needs closed ends below its plane.
 
@@ -504,6 +525,7 @@ surfaces it means a target edge `L = π D / n`, invariant under placement: `fiel
 `blend` keeps its voxel closing, then collapses toward `4 area / (√3 L²)` triangles (at least four,
 the original kept if collapse breaks manifoldness); `hull` keeps its points. Use a larger n when thin
 branches or cavities vanish. Fixed counts shade flat unless `smooth=True` (chosen at the first `facets`
-call) or a part has a `smooth` override; `"auto"`, the default, is a 0.05 mm chord tolerance with usual
-shading. `with facets(n):` restores the previous count, even on error. `smooth(ob, angle)` persists
-through edits and copies. Triangle budgets: guide `resolution`.
+call). `"auto"`, the default, is a 0.05 mm chord tolerance with usual shading.
+`with facets(n):` restores the previous count, even on error. A part keeps its construction
+shading through placement, grouping, material changes, copies and mesh edits.
+`smooth(ob, angle)` overrides that choice and persists through edits and copies. Triangle budgets: guide `resolution`.
