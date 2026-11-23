@@ -2,6 +2,7 @@
 import unittest
 
 import sand3d as s3d
+from sand3d.edit import strict
 
 
 def same(a, b):
@@ -29,6 +30,17 @@ class FrameLists(unittest.TestCase):
                 self.assertTrue(same(make().offset(4), [f.offset(4) for f in make()]))
                 self.assertTrue(same(make().move(y=1).turn(rz=90).offset(2),
                                      [f.move(y=1).turn(rz=90).offset(2) for f in make()]))
+
+    def test_at_list_reuses_names_in_prototype_order(self):
+        a = s3d.box("same.001", 2, 2, 2)
+        b = s3d.box("same", 3, 3, 3)
+        frames = s3d.grid(2, px=10)
+        with strict(False), self.assertWarnsRegex(UserWarning, "no copies placed"):
+            self.assertEqual(s3d.at([a, s3d.rect(2, 2)], on=frames, scale=2), [])
+        self.assertEqual((a.name, b.name), ("same.001", "same"))
+        placed = s3d.at([a, b], on=frames)
+        self.assertEqual([part.name for part in placed],
+                         ["same.002", "same.003", "same.001", "same.004"])
 
     def test_it_stays_a_list_of_frames(self):
         frames = s3d.grid(4, 1, 20)

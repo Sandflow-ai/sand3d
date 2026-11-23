@@ -788,6 +788,7 @@ def _on_frames(ob, frames, given, anchor, scale=None):
     if items is not None:
         _not_nested(items, "at")
     out, prepared, originals = [], [], {}
+    lent_names = {}
     try:
         for item in [ob] if items is None else items:
             if not isinstance(item, (bpy.types.Object, Handle)):
@@ -812,10 +813,19 @@ def _on_frames(ob, frames, given, anchor, scale=None):
                 out.append(twin)
                 placed_anchor = _scaled(twin, factor, anchor) if scale is not None else anchor
                 _posed(placed, f.matrix, given, placed_anchor)
+            if items is not None and len(items) > 1:
+                # The next prototype used to be copied after this tree was removed.
+                consumed = [root]
+                for part in consumed:
+                    consumed.extend(children.get(part, ()))
+                    lent_names[part] = part.name
+                    part.name = "s3d~at~lent"
     except Exception as error:
-        data = {part.data for part in prepared if part.type != "MESH" and part.data is not None}
+        data = {part.data for part in prepared if part.type not in ("MESH", "LIGHT") and part.data is not None}
         delete(list(reversed(prepared)))
         bpy.data.batch_remove([block for block in data if block.users == 0])
+        for part, name in lent_names.items():
+            part.name = name
         if items is not None and isinstance(error, (TypeError, ValueError)) and not _is_strict():
             _warn(f"at: no copies placed: {error}", UserWarning)
             return []
