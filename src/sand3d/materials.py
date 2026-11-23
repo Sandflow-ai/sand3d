@@ -98,7 +98,8 @@ def material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, 
     units), following Beer-Lambert attenuation. Zero distance disables absorption.
     thickness is the constant depth glTF viewers assume: "auto" (the default) estimates
     it at export from the meshes that wear the material, 2 x volume / area; a length
-    sets it. Cycles uses the closed mesh's actual depth. ior is 1..1000, transmission 0..1.
+    sets it, and zero omits glTF volume. Cycles uses the closed mesh's actual depth.
+    ior is 1..1000, transmission 0..1.
     None inherits the preset. Water absorbs over one metre with IOR 1.333.
 
     scatter is the sRGB colour the medium inside the closed mesh sends light back in:
@@ -240,7 +241,7 @@ def _material(tag, made):
                           ("Emission Color", rgba), ("Emission Strength", v["emission"])):
         bsdf.inputs[socket].default_value = value
     medium = v["absorb_distance"] > 0 or v["scatter_distance"] > 0
-    if medium and (v["thickness"] == "auto" or v["thickness"] > 0):
+    if medium:
         node = mat.node_tree.nodes.new("ShaderNodeVolumeAbsorption")
         node.name = "Absorption"
         # Cycles uses sigma = (1 - colour) * density, not -log(colour)/distance.
@@ -278,6 +279,7 @@ def _material(tag, made):
             clear.inputs["Color"].default_value = (*(v["opacity"] * c + 1 - v["opacity"] for c in rgba[:3]), 1)
             mat.node_tree.links.new(clear.outputs["BSDF"], output.inputs["Surface"])
             mat.node_tree.links.new(volume, output.inputs["Volume"])
+    if medium and v["thickness"] != 0:
         group = bpy.data.node_groups.get("glTF Material Output")
         if group is None:
             group = bpy.data.node_groups.new("glTF Material Output", "ShaderNodeTree")
@@ -569,6 +571,8 @@ def volume_export(parts):
             if node is None:
                 continue
             v = look(mat[TAG])
+            if v["thickness"] == 0:
+                continue
             color, density = node.inputs["Color"], node.inputs["Density"]
             saved.append((color, tuple(color.default_value)))
             saved.append((density, density.default_value))

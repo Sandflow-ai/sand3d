@@ -334,8 +334,8 @@ Natural presets are average untextured colours, nonmetallic, alpha 1: `bark` (ou
 Water is a volume bounded by a **closed mesh**: model its bottom and sides as well as its top, with
 outward normals. Cycles absorbs along the actual ray length. `thickness` is the constant depth glTF
 raster viewers assume: `"auto"` estimates it at export as 2 × volume / area over the exported mesh
-instances that wear the material (D/3 for a sphere), one value per material; a length sets it; 0 disables absorption
-in those viewers and omits the glTF volume extension. It creates no geometry.
+instances that wear the material (D/3 for a sphere), one value per material. A length sets it.
+Zero omits the glTF volume extension. Cycles still uses the medium. It creates no geometry.
 
 Export: GLB carries `KHR_materials_volume`, `KHR_materials_ior` and transmission (distances in world
 metres, thickness in mesh units). **glTF has no ratified scattering**: a scattering medium exports its

@@ -442,6 +442,18 @@ class Absorption(unittest.TestCase):
         volume = doc["materials"][0]["extensions"]["KHR_materials_volume"]
         self.assertAlmostEqual(volume["thicknessFactor"], 2 * (2 * 8 + 64) / (2 * 24 + 96), places=6)
 
+    def test_fix44_zero_thickness_only_disables_glb_volume(self):
+        ob = s3d.box("medium", 10, 10, 10)
+        for kind, node in (("water", "Absorption"), ("smoke", "Scatter")):
+            with self.subTest(kind=kind):
+                s3d.material(ob, kind, thickness=0)
+                nodes = ob.data.materials[0].node_tree.nodes
+                self.assertIn(node, nodes)
+                self.assertTrue(nodes["Material Output"].inputs["Volume"].is_linked)
+                if kind == "smoke":
+                    self.assertTrue(nodes["Cycles Output"].inputs["Volume"].is_linked)
+                self.assertNotIn("KHR_materials_volume", export(ob)[0]["materials"][0]["extensions"])
+
     def test_overrides_disable_and_invalid_values(self):
         ob = s3d.box("pane", 10, 10, 10)
         s3d.material(ob, "glass", absorb="#aabbcc", absorb_distance=20, thickness=4,
@@ -451,11 +463,10 @@ class Absorption(unittest.TestCase):
         self.assertAlmostEqual(ext["KHR_materials_volume"]["attenuationDistance"], .02)
         self.assertEqual(ext["KHR_materials_volume"]["thicknessFactor"], 4)
         self.assertAlmostEqual(ext["KHR_materials_transmission"]["transmissionFactor"], .7)
-        for kw in ({"absorb_distance": 0}, {"thickness": 0}):
-            s3d.material(ob, "water", **kw)
-            self.assertNotIn("Absorption", ob.data.materials[0].node_tree.nodes)
-            doc, _ = export(ob)
-            self.assertNotIn("KHR_materials_volume", doc["materials"][0]["extensions"])
+        s3d.material(ob, "water", absorb_distance=0)
+        self.assertNotIn("Absorption", ob.data.materials[0].node_tree.nodes)
+        doc, _ = export(ob)
+        self.assertNotIn("KHR_materials_volume", doc["materials"][0]["extensions"])
         for key in ("absorb_distance", "thickness", "ior", "transmission"):
             for value in (-1, True, float("nan"), float("inf"), "1"):
                 with self.subTest(key=key, value=value), self.assertRaises(ValueError):
@@ -599,12 +610,11 @@ class Scattering(unittest.TestCase):
 
     def test_disable_bounds_and_errors(self):
         ob = s3d.box("cloud", 10, 10, 10)
-        for kind, kw in (("fog", {"scatter_distance": 0}), ("smoke", {"thickness": 0})):
-            s3d.material(ob, kind, **kw)
-            nodes = ob.data.materials[0].node_tree.nodes
-            self.assertNotIn("Scatter", nodes)
-            self.assertFalse(nodes["Material Output"].inputs["Volume"].is_linked)
-            self.assertNotIn("KHR_materials_volume", export(ob)[0]["materials"][0]["extensions"])
+        s3d.material(ob, "fog", scatter_distance=0)
+        nodes = ob.data.materials[0].node_tree.nodes
+        self.assertNotIn("Scatter", nodes)
+        self.assertFalse(nodes["Material Output"].inputs["Volume"].is_linked)
+        self.assertNotIn("KHR_materials_volume", export(ob)[0]["materials"][0]["extensions"])
         for g in (-1, 1, 0):
             s3d.material(ob, "fog", scatter_anisotropy=g)
             self.assertEqual(ob.data.materials[0].node_tree.nodes["Scatter"].inputs["Anisotropy"].default_value, g)
