@@ -11,8 +11,10 @@ import math
 import os
 import sys
 import warnings
+from contextlib import contextmanager
 
 import bpy
+import numpy as np
 
 from . import _core
 from .materials import _hex, _linear
@@ -28,6 +30,11 @@ SIZE = {"point": 60.0, "spot": 30.0}
 
 #: Lumens per watt: Blender's watts from the lumens and lux of a program, as glTF's exporter reads them back.
 LUMENS_PER_WATT = 683.0
+
+# The largest Blender float32 cone opening no greater than π radians.
+MAX_SPOT_SIZE = float(np.nextafter(np.float32(math.pi), np.float32(0)))
+# Enough separation for the two half-angles to stay distinct in float32 and in IFC's STEP text.
+MIN_CONE_BLEND = 2 ** -24
 
 #: On a light's data, what the program said, in units no reader has to convert: "kind"; "power", lm or lux;
 #: "color", "#rrggbb" (sRGB); "shadow"; a point's or a spot's "size", in metres; a sun's "angle", in degrees.
@@ -46,7 +53,7 @@ def light(name, kind="point", lm=None, lux=None, color="#ffffff", angle=None, bl
     - "point" shines every way from where it stands, with `lm` lumens: 800 is a household
       bulb, 250 a small lamp.
     - "spot" is a point that shines only inside a cone about its own -Z: `angle`, in
-      degrees, is the cone's full opening (above 0, under 180; 45 by default), and `blend`
+      degrees, is the cone's full opening (at least 1, under 180; 45 by default), and `blend`
       (0..1, 0.15 by default) the share of it, from the edge inwards, over which the light
       fades. Its `lm` are those of the whole point it is cut from: on its axis it is as
       bright as a point of the same `lm`.
@@ -100,8 +107,8 @@ def light(name, kind="point", lm=None, lux=None, color="#ffffff", angle=None, bl
         raise ValueError("light: a sun is infinitely far and has no size: `angle` is how wide it is seen")
     if kind == "spot":
         angle = _number("angle", 45 if angle is None else angle)
-        if not 0 < angle < 180:
-            raise ValueError(f"light: a spot's angle is its cone's full opening, above 0 and under 180 degrees, "
+        if not 1 <= angle < 180:
+            raise ValueError(f"light: a spot's angle is its cone's full opening, at least 1 and under 180 degrees, "
                              f"not {angle!r}")
         blend = _number("blend", 0.15 if blend is None else blend)
         if blend > 1:
@@ -157,6 +164,23 @@ def power(ob):
 def color(ob):
     """A light's colour as the program gave it: "#rrggbb", sRGB."""
     return ob.data[SAID]["color"]
+
+
+@contextmanager
+def gltf_spot_cones(obs):
+    """Lend Blender's exporter spot cones within glTF's limits, then restore the program's lights."""
+    saved = {}
+    try:
+        for data in {ob.data for ob in obs if ob.data.type == "SPOT"}:
+            size, blend = data.spot_size, data.spot_blend
+            if size > MAX_SPOT_SIZE or blend < MIN_CONE_BLEND:
+                saved[data] = size, blend
+                data.spot_size = min(size, MAX_SPOT_SIZE)
+                data.spot_blend = max(blend, MIN_CONE_BLEND)
+        yield
+    finally:
+        for data, (size, blend) in saved.items():
+            data.spot_size, data.spot_blend = size, blend
 
 
 def left_out(obs, path, why):

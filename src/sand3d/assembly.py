@@ -149,9 +149,10 @@ def _export(root, path):
             if clash is not None:
                 clash.name = "s3d~export~lent"
             coll.name = name
-            bpy.ops.export_scene.gltf(filepath=str(path), export_format="GLB", collection=coll.name,
-                                      export_extras=True, export_lights=bool(lit),
-                                      export_materials="EXPORT" if dressed else "NONE")
+            with lights.gltf_spot_cones(lit):
+                bpy.ops.export_scene.gltf(filepath=str(path), export_format="GLB", collection=coll.name,
+                                          export_extras=True, export_lights=bool(lit),
+                                          export_materials="EXPORT" if dressed else "NONE")
         finally:
             coll.name = "s3d~export"
             if clash is not None:

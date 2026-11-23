@@ -190,7 +190,7 @@ def _light(out, name, ob, m, unit):
     if not data.use_shadow:
         out("bool inputs:shadow:enable = 0")
     if kind == "spot":
-        out(f"float inputs:shaping:cone:angle = {_num(math.degrees(data.spot_size) / 2)}")
+        out(f"float inputs:shaping:cone:angle = {_num(min(math.degrees(data.spot_size) / 2, 90))}")
         out(f"float inputs:shaping:cone:softness = {_num(data.spot_blend)}")
     if kind in ("point", "spot") and not data.shadow_soft_size:
         out("bool treatAsPoint = 1")

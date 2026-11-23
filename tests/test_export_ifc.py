@@ -10,6 +10,7 @@ $SAND3D_IFC_PYTHON names, never bpy's), the files are also held to its schema an
 where-rule validation, and their solids built by its geometry kernel.
 """
 import json
+import math
 import os
 import subprocess
 import re
@@ -345,6 +346,22 @@ class ExportIfc(unittest.TestCase):
         (_, relation), = ifc.kind("IFCRELASSOCIATESMATERIAL")
         self.assertEqual(ifc.label(relation[5], 0), "rubber")
         self.assertEqual({ifc.name(ref) for ref in ifc.refs(relation, 4)}, {"stand", "left", "right"})
+
+    def test_an_ifc_spot_cone_has_distinct_angles(self):
+        for angle, blend in ((45, 0), (179.999999, .15), (1, 1e-12), (1, 1)):
+            with self.subTest(angle=angle, blend=blend):
+                s3d.empty_scene()
+                spot = s3d.light("spot", "spot", angle=angle, blend=blend)
+                ifc = self.write(spot, "spot.ifc")
+                (_, data), = ifc.kind("IFCLIGHTDISTRIBUTIONDATA")
+                angles = [float(value) for value in ifc.refs(data, 1)]
+                intensities = [float(value) for value in ifc.refs(data, 2)]
+                self.assertEqual(len(angles), len(intensities))
+                self.assertTrue(all(a < b for a, b in zip(angles, angles[1:])), angles)
+                self.assertLessEqual(angles[-2], math.pi / 2)
+                self.assertAlmostEqual(angles[-2], math.radians(angle) / 2, places=6)
+                self.assertAlmostEqual(intensities[0], 1 / (4 * math.pi))
+                self.assertEqual(intensities[-2:], [0, 0])
 
     def test_a_part_with_no_look_carries_no_style(self):
         root, cab, *_ = machine()

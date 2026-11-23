@@ -142,8 +142,11 @@ def _distribution(ob):
     every = 1 / (4 * math.pi)
     if lights.kind(ob) == "point":
         return [0.0, math.pi], [every, every]
-    half = ob.data.spot_size / 2
-    return [0.0, half * (1 - ob.data.spot_blend), half, math.pi], [every, every, 0.0, 0.0]
+    half = min(ob.data.spot_size, lights.MAX_SPOT_SIZE) / 2
+    inner = half * (1 - max(ob.data.spot_blend, lights.MIN_CONE_BLEND))
+    if inner == 0:
+        return [0.0, half, math.pi], [every, 0.0, 0.0]
+    return [0.0, inner, half, math.pi], [every, every, 0.0, 0.0]
 
 
 def _closed(tris):

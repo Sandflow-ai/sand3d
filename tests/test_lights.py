@@ -179,6 +179,10 @@ class Lights(unittest.TestCase):
         self.assertFalse(first.startswith("error"), first)
         self.assertEqual(first, second)
 
+    def test_a_spot_rejects_an_angle_below_one_degree(self):
+        with self.assertRaisesRegex(ValueError, "at least 1 and under 180 degrees"):
+            s3d.light("tiny", "spot", angle=0.1)
+
 
 class Export(unittest.TestCase):
 
@@ -238,6 +242,24 @@ class Export(unittest.TestCase):
         self.export(s3d.group("row", lamps), "row.glb")
         self.assertEqual(sorted((o.name, o.data.name) for o in lamps), before)
         self.assertEqual(len(bpy.data.objects), 4)
+
+    def test_a_glb_spot_cone_stays_within_limits(self):
+        hard = s3d.light("hard", "spot", angle=45, blend=0)
+        wide = s3d.light("wide", "spot", angle=179.999999)
+        narrow = s3d.light("narrow", "spot", angle=1, blend=1e-12)
+        spots = (hard, wide, narrow)
+        before = [(ob.data.spot_size, ob.data.spot_blend) for ob in spots]
+        doc = glb_json(s3d.group("cones", *spots))
+        exported = doc["extensions"]["KHR_lights_punctual"]["lights"]
+        self.assertEqual({light["name"] for light in exported}, {"hard", "wide", "narrow"})
+        for light in exported:
+            with self.subTest(light=light["name"]):
+                spot = light["spot"]
+                inner, outer = struct.unpack("<ff", struct.pack("<ff", spot["innerConeAngle"], spot["outerConeAngle"]))
+                self.assertGreaterEqual(inner, 0)
+                self.assertLess(inner, outer)
+                self.assertLessEqual(outer, math.pi / 2)
+        self.assertEqual([(ob.data.spot_size, ob.data.spot_blend) for ob in spots], before)
 
     def test_a_glb_with_no_light_is_written_as_before(self):
         path, said = self.export(s3d.assembly("plain", s3d.box("box", 10, 10, 10)), "plain.glb")
