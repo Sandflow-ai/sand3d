@@ -93,6 +93,11 @@ def sweeps():
     s3d.wire("hoop", s3d.arc((0, 0, 0), 30, 0, 270), 4)
 
 
+@case("sweep")
+def sweep_twisted_rings():
+    s3d.sweep("ribbon", s3d.rect(4, 2), [(0, 0, 0), (0, 0, 10)], twist=180, rings=1)
+
+
 @case("loft", "superellipse")
 def lofts():
     s3d.loft("vase", s3d.circle(40), s3d.at(s3d.circle(60), z=50), s3d.at(s3d.circle(30), z=100))

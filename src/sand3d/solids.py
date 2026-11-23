@@ -625,6 +625,10 @@ def _soft_scale(law, u):
     return tuple(out) if law.pair else out[0]
 
 
+class UndersampledTwist(UserWarning):
+    """The requested sweep rings are too sparse to represent the twist."""
+
+
 def sweep(name, profile, path, scale=1, twist=0, frenet=False, *, tip="round", rings=0):
     """Profile along a path.
 
@@ -641,7 +645,9 @@ def sweep(name, profile, path, scale=1, twist=0, frenet=False, *, tip="round", r
     partially zero pairs or all-zero laws. Laws on closed paths are refused;
     numeric scale and twist keep their existing meaning. Law paths are refined
     with their changing size and twist; crossing rings are refused (reduce
-    the size or round the path)."""
+    the size or round the path). Extra rings sample a numeric twist; a span
+    that would still turn at least 180 degrees between rings warns and keeps
+    its original chord interpolation."""
     path = getattr(path, "_mesh_path", path)
     tips = _ring_options(tip, rings)
     extra = rings
@@ -686,6 +692,21 @@ def sweep(name, profile, path, scale=1, twist=0, frenet=False, *, tip="round", r
             lengths.append(lengths[-1] + (p[i] - p[i - 1]).length)
     total = lengths[-1] + ((p[0] - p[-1]).length if path.closed and laws else 0) or 1.0
     centre = sum(local, Vector()) / len(local) if scale_law else None
+    sample_twist = not laws and extra and not curved_refinement and twist != 0
+    section_axes = []
+    if sample_twist:
+        angles = [twist * (d / total) for d in lengths]
+        turns = [end - start for start, end in zip(angles, angles[1:])]
+        if path.closed:
+            # Keep the original seam stations and take the shortest way back.
+            turns.append(-math.remainder(angles[-1], 360))
+        if any(abs(turn) / (extra + 1) >= 180 for turn in turns):
+            from .edit import _is_strict, _warn
+            message = (f"sweep {name!r}: twist turns at least 180 degrees between rings; "
+                       "increase rings (using chord interpolation on undersampled spans)")
+            if _is_strict():
+                raise ValueError(message)
+            _warn(message, UndersampledTwist)
     b = _core.Builder(name)
     rings = []
     for i in range(m):
@@ -704,7 +725,15 @@ def sweep(name, profile, path, scale=1, twist=0, frenet=False, *, tip="round", r
         d_in, d_out = bends[i]
         bend = d_out - d_in
         bend = bend - t * bend.dot(t)
+        bdir = bend.normalized() if bend.length > 1e-9 else None
         cos_half = max(t.dot(d_out), 0.2)
+        if sample_twist:
+            # The untwisted section map includes the station's miter.
+            if bdir is not None:
+                section_axes.append(tuple(axis + bdir * axis.dot(bdir) * (1 / cos_half - 1)
+                                          for axis in (r, s)))
+            else:
+                section_axes.append((r, s))
         ring = []
         if scale_law and kx == 0 and ky == 0:
             pole = b.vert(p[i])
@@ -724,8 +753,7 @@ def sweep(name, profile, path, scale=1, twist=0, frenet=False, *, tip="round", r
                 x += dx * math.cos(a) - dy * math.sin(a)
                 y += dx * math.sin(a) + dy * math.cos(a)
             off = r * x + s * y
-            if bend.length > 1e-9:
-                bdir = bend.normalized()
+            if bdir is not None:
                 off = off + bdir * off.dot(bdir) * (1 / cos_half - 1)
             ring.append(b.vert(p[i] + off))
         rings.append(ring)
@@ -738,10 +766,27 @@ def sweep(name, profile, path, scale=1, twist=0, frenet=False, *, tip="round", r
             j = (i+1) % m
             rings.append(original[i])
             p.append(original_p[i])
+            turn = turns[i] if sample_twist else 0
+            rotate = 0 < abs(turn) / (extra + 1) < 180
             for k in range(1, extra+1):
                 t = k/(extra+1)
-                rings.append([b.vert(a.co.lerp(c.co,t)) for a,c in zip(original[i],original[j])])
                 p.append(original_p[i].lerp(original_p[j],t))
+                if rotate:
+                    u = ((lengths[i] + (lengths[j] - lengths[i]) * t) / total if j else 1 - t)
+                    size = _linear_scale(scale, u)
+                    sx, sy = size if pair else (size, size)
+                    angle = math.radians(angles[i] + turn * t)
+                    cs, sn = math.cos(angle), math.sin(angle)
+                    x0, y0 = section_axes[i]
+                    x1, y1 = section_axes[j]
+                    x, y = x0.lerp(x1, t), y0.lerp(y1, t)
+                    # Apply the sampled rotation before the interpolated
+                    # section map, so rotating cannot collapse the profile.
+                    rings.append([b.vert(p[-1] + x * (sx*q.x*cs - sy*q.y*sn)
+                                               + y * (sx*q.x*sn + sy*q.y*cs))
+                                  for q in local])
+                else:
+                    rings.append([b.vert(a.co.lerp(c.co,t)) for a,c in zip(original[i],original[j])])
         if not path.closed:
             rings.append(original[-1])
             p.append(original_p[-1])

@@ -296,7 +296,9 @@ the end interval without overshooting the neighbouring sections.
 
 `tip` (loft, wire, sweep) is "round", "sharp" (the end span linear), "flat" (a zero end takes its
 neighbour's size, capped in the end plane), or a `(start, end)` pair; nonzero ends are always capped.
-`rings` adds that many rings per span; `wire` also takes explicit arc-length fractions strictly inside
+`rings` adds that many rings per span. In a numeric sweep, if a span would turn at least 180°
+between rings, it keeps chord interpolation and emits `sand3d.solids.UndersampledTwist`
+(an error in strict mode). `wire` also takes explicit arc-length fractions strictly inside
 (0, 1). `wire(d=(width, thickness))` is a constant elliptical section; laws describe circular
 diameters.
 
