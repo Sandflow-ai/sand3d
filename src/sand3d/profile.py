@@ -6,6 +6,7 @@ turns sharply there: the edges a solid grows from those points are its real
 edges, the ones `fillet` and `chamfer` reach by name; the others only facet a
 curve. `p + q` is the union of two profiles, `p - q` the first minus the second.
 """
+import heapq
 import math
 
 import bpy
@@ -15,6 +16,8 @@ from . import _core, _guard
 
 #: Two points closer than this (mm, so `_core.mm(EPS)` in the program's unit) are one point.
 EPS = 1e-6
+# Larger outlines are checked at loft entry, without resolving them into regions.
+_CROSSING_LIMIT = 400
 
 
 # ---------------------------------------------------------------- the two types
@@ -42,6 +45,7 @@ class Profile:
     def __init__(self, loops):
         self.loops = [loop if loop.area() >= 0 or len(loops) > 1 else loop.reversed() for loop in loops]
         self._mesh = None
+        self._crossing = None   # where the drawn outline crossed, if split into pieces
 
     def __add__(self, other):
         return _boolean(self, _flat(other), lambda a, b: a or b)
@@ -307,20 +311,61 @@ def _clean(pts, sharp):
     return out, flags
 
 
-def _simple(pts):
-    """Whether a closed polyline crosses itself (checked up to 400 points)."""
+def _segment_crossing(a, b, c, d):
+    """Intersection of nonparallel segments, in the precision of the drawing."""
+    ax, ay = a
+    bx, by = b
+    cx, cy = c
+    dx, dy = d
+    ux, uy = bx - ax, by - ay
+    vx, vy = dx - cx, dy - cy
+    det = ux * vy - uy * vx
+    if not det:
+        return None
+    wx, wy = cx - ax, cy - ay
+    t = (wx * vy - wy * vx) / det
+    if 0 <= t <= 1 and 0 <= (wx * uy - wy * ux) / det <= 1:
+        return ax + t * ux, ay + t * uy
+    return None
+
+
+def _crossing(pts):
+    """The first point where a closed polyline crosses itself, or None."""
     n = len(pts)
-    if n > 400:
-        return True
-    for i in range(n):
-        a, b = Vector(pts[i]), Vector(pts[(i + 1) % n])
-        for j in range(i + 2, n):
-            if i == 0 and j == n - 1:
+    for i, a in enumerate(pts):
+        b = pts[(i + 1) % n]
+        for j in range(i + 2, n - (i == 0)):
+            q = _segment_crossing(a, b, pts[j], pts[(j + 1) % n])
+            if q is not None:
+                return q
+    return None
+
+
+def _large_crossing(pts):
+    """Find a crossing by testing only segments with overlapping bounding boxes."""
+    n = len(pts)
+    ends = pts[1:] + pts[:1]
+
+    def coverage(axis):
+        coord = [p[axis] for p in pts]
+        span = max(coord) - min(coord)
+        return sum(abs(a[axis] - b[axis]) for a, b in zip(pts, ends)) / span if span else math.inf
+
+    x = min((0, 1), key=coverage)
+    y = 1 - x
+    boxes = sorted((min(a[x], b[x]), max(a[x], b[x]), min(a[y], b[y]), max(a[y], b[y]), i)
+                   for i, (a, b) in enumerate(zip(pts, ends)))
+    active = []
+    for left, right, bottom, top, i in boxes:
+        active = [box for box in active if box[0] >= left]
+        for _, lo, hi, j in active:
+            if hi < bottom or top < lo or abs(i - j) in (1, n - 1):
                 continue
-            c, d = Vector(pts[j]), Vector(pts[(j + 1) % n])
-            if geometry.intersect_line_line_2d(a, b, c, d) is not None:
-                return False
-    return True
+            q = _segment_crossing(pts[i], ends[i], pts[j], ends[j])
+            if q is not None:
+                return q
+        active.append((right, bottom, top, i))
+    return None
 
 
 def _single(pts, sharp):
@@ -331,9 +376,13 @@ def _single(pts, sharp):
     loop = Loop(pts, sharp)
     if loop.area() < 0:
         loop = loop.reversed()
-    if _simple(loop.pts):
+    crossing = _crossing(loop.pts) if len(loop.pts) <= _CROSSING_LIMIT else None
+    if crossing is None:
         return Profile([loop])
-    return _from_region(_region([[loop]], lambda w: w != 0))
+    profile = _from_region(_region([[loop]], lambda w: w != 0))
+    if len(profile.loops) > 1:
+        profile._crossing = crossing
+    return profile
 
 
 # ---------------------------------------------------------------- shapes
@@ -357,8 +406,10 @@ def rect(w, d, r=0, chamfer=0):
     """Centred; corners rounded or cut.
 
     A rectangle `w` wide (X) and `d` deep (Y), centred; its corners rounded by
-    `r` or cut by `chamfer`."""
-    return poly([(-w / 2, -d / 2), (w / 2, -d / 2), (w / 2, d / 2), (-w / 2, d / 2)], fillet=r, chamfer=chamfer)
+    `r` or cut by `chamfer`. An oversized radius is clamped to fit the sides
+    and emits `sand3d.edit.ClampedRadius`. Set `SAND3D_STRICT=1` or use
+    `with sand3d.edit.strict():` to raise instead."""
+    return _poly([(-w / 2, -d / 2), (w / 2, -d / 2), (w / 2, d / 2), (-w / 2, d / 2)], r, chamfer, ("rect", "r"))
 
 
 def slot(l, d):
@@ -658,7 +709,14 @@ def poly(pts, fillet=0, chamfer=0):
     A closed outline through `pts`: (x, y) points joined by straight lines, with
     `arc(...)`, `tangent_arc(to)` or an open `spline(...)` among them for curved runs.
     `fillet` rounds and `chamfer` cuts the corners between two straight lines — one
-    number for all of them, or a list giving each point its own (0 leaves it)."""
+    number for all of them, or a list giving each point its own (0 leaves it). A fillet
+    too large for a side is clamped to the largest that fits, with a warning (strict mode:
+    an error)."""
+    return _poly(pts, fillet, chamfer, ("poly", "fillet"))
+
+
+def _poly(pts, fillet, chamfer, said):
+    """`poly`, its fillet named in a warning as `said`: (verb, parameter)."""
     nodes = _outline(pts, "poly", POLY_LIFT)
     if len(nodes) > 1 and math.dist((nodes[0].x, nodes[0].y), (nodes[-1].x, nodes[-1].y)) < _core.mm(EPS):
         last = nodes.pop()
@@ -681,17 +739,58 @@ def poly(pts, fillet=0, chamfer=0):
     pts2 = [(n.x, n.y) for n in nodes]
     lines = [n.line_out for n in nodes]
     src = [n.src for n in nodes]
-    pts2, sharp, lines, src = _corners(pts2, sharp, lines, src, fillet, "fillet")
+    pts2, sharp, lines, src = _corners(pts2, sharp, lines, src, fillet, "fillet", said)
     pts2, sharp, lines, src = _corners(pts2, sharp, lines, src, chamfer, "chamfer")
     return _single(pts2, sharp)
 
 
-def _corners(pts, sharp, lines, src, amount, kind):
-    """Round (`fillet`) or cut (`chamfer`) the drawn corners between two straight lines."""
+def _fit(setbacks, over, minimums=None):
+    """Grow the requested setbacks above their minima at the same fraction of each
+    request. Freeze both ends of a side when it fills, so corners with room keep growing.
+    Return factors corner -> f and the tightest side (i, j, length) for the warning."""
+    if minimums is None:
+        minimums = {i: t[0] for i, t in setbacks.items() if t[0] < 0}
+    rates = {i: t[0] - minimums.get(i, 0) for i, t in setbacks.items()}
+    frozen = {}
+
+    def saturation(i, j, length):
+        fixed = sum(frozen.get(k, minimums.get(k, 0)) for k in (i, j))
+        rate = sum(rates.get(k, 0) for k in (i, j) if k not in frozen)
+        return max(0.0, length - fixed) / rate if rate > 0 else math.inf
+
+    # Only initially overflowing sides can fill before the requests are met. When a
+    # corner freezes, the adjacent side may fill later, so refresh its event on pop.
+    sides = [(saturation(i, j, length), i, j, length) for i, j, _, length in over]
+    heapq.heapify(sides)
+    while sides:
+        f, i, j, length = heapq.heappop(sides)
+        if f >= 1:
+            break
+        later = saturation(i, j, length)
+        if later > f:
+            heapq.heappush(sides, (later, i, j, length))
+            continue
+        for k in (i, j):
+            if k not in frozen and rates.get(k, 0) > 0:
+                frozen[k] = minimums.get(k, 0) + rates[k] * f
+
+    _, i, j, length = min((length / used, i, j, length) for i, j, used, length in over)
+    factors = {k: t / setbacks[k][0] for k, t in frozen.items()}
+    return factors, (i, j, length)
+
+
+def _said(q):
+    return "(" + ", ".join(f"{round(c, 6):g}" for c in q) + ")"
+
+
+def _corners(pts, sharp, lines, src, amount, kind, said=None):
+    """Round (`fillet`) or cut (`chamfer`) the drawn corners between two straight lines.
+    A fillet too large for a side is clamped to the largest that fits, and `said` (verb,
+    parameter) names it in the warning; strict mode raises, as a chamfer always does."""
     if not amount:
         return pts, sharp, lines, src
     m = len(pts)
-    trims = {}
+    trims, mesh_setbacks = {}, {}
     for i in range(m):
         value = amount if isinstance(amount, (int, float)) else (
             amount[src[i]] if src[i] is not None and src[i] < len(amount) else 0)
@@ -701,15 +800,52 @@ def _corners(pts, sharp, lines, src, amount, kind):
         u = (p - Vector(pts[i - 1])).normalized()
         v = (Vector(pts[(i + 1) % m]) - p).normalized()
         turn = math.acos(max(-1.0, min(1.0, u.dot(v))))
-        if turn < 1e-6:
-            continue
-        trims[i] = (value * math.tan(turn / 2) if kind == "fillet" else value, value, u, v)
+        if kind == "fillet":
+            ax, ay = pts[i - 1]
+            bx, by = pts[i]
+            cx, cy = pts[(i + 1) % m]
+            ux, uy = bx - ax, by - ay
+            vx, vy = cx - bx, cy - by
+            exact_turn = math.atan2(abs(ux * vy - uy * vx), ux * vx + uy * vy)
+            if exact_turn < 1e-6:
+                continue
+            mesh_setbacks[i] = value * math.tan(turn / 2)
+            setback = value * math.tan(exact_turn / 2)
+        else:
+            if turn < 1e-6:
+                continue
+            setback = value
+            mesh_setbacks[i] = value
+        trims[i] = (setback, value, u, v)
+    over = []
+    mesh_fits = True
+    tol = _core.mm(1e-9)
     for i in range(m):
         j = (i + 1) % m
         used = trims.get(i, (0,))[0] + trims.get(j, (0,))[0]
         length = math.dist(pts[i], pts[j])
-        if used > length + _core.mm(1e-9):
-            raise ValueError(f"{kind} too large for the side from {pts[i]} to {pts[j]} ({used:.4g} > {length:.4g})")
+        if used > length + tol:
+            over.append((i, j, used, length))
+        if mesh_setbacks.get(i, 0) + mesh_setbacks.get(j, 0) > length + tol:
+            mesh_fits = False
+    if over:
+        i, j, used, length = over[0]
+        error = ValueError(f"{kind} too large for the side from {pts[i]} to {pts[j]} ({used:.4g} > {length:.4g})")
+        from .edit import _clamped, _is_strict
+        if kind != "fillet" or _is_strict():
+            raise error
+        factors, (i, j, length) = _fit(trims, over)
+        k = max((k for k in (i, j) if k in factors), key=lambda k: trims[k][1])
+        r = trims[k][1]
+        verb, name = said
+        where = "" if verb == "rect" else f" from {_said(pts[i])} to {_said(pts[j])}"
+        _clamped(error, f"{verb}: {name}={r:g} too large for the side of {length:.4g}{where}; clamped to "
+                        f"{r * factors[k]:.4g}")
+        for k, fk in factors.items():
+            t, value, u, v = trims[k]
+            trims[k] = (t * fk, value * fk, u, v)
+    # Preserve the arc coordinates of profiles that already fit in single precision.
+    keep_mesh_setbacks = not over and mesh_fits
     out = ([], [], [], [])
 
     def put(p, s, line, k=None):
@@ -721,6 +857,8 @@ def _corners(pts, sharp, lines, src, amount, kind):
             put(pts[i], sharp[i], lines[i], src[i])
             continue
         t, value, u, v = trims[i]
+        if keep_mesh_setbacks:
+            t = mesh_setbacks[i]
         p = Vector(pts[i])
         a, b = p - u * t, p + v * t
         if kind == "chamfer":
