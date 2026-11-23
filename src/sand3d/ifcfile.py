@@ -273,7 +273,7 @@ def write_ifc(root, path):
         source, for a light fixture — its look on both the geometry (a style) and the product
         (a material), and its reference. `key` is what its id digests, besides its name."""
         name = names.unique("element", _core.given_name(ob))
-        tag = materials._nearest(ob) if ob.type == "MESH" else None
+        tag = materials._nearest(ob) if ob.type != "LIGHT" else None
         shape = "$"
         if ob.type == "LIGHT":
             shape = step("IFCPRODUCTDEFINITIONSHAPE", "$", "$", _refs([

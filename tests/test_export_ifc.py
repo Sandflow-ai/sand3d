@@ -335,6 +335,17 @@ class ExportIfc(unittest.TestCase):
         (_, colour), = ifc.kind("IFCCOLOURRGB")
         self.assertEqual([round(float(c) * 255) for c in colour[1:]], [0x3F, 0xAE, 0x6A])
 
+    def test_a_group_keeps_its_material_association(self):
+        s3d.empty_scene()
+        left = s3d.box("left", 20, 20, 10)
+        right = s3d.at(s3d.box("right", 20, 20, 10), x=40)
+        stand = s3d.group("stand", left, right)
+        s3d.material(stand, "rubber")
+        ifc = self.write(stand, "stand.ifc")
+        (_, relation), = ifc.kind("IFCRELASSOCIATESMATERIAL")
+        self.assertEqual(ifc.label(relation[5], 0), "rubber")
+        self.assertEqual({ifc.name(ref) for ref in ifc.refs(relation, 4)}, {"stand", "left", "right"})
+
     def test_a_part_with_no_look_carries_no_style(self):
         root, cab, *_ = machine()
         s3d.material(cab, "oak")
