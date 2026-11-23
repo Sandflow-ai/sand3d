@@ -10,6 +10,7 @@ exists qualified by the solid's name: `plate.top`.
 import bisect
 import math
 import re
+from copy import copy
 
 import bmesh
 import bpy
@@ -869,7 +870,7 @@ def _shaped_wire(name, path, d, closed, fillet, tip, rings):
     width, depth = d if elliptical else (max(v[0] for v in law.values) if law else d,)*2
     if any(isinstance(v, bool) or not math.isfinite(v) or v <= 0 for v in (width, depth)):
         raise ValueError('wire: diameters must be positive finite lengths')
-    path = _as_path(path)
+    path = copy(path) if isinstance(path, Path) else _as_path(path)
     if closed is not None:
         path.closed = bool(closed)
     if fillet:
