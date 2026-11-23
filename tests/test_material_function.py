@@ -231,6 +231,20 @@ print(([tuple(v.co) for v in a.data.vertices], [tuple(f.vertices) for f in a.dat
             self.assertEqual(len(g.doc['materials']), 1)
             self.assertIn('COLOR_0', g.doc['meshes'][0]['primitives'][0]['attributes'])
 
+    def test_lengthwise_color_after_displace_refinement(self):
+        import tempfile
+        from pathlib import Path
+
+        ob = s3d.wire('wire', [(0, 0, 0), (0, 0, 30)], 4)
+        s3d.displace(ob, .1, 2, direction='+X', step=.5)
+        mesh = ob.data
+        np.testing.assert_allclose([v.value for v in mesh.attributes['.s3d_extent'].data], 30, rtol=1e-6)
+        np.testing.assert_allclose([v.value for v in mesh.attributes['.s3d_s'].data],
+                                   [v.co.z for v in mesh.vertices], atol=1e-5)
+        s3d.material(ob, 'plastic', color=lambda x, y, z, n, u: (u, 0, 1-u))
+        with tempfile.TemporaryDirectory() as tmp:
+            s3d.export(ob, Path(tmp) / 'wire.glb')
+
     def test_lengthwise_makers_and_edits(self):
         makers = [lambda: s3d.loft('loft', s3d.station(0,20,20), s3d.station(100,30,30), rings=5),
                   lambda: s3d.wire('wire', s3d.spline([(0,0,0),(20,0,100),(0,0,200)]),

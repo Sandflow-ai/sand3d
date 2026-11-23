@@ -2148,12 +2148,19 @@ def _refine(bm, size, name, selection=None):
         already_fine = already_fine and length <= longest / 2
     if already_fine:
         return
+    from ._coordinates import NAMES
+    # Edge splits and poke interpolate vertex data in BMesh. Interior row
+    # points created below need their construction labels supplied explicitly
+    # on the whole-surface path. The selected-face path already interpolates.
+    layers = []
+    if selection is None:
+        layers = [layer for name in NAMES if (layer := bm.verts.layers.float.get(name)) is not None]
     plans, added = [], 0
     faces = [f for f in bm.faces if selection is None or f[selection]]
     for k, f in enumerate(faces):
         corners = list(f.verts)
         sides = [cuts[loop.edge] for loop in f.loops]
-        rows = _rows(corners, sides, longest) if len(corners) == 3 else []
+        rows = _rows(corners, sides, longest, layers) if len(corners) == 3 else []
         inside = sum(n - 1 for *_, n in rows)
         boundary = sum(sides)
         if boundary == len(corners) and not inside:
@@ -2175,17 +2182,19 @@ def _refine(bm, size, name, selection=None):
             v.co = [(p * (n - k) + q * k) / n for p, q in zip(start, stop)]
             edge = next(x for x in v.link_edges if x.other_vert(v) != here)
             here = v
-    slivers = [face for face, corners, inside in plans if not _fill(bm, face, corners, inside, interpolate=selection is not None)]
+    slivers = [face for face, corners, inside in plans
+               if not _fill(bm, face, corners, inside, interpolate=selection is not None, layers=layers)]
     if slivers:                         # one operator for all: each call walks the whole mesh
         bmesh.ops.triangulate(bm, faces=slivers, quad_method="BEAUTY", ngon_method="BEAUTY")
 
 
-def _rows(corners, sides, longest):
+def _rows(corners, sides, longest, layers=()):
     """The rows of points to add inside a triangle whose sides will be cut in `sides`
     pieces, as (start, stop, pieces): rows parallel to its most cut side (the first of
     them), as many as its height over that side asks, each cut as its own length asks —
     about one point per longest² of area, however long and thin the triangle. The points
-    are the row's inner cuts. In double precision."""
+    are the row's inner cuts. In double precision. Any construction labels are
+    appended to each endpoint and interpolated with the same weights."""
     k = 0 if sides[0] >= sides[1] and sides[0] >= sides[2] else (1 if sides[1] >= sides[2] else 2)
     a, b, c = (tuple(corners[(k + i) % 3].co) for i in range(3))
     ab = [q - p for p, q in zip(a, b)]
@@ -2200,6 +2209,9 @@ def _rows(corners, sides, longest):
         return []
     height = math.sqrt(sum(x * x for x in cross)) / base
     count = max(1, math.ceil(height / longest))
+    if layers:
+        a, b, c = (co + tuple(corners[(k + i) % 3][layer] for layer in layers)
+                   for i, co in enumerate((a, b, c)))
     rows = []
     for r in range(1, count):
         t = r / count
@@ -2208,7 +2220,7 @@ def _rows(corners, sides, longest):
     return rows
 
 
-def _fill(bm, face, corners, inside, interpolate=False):
+def _fill(bm, face, corners, inside, interpolate=False, layers=()):
     """Replace the triangle `face` — its sides already cut, `corners` its three corners — by
     triangles through its side points and the points `inside` it, by the constrained
     Delaunay triangulation caps use (in millimetres). False, the face left as it is, for a
@@ -2218,21 +2230,23 @@ def _fill(bm, face, corners, inside, interpolate=False):
     a, b, c = (v.co.copy() for v in corners)
     normal = (b - a).cross(c - a)
     loop = list(face.verts)
-    inside = [Vector(p) for p in inside]
+    points = [Vector(p[:3]) for p in inside]
     tris = None
     if normal.length > 0:
         normal.normalize()
         u = normal.orthogonal().normalized()
         w = normal.cross(u)
-        flat = [(p.dot(u), p.dot(w)) for p in [v.co for v in loop] + inside]
+        flat = [(p.dot(u), p.dot(w)) for p in [v.co for v in loop] + points]
         tris = _triangles(flat, len(loop))
     if not tris:
         return False
     verts = list(loop)
-    for p in inside:
+    for p, sample in zip(points, inside):
         v = bm.verts.new(p)
         if interpolate:
             v.copy_from_face_interp(face)
+        for layer, value in zip(layers, sample[3:]):
+            v[layer] = value
         verts.append(v)
     for t in tris:
         bm.faces.new([verts[i] for i in t], face)
