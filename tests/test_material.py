@@ -432,6 +432,16 @@ class Absorption(unittest.TestCase):
         with self.assertRaises(ValueError):
             s3d.material(a, "water", thickness="deep")
 
+    def test_fix44_glb_thickness_uses_exported_instances(self):
+        a = s3d.material(s3d.box("water", 2, 2, 2), "water")
+        b = s3d.material(s3d.box("deep", 4, 4, 4), "water")
+        c = s3d.copy(a)
+        self.assertEqual(a.data, c.data)
+        s3d.material(s3d.box("excluded", 200, 200, 200), "water")
+        doc, _ = export(s3d.group("ponds", a, b, c))
+        volume = doc["materials"][0]["extensions"]["KHR_materials_volume"]
+        self.assertAlmostEqual(volume["thicknessFactor"], 2 * (2 * 8 + 64) / (2 * 24 + 96), places=6)
+
     def test_overrides_disable_and_invalid_values(self):
         ob = s3d.box("pane", 10, 10, 10)
         s3d.material(ob, "glass", absorb="#aabbcc", absorb_distance=20, thickness=4,
@@ -460,7 +470,7 @@ class Absorption(unittest.TestCase):
         color = tuple(node.inputs["Color"].default_value)
         density = node.inputs["Density"].default_value
         with self.assertRaises(RuntimeError):
-            with materials.volume_export():
+            with materials.volume_export([ob]):
                 raise RuntimeError("failed")
         self.assertEqual(tuple(node.inputs["Color"].default_value), color)
         self.assertEqual(node.inputs["Density"].default_value, density)

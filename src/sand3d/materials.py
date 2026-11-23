@@ -18,6 +18,7 @@ import difflib
 import json
 import inspect
 import math
+from collections import Counter
 from contextlib import contextmanager
 
 import bpy
@@ -547,7 +548,7 @@ def exporting(root, mode="material", *, members=None):
 
 
 @contextmanager
-def volume_export():
+def volume_export(parts):
     """Lend glTF's attenuation parameters; restore Cycles even on export failure.
 
     The exporter copies colour and reciprocal density literally. Distance is in
@@ -555,11 +556,15 @@ def volume_export():
     glTF has no scattering: a scattering medium lends its total attenuation,
     absorption plus scattering, over the distance that dims its densest channel to 1/e.
     """
+    meshes = {}
+    for ob in parts:
+        if ob.type == "MESH":
+            for mat in set(ob.data.materials):
+                if mat is not None and TAG in mat and mat.use_nodes:
+                    meshes.setdefault(mat, Counter())[ob.data] += 1
     saved = []
     try:
-        for mat in bpy.data.materials:
-            if TAG not in mat or not mat.use_nodes:
-                continue
+        for mat, instances in meshes.items():
             node = mat.node_tree.nodes.get("Absorption")
             if node is None:
                 continue
@@ -583,28 +588,26 @@ def volume_export():
                               if n.type == "GROUP" and n.node_tree and n.node_tree.name == "glTF Material Output")
                 socket = output.inputs["Thickness"]
                 saved.append((socket, socket.default_value))
-                socket.default_value = _auto_thickness(mat)
+                socket.default_value = _auto_thickness(instances)
         yield
     finally:
         for socket, value in saved:
             socket.default_value = value
 
 
-def _auto_thickness(mat):
+def _auto_thickness(instances):
     """2 x volume / area of the meshes wearing `mat`, in mesh units: a slab's thickness.
 
-    Summed over every mesh with the material, so one value per material; a mesh
+    Summed over exported instances with the material, so one value per material; a mesh
     without volume (open or empty) contributes nothing. Falls back to one metre."""
     import bmesh
     volume = area = 0.0
-    for me in sorted({ob.data for ob in bpy.data.objects
-                      if ob.type == "MESH" and any(s.material == mat for s in ob.material_slots)},
-                     key=lambda m: m.name):
+    for me, count in sorted(instances.items(), key=lambda pair: pair[0].name):
         bm = bmesh.new()
         bm.from_mesh(me)
         v = abs(bm.calc_volume(signed=False))
         if v > 0:
-            volume += v
-            area += sum(f.calc_area() for f in bm.faces)
+            volume += count * v
+            area += count * sum(f.calc_area() for f in bm.faces)
         bm.free()
     return 2 * volume / area if volume > 0 and area > 0 else _core.mm(1000)

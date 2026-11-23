@@ -121,8 +121,9 @@ def _export(root, path, colors):
         usd.write_usda(root, path)
         return
     mech = urdf.Mechanism(root)
-    with materials.exporting(root, colors, members=mech.members), materials.volume_export():
-        return _write_glb(mech, path)
+    with materials.exporting(root, colors, members=mech.members):
+        with materials.volume_export(mech.members):
+            return _write_glb(mech, path)
 
 
 def _write_glb(mech, path):
