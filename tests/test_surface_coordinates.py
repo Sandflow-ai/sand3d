@@ -95,6 +95,9 @@ class Surfaces(unittest.TestCase):
         a = s3d.box("A", 2, 2, 2)
         b = s3d.at(s3d.box("B", 2, 2, 2), z=40)
         lot = [a, (b,)]
+        s3d.material(a, "oak")
+        override = bpy.data.materials.new("override")
+        a.data.materials.append(override)
         a.data.polygons[0].use_smooth = True
         meshes = a.data, b.data
         snapshot = [tuple(v.co) for part in (a, b) for v in part.data.vertices]
@@ -106,6 +109,7 @@ class Surfaces(unittest.TestCase):
         self.assertEqual(snapshot, [tuple(v.co) for part in (a, b) for v in part.data.vertices])
         self.assertEqual(meshes, (a.data, b.data))
         self.assertTrue(a.data.polygons[0].use_smooth)
+        self.assertEqual(a.data.materials[1], override)
 
     def test_lay_empty_carrier_warns_and_leaves_patch_unchanged(self):
         carrier = s3d.tufts("vide", [], 1, 1)

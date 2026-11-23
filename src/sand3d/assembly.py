@@ -174,7 +174,7 @@ def _write_glb(mech, path):
             with lights.gltf_spot_cones(lit):
                 bpy.ops.export_scene.gltf(filepath=str(path), export_format="GLB", collection=coll.name,
                                           export_extras=True, export_lights=bool(lit),
-                                           export_vertex_color="MATERIAL",
+                                          export_vertex_color="MATERIAL",
                                           export_materials="EXPORT" if dressed else "NONE")
         finally:
             coll.name = "s3d~export"
