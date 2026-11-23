@@ -1116,21 +1116,31 @@ def snap(targets, points, direction=None):
     Frames on the surface of `targets` (one object or several), one per point or
     frame of `points`: at the nearest spot, or where a line from it running along
     `direction` ("-Z", "+X"… or (x, y, z)) first meets the surface; each frame's normal
-    points out of it. Points a line misses are dropped."""
+    points out of it. Points a line misses are dropped. Meshes without faces
+    are skipped; if none has faces, warn and return no frames."""
+    from .edit import _is_strict, _warn
     ray = None if direction is None else _ray(direction)
     size = _core.in_mm(1.0)   # Blender's BVH pads its boxes in its own units, which breaks ties: search in mm
-    trees = [_core.mm_tree(ob, matrix) for ob, matrix in _surface_parts(targets, "snap")]
+    trees = [_core.mm_tree(ob, matrix) for ob, matrix in _surface_parts(targets, "snap") if ob.data.polygons]
+    message = ("snap: could not find a surface point on the target meshes" if trees
+               else "snap: target meshes have no faces")
+    warned = False
     out = []
     for p in points:
         p = Vector(p.origin if isinstance(p, Frame) else p) * size
-        if direction is None:
-            found = [t.find_nearest(p) for t in trees]
-            loc, normal, _, _ = min((f for f in found if f[0] is not None), key=lambda f: f[3])
+        if ray is None:
+            hits = (t.find_nearest(p) for t in trees)
         else:
-            found = [f for f in (t.ray_cast(p, ray) for t in trees) if f[0] is not None]
-            if not found:
-                continue
-            loc, normal, _, _ = min(found, key=lambda f: f[3])
+            hits = (t.ray_cast(p, ray) for t in trees)
+        found = [hit for hit in hits if hit[0] is not None]
+        if not found:
+            if ray is None and _is_strict():
+                raise ValueError(message)
+            if (ray is None or not trees) and not warned:
+                _warn(message, UserWarning)
+                warned = True
+            continue
+        loc, normal, _, _ = min(found, key=lambda f: f[3])
         out.append(Frame(loc / size, normal))
     return Frames(out)
 
