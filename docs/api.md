@@ -124,7 +124,7 @@ lay(ob, over, reach=None, *, step=None)  # Seat on a surface along own Z, retain
 ```python
 Frame(origin=(0, 0, 0), normal=(0, 0, 1), up=None)  # A place to build on
 .offset(d) .turn(rx=0, ry=0, rz=0) .move(x=0, y=0, z=0) .point(x=0, y=0, z=0)
-Frames(frames)  # A list of frames that moves, turns, offsets and jitters as one; what distributors return
+Frames(iterable=(), /)  # A list of frames that moves, turns, offsets and jitters as one; what distributors return
 ob.face(which)  # Frame of a named face, or furthest along "+Z"
 ob.edge(which)  # Path along the edges named which, in the space ob is in: the longest run (as long: the one reaching furthest -X, then -Y, -Z), closed if it closes
 bbox(ob, which)  # Frame on its bounding box: a side "+X", an edge "+X-Y", a corner "+X-Y+Z"
