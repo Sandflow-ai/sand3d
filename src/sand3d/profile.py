@@ -6,6 +6,7 @@ turns sharply there: the edges a solid grows from those points are its real
 edges, the ones `fillet` and `chamfer` reach by name; the others only facet a
 curve. `p + q` is the union of two profiles, `p - q` the first minus the second.
 """
+import heapq
 import math
 
 import bpy
@@ -712,26 +713,38 @@ def _poly(pts, fillet, chamfer, said):
 
 
 def _fit(setbacks, over, minimums=None):
-    """Scale the available setback above each corner's minimum to fit its sides.
-    Return factors corner -> f and the tightest side (f, i, j, length)."""
-    minimums = minimums or {}
-    shares, tightest = {}, None
-    for i, j, used, length in over:
-        f = length / used
-        reserved = minimums.get(i, 0) + minimums.get(j, 0)
-        excess = used - reserved
-        share = max(0.0, length - reserved) / excess if excess > 0 else 0.0
+    """Grow the requested setbacks above their minima at the same fraction of each
+    request. Freeze both ends of a side when it fills, so corners with room keep growing.
+    Return factors corner -> f and the tightest side (i, j, length) for the warning."""
+    if minimums is None:
+        minimums = {i: t[0] for i, t in setbacks.items() if t[0] < 0}
+    rates = {i: t[0] - minimums.get(i, 0) for i, t in setbacks.items()}
+    frozen = {}
+
+    def saturation(i, j, length):
+        fixed = sum(frozen.get(k, minimums.get(k, 0)) for k in (i, j))
+        rate = sum(rates.get(k, 0) for k in (i, j) if k not in frozen)
+        return max(0.0, length - fixed) / rate if rate > 0 else math.inf
+
+    # Only initially overflowing sides can fill before the requests are met. When a
+    # corner freezes, the adjacent side may fill later, so refresh its event on pop.
+    sides = [(saturation(i, j, length), i, j, length) for i, j, _, length in over]
+    heapq.heapify(sides)
+    while sides:
+        f, i, j, length = heapq.heappop(sides)
+        if f >= 1:
+            break
+        later = saturation(i, j, length)
+        if later > f:
+            heapq.heappush(sides, (later, i, j, length))
+            continue
         for k in (i, j):
-            if k in setbacks:
-                shares[k] = min(shares.get(k, 1.0), share)
-        if tightest is None or f < tightest[0]:
-            tightest = (f, i, j, length)
-    factors = {}
-    for k, share in shares.items():
-        t = setbacks[k][0]
-        minimum = minimums.get(k, 0)
-        factors[k] = (minimum + (t - minimum) * share) / t
-    return factors, tightest
+            if k not in frozen and rates.get(k, 0) > 0:
+                frozen[k] = minimums.get(k, 0) + rates[k] * f
+
+    _, i, j, length = min((length / used, i, j, length) for i, j, used, length in over)
+    factors = {k: t / setbacks[k][0] for k, t in frozen.items()}
+    return factors, (i, j, length)
 
 
 def _said(q):
@@ -768,15 +781,16 @@ def _corners(pts, sharp, lines, src, amount, kind, said=None):
     if over:
         i, j, used, length = over[0]
         error = ValueError(f"{kind} too large for the side from {pts[i]} to {pts[j]} ({used:.4g} > {length:.4g})")
-        if kind != "fillet":
+        from .edit import _clamped, _is_strict
+        if kind != "fillet" or _is_strict():
             raise error
-        factors, (f, i, j, length) = _fit(trims, over)
-        r = max(trims[k][1] for k in (i, j) if k in trims)
+        factors, (i, j, length) = _fit(trims, over)
+        k = max((k for k in (i, j) if k in factors), key=lambda k: trims[k][1])
+        r = trims[k][1]
         verb, name = said
         where = "" if verb == "rect" else f" from {_said(pts[i])} to {_said(pts[j])}"
-        from .edit import _clamped
         _clamped(error, f"{verb}: {name}={r:g} too large for the side of {length:.4g}{where}; clamped to "
-                        f"{r * f:.4g}")
+                        f"{r * factors[k]:.4g}")
         for k, fk in factors.items():
             t, value, u, v = trims[k]
             trims[k] = (t * fk, value * fk, u, v)

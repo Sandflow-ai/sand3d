@@ -568,8 +568,8 @@ def _filleted(points, closed, amount, least=0.0):
             raise ValueError(f"{error}: the largest fillet that fits at {said(pts[k])}, {largest:.4g}, is tighter "
                              f"than the wire's radius {least:g} (d / 2), and a tube bent tighter than its radius "
                              f"folds on itself")
-        factors, (_, i, j, length) = _fit(corners, over, minimums)
-        k = max((k for k in (i, j) if k in corners and factors[k] < 1), key=lambda k: corners[k][1])
+        factors, (i, j, length) = _fit(corners, over, minimums)
+        k = max((k for k in (i, j) if k in factors), key=lambda k: corners[k][1])
         r = corners[k][1]
         _clamped(error, f"wire: fillet={r:g} too large for the side of {length:.4g} from {_said(pts[i])} to "
                         f"{_said(pts[j])}; clamped to {r * factors[k]:.4g}")

@@ -79,6 +79,13 @@ class Clamped(unittest.TestCase):
         self.assertEqual(mesh(ob), mesh(s3d.wire("fits", pts, 4, fillet=[0, 8, 2, 0])))
         self.assertTrue(closed_volume(ob)[0])
 
+    def test_wire_reuses_length_freed_by_a_shorter_side(self):
+        pts = [(0, 0), (0, 2), (10, 2), (10, 22)]
+        with self.assertWarns(ClampedRadius):
+            ob = s3d.wire("shared", pts, 1, fillet=10)
+        self.assertEqual(mesh(ob), mesh(s3d.wire("fits", pts, 1, fillet=[0, 2, 8, 0])))
+        self.assertTrue(closed_volume(ob)[0])
+
     def test_a_wire_clamped_tighter_than_its_radius_raises(self):
         with self.assertRaisesRegex(ValueError, r"^wire: fillet too large for the side from \(0.0, 0.0, 650.0\) to "
                                                 r"\(-30.0, 0.0, 650.0\) \(60 > 30\): the largest fillet that fits at "
