@@ -12,7 +12,7 @@
 <h1>The whole API, for a prompt</h1>
 <div class="bande"></div>
 <p class="chapo">Everything a model needs to write sand3d: the rules of the vocabulary, every signature with
-one line on it, and worked examples. 11 383 tokens (o200k_base). Paste it in a system prompt as it is.</p>
+one line on it, and worked examples. 11 402 tokens (o200k_base). Paste it in a system prompt as it is.</p>
 <div class="actions"><button class="btn plein" data-copy="raw">Copy for your prompt</button>
 <a class="btn" href="api.md">api.md, raw</a><a class="btn" href="llms.txt">llms.txt</a></div>
 <p><code>import sand3d as s3d</code>; mm, or <code>units(&quot;m&quot;)</code> first. Makers take a name, return the solid; edits return
@@ -460,10 +460,11 @@ space the part is in, as <code>snap</code> and <code>scatter(part)</code> give t
 piece&rsquo;s Z = 0. A group uses its root frame, and a list seats each item. If a ray misses, seating
 uses the nearest surface point, which can also move the point laterally. <code>reach</code> bounds the
 distance from the base plane point to the surface (None is unbounded).
-If any part exceeds it or the carrier has no faces, the whole call leaves the original meshes
-unchanged, including when <code>step</code> is set. These cases and missed vertical projections emit
-<code>sand3d.edit.LayWarning</code> at the call, or raise in strict mode
-(<code>SAND3D_STRICT=1</code> or <code>sand3d.edit.strict()</code>). Seating a piece on itself is refused.</p>
+If any part exceeds <code>reach</code>, <code>lay</code> raises <code>ValueError</code>. A carrier without faces and missed vertical
+projections emit <code>sand3d.edit.LayWarning</code> at the call, or raise in strict mode
+(<code>SAND3D_STRICT=1</code> or <code>sand3d.edit.strict()</code>). A reach failure, a carrier without faces, or any
+strict-mode failure leaves the whole call&rsquo;s meshes unchanged, including when <code>step</code> is set.
+Seating a piece on itself is refused.</p>
 <h2 id="filling-a-container">Filling a container</h2>
 <p><code>fill("soil", pot, 80)</code> makes a new solid in the voids retained below height 80 in the container&rsquo;s own
 frame (a part, group or assembly); the container is kept. A list of parts needs a <code>Frame</code>, e.g.
@@ -1019,10 +1020,11 @@ space the part is in, as `snap` and `scatter(part)` give them. `r` and `depth` s
 piece&#x27;s Z = 0. A group uses its root frame, and a list seats each item. If a ray misses, seating
 uses the nearest surface point, which can also move the point laterally. `reach` bounds the
 distance from the base plane point to the surface (None is unbounded).
-If any part exceeds it or the carrier has no faces, the whole call leaves the original meshes
-unchanged, including when `step` is set. These cases and missed vertical projections emit
-`sand3d.edit.LayWarning` at the call, or raise in strict mode
-(`SAND3D_STRICT=1` or `sand3d.edit.strict()`). Seating a piece on itself is refused.
+If any part exceeds `reach`, `lay` raises `ValueError`. A carrier without faces and missed vertical
+projections emit `sand3d.edit.LayWarning` at the call, or raise in strict mode
+(`SAND3D_STRICT=1` or `sand3d.edit.strict()`). A reach failure, a carrier without faces, or any
+strict-mode failure leaves the whole call's meshes unchanged, including when `step` is set.
+Seating a piece on itself is refused.
 
 ## Filling a container
 

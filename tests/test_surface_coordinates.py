@@ -104,8 +104,8 @@ class Surfaces(unittest.TestCase):
         with edit.strict(), self.assertRaisesRegex(ValueError, "B.*beyond reach"):
             s3d.lay(lot, carrier, reach=3, step=1)
         self.assertEqual(snapshot, [tuple(v.co) for part in (a, b) for v in part.data.vertices])
-        with edit.strict(False), s3d.facets(6), self.assertWarnsRegex(edit.LayWarning, "B.*beyond reach"):
-            self.assertIs(s3d.lay(lot, carrier, reach=3, step=1), lot)
+        with edit.strict(False), s3d.facets(6), self.assertRaisesRegex(ValueError, "B.*beyond reach"):
+            s3d.lay(lot, carrier, reach=3, step=1)
         self.assertEqual(snapshot, [tuple(v.co) for part in (a, b) for v in part.data.vertices])
         self.assertEqual(meshes, (a.data, b.data))
         self.assertTrue(a.data.polygons[0].use_smooth)

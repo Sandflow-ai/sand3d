@@ -317,7 +317,8 @@ def strict(on=True):
     NothingCut (on) or warns with MissedCut and leaves the part as it was (off); a corner
     radius too large for its side (`rect(r=)`, `poly(fillet=)`, `wire(fillet=)`) raises
     ValueError (on) or warns with ClampedRadius and is clamped to the largest that fits (off).
-    A missed projection or failed seating in lay raises (on) or gives LayWarning (off).
+    A missed projection or a carrier without a surface in lay raises (on) or gives
+    LayWarning (off). Exceeding reach always raises ValueError.
 
     Outside any block, SAND3D_STRICT in the environment decides: 1, true, yes or on make
     it raise; 0, false, no, off or nothing make it warn, as a boolean that misses does in
@@ -2775,7 +2776,8 @@ def lay(ob, over, reach=None, *, step=None):
 
     A positive step subdivides faces before seating until every edge is at most that length;
     0 leaves the topology. reach bounds the travel from the base plane to the surface;
-    None has no limit. A reach failure leaves all the pieces and their topology unchanged.
+    None has no limit. Exceeding reach raises ValueError and leaves all the pieces and
+    their topology unchanged.
     Projection and tessellation use the parts' own frames, so a common translation and
     rotation do not change the result in the piece's frame.
     """
@@ -2903,7 +2905,7 @@ def _lay(ob, over, reach=None, *, step=None):
                     distance = (spot-base).length
                     if reach is not None and distance > reach + _core.mm(1e-6):
                         name = _core.given_name(part)
-                        raise _LayFailure(f'lay: {name!r} needs distance {distance:g}, beyond reach {reach:g}')
+                        raise ValueError(f'lay: {name!r} needs distance {distance:g}, beyond reach {reach:g}')
                     positions.append(back @ (spot + up * height))
                 if misses:
                     name = _core.given_name(part)

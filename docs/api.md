@@ -477,10 +477,11 @@ space the part is in, as `snap` and `scatter(part)` give them. `r` and `depth` s
 piece's Z = 0. A group uses its root frame, and a list seats each item. If a ray misses, seating
 uses the nearest surface point, which can also move the point laterally. `reach` bounds the
 distance from the base plane point to the surface (None is unbounded).
-If any part exceeds it or the carrier has no faces, the whole call leaves the original meshes
-unchanged, including when `step` is set. These cases and missed vertical projections emit
-`sand3d.edit.LayWarning` at the call, or raise in strict mode
-(`SAND3D_STRICT=1` or `sand3d.edit.strict()`). Seating a piece on itself is refused.
+If any part exceeds `reach`, `lay` raises `ValueError`. A carrier without faces and missed vertical
+projections emit `sand3d.edit.LayWarning` at the call, or raise in strict mode
+(`SAND3D_STRICT=1` or `sand3d.edit.strict()`). A reach failure, a carrier without faces, or any
+strict-mode failure leaves the whole call's meshes unchanged, including when `step` is set.
+Seating a piece on itself is refused.
 
 ## Filling a container
 
