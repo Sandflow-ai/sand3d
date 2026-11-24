@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Writing an assembly · sand3d</title>
+<link rel="icon" href="../assets/sandflow-symbol-black.svg">
+<link rel="stylesheet" href="../assets/site.css"><link rel="stylesheet" href="../assets/docs.css">
+</head><body><header class="top"><div class="topin"><button class="burger" id="burger" aria-label="Documentation menu" aria-controls="side" aria-expanded="false"><span></span><span></span><span></span></button>
+<a class="titre" href="../index.html"><img src="../assets/sandflow-symbol-black.svg" alt="">sand3d</a>
+<nav class="main" aria-label="Main"><a class="on" href="../reference/profiles.html">Docs</a><a class="" href="../gallery.html">Gallery</a><a class="" href="../llms.html">For LLMs</a></nav>
+<span class="right"><span class="ver">1.7.0</span><a class="gh" href="https://github.com/Sandflow-ai/sand3d"><img src="../assets/github.svg" alt="">GitHub</a></span>
+</div></header><div class="shell"><aside class="side" id="side"><nav aria-label="Documentation"><p class="grp">Start</p><ul><li><a class="" href="../index.html">Overview</a></li><li><a class="" href="../start/install.html">Install and a first program</a></li><li><a class="" href="../start/concepts.html">Concepts</a></li><li class="cur"><a href="../start/assembly.html" aria-current="page">Writing an assembly</a><ul class="subs"><li><a href="#head">1. Make the head a table of contents</a></li><li><a href="#parts">2. Write one function per distinct part</a></li><li><a href="#dimensions">3. Name each dimension once</a></li><li><a href="#placement">4. Place each part once in its parent&#x27;s frame</a></li><li><a href="#repeat">5. Repeat with frames and mirror a copy</a></li><li><a href="#vocabulary">6. Use the verb that names the shape</a></li><li><a href="#materials">7. Give visible parts materials</a></li><li><a href="#joints">8. Reuse one frame per joint</a></li><li><a href="#natural">Natural forms</a></li><li><a href="#weight-stack">A larger plan with optional details</a></li></ul></li></ul><p class="grp">Reference</p><ul><li><a class="" href="../reference/profiles.html">Profiles and outlines</a></li><li><a class="" href="../reference/solids.html">Solids</a></li><li><a class="" href="../reference/paths.html">Paths and fields</a></li><li><a class="" href="../reference/edits.html">Edits</a></li><li><a class="" href="../reference/frames.html">Frames and placement</a></li><li><a class="" href="../reference/distributions.html">Distributions</a></li><li><a class="" href="../reference/materials.html">Materials and media</a></li><li><a class="" href="../reference/assembly.html">Articulation and assembly</a></li><li><a class="" href="../reference/export.html">Export and settings</a></li></ul><p class="grp">Guides</p><ul><li><a class="" href="../guides/water.html">Water</a></li><li><a class="" href="../guides/fire-smoke.html">Fire and smoke</a></li><li><a class="" href="../guides/trees.html">Trees, grass and fur</a></li><li><a class="" href="../guides/terrain.html">Terrain and ground</a></li><li><a class="" href="../guides/organic.html">Organic forms</a></li><li><a class="" href="../guides/colour.html">Colour and weathering</a></li><li><a class="" href="../guides/glass.html">Glass and ice</a></li><li><a class="" href="../guides/resolution.html">Resolution and cost</a></li></ul><p class="grp">For LLMs</p><ul><li><a class="" href="../index.html">Overview</a></li><li><a class="" href="../llms.html">For LLMs</a></li></ul><ul class="mobile-gallery"><li><a class="" href="../gallery.html">Gallery</a></li></ul></nav></aside><div class="scrim" id="scrim"></div>
+<main class="doc"><p class="crumb">Start <span>›</span> Writing an assembly</p><details class="toc-m"><summary>On this page</summary><ul><li><a href="#head">1. Make the head a table of contents</a></li><li><a href="#parts">2. Write one function per distinct part</a></li><li><a href="#dimensions">3. Name each dimension once</a></li><li><a href="#placement">4. Place each part once in its parent&#x27;s frame</a></li><li><a href="#repeat">5. Repeat with frames and mirror a copy</a></li><li><a href="#vocabulary">6. Use the verb that names the shape</a></li><li><a href="#materials">7. Give visible parts materials</a></li><li><a href="#joints">8. Reuse one frame per joint</a></li><li><a href="#natural">Natural forms</a></li><li><a href="#weight-stack">A larger plan with optional details</a></li></ul></details><h1>Writing an assembly</h1><div class="bande"></div><p class="chapo">Put the plan first, then the details, then the part builders. Each part has its own dimensions and origin; the head explains how they belong together.</p><h2 id="head">1. Make the head a table of contents</h2><p>The first function is named after the object. It calls part builders, places their results and returns <a class="vlink" href="../reference/assembly.html#assembly"><code>assembly</code></a>; it does not build geometry. Runners call this first function. Keep module-level code to imports and function definitions; a separate runner performs export.</p><p>A picnic table's head should read as tabletop, end frame, mirrored frame, benches. A turnstile head should show the frame, rotor and pawl with their pivots beside them. Extrusions buried in the head hide this plan and make parts harder to remove or reuse. Details that remain optional can hang from an assembly with <a class="vlink" href="../reference/assembly.html#attach"><code>attach</code></a>.</p><p>The chair separates a plan, published anchors and removable details. Delete its <code>add_back</code> call and the same plan makes a stool.</p><article class="scene" id="start_chair"><h3>Chair: plan, details, parts</h3><div class="stage "><img src="../assets/examples/start_chair.webp" alt="Chair: plan, details, parts" loading="lazy"><button type="button" class="activate" data-glb="../assets/examples/start_chair.glb" aria-label="Chair: plan, details, parts: turn in 3D"><span class="hint">Turn in 3D</span></button><span class="msg" role="status"></span></div><p>Four legs and a seat establish the plan; the back and rails are attached afterwards. The render adds a fallback material.</p><details><summary>The program, 60 lines</summary><pre class="code"><span class="s">&quot;&quot;&quot;A chair, written as an assembly: the plan first, then the details, then the parts.
+
+`chair` reads as a table of contents. `chair_frame` is the plan: the seat on its legs,
+and the anchors the details need. Each `add_` function hangs one detail on those
+anchors: delete its line and nothing else moves — without `add_back` it is a stool.
+The parts come last, each built at its own origin, standing on z = 0.
+&quot;&quot;&quot;</span>
+<span class="k">import</span> sand3d <span class="k">as</span> s3d
+
+
+<span class="k">def</span> chair(width=<span class="n">440</span>, depth=<span class="n">420</span>, seat_h=<span class="n">450</span>):
+    chair = chair_frame(width, depth, seat_h)   <span class="c"># the plan</span>
+    add_back(chair)                             <span class="c"># the details, on the plan&#x27;s anchors</span>
+    add_rails(chair)
+    <span class="k">return</span> chair.root
+
+
+<span class="c"># ---------------------------------------------------------------- the plan</span>
+
+<span class="k">def</span> chair_frame(width, depth, seat_h, t=<span class="n">30</span>, inset=<span class="n">35</span>):
+    <span class="s">&quot;&quot;&quot;The seat on four legs. Publishes the width, the seat&#x27;s height and the line
+    the back stands on.&quot;&quot;&quot;</span>
+    legs = s3d.<span class="vb">at</span>(leg(seat_h - t), on=s3d.<span class="vb">grid</span>(<span class="n">2</span>, <span class="n">2</span>, width - <span class="n">2</span> * inset, depth - <span class="n">2</span> * inset))
+    seat = s3d.<span class="vb">at</span>(seat_board(width, depth, t), z=seat_h - t)
+    <span class="k">return</span> s3d.<span class="vb">assembly</span>(<span class="s">&quot;chair&quot;</span>, seat, legs, width=width, depth=depth, seat_h=seat_h, inset=inset,
+                        back_y=depth / <span class="n">2</span> - <span class="n">20</span>)
+
+
+<span class="c"># ---------------------------------------------------------------- the details</span>
+
+<span class="k">def</span> add_back(chair, h=<span class="n">420</span>, t=<span class="n">24</span>, button_d=<span class="n">16</span>):
+    <span class="s">&quot;&quot;&quot;A panel standing on the seat&#x27;s back edge, buttoned on its face.&quot;&quot;&quot;</span>
+    back = s3d.<span class="vb">at</span>(back_panel(chair.width - <span class="n">40</span>, h, t), y=chair.back_y, z=chair.seat_h)
+    <span class="c"># a side face&#x27;s frame starts at z = 0, below the parent&#x27;s origin, and its Y is up</span>
+    face = back.face(<span class="s">&quot;-Y&quot;</span>).move(y=chair.seat_h + h * <span class="n">0.6</span>)
+    buttons = s3d.<span class="vb">at</span>(s3d.<span class="vb">dome</span>(<span class="s">&quot;button&quot;</span>, button_d, <span class="n">5</span>), on=s3d.<span class="vb">grid</span>(<span class="n">3</span>, <span class="n">2</span>, <span class="n">100</span>, <span class="n">110</span>, on=face))
+    s3d.<span class="vb">attach</span>(chair, <span class="s">&quot;back&quot;</span>, back, buttons)
+
+
+<span class="k">def</span> add_rails(chair, d=<span class="n">18</span>, z=<span class="n">160</span>):
+    <span class="s">&quot;&quot;&quot;A rail between the front and back legs, on each side.&quot;&quot;&quot;</span>
+    <span class="c"># both=True: centred on its middle, so turned about X it spans the depth evenly</span>
+    rail = s3d.<span class="vb">extrude</span>(<span class="s">&quot;rail&quot;</span>, s3d.<span class="vb">circle</span>(d), chair.depth - <span class="n">2</span> * chair.inset, both=<span class="k">True</span>)
+    sides = s3d.<span class="vb">grid</span>(<span class="n">2</span>, <span class="n">1</span>, chair.width - <span class="n">2</span> * chair.inset, on=s3d.<span class="vb">Frame</span>((<span class="n">0</span>, <span class="n">0</span>, z)))
+    s3d.<span class="vb">attach</span>(chair, <span class="s">&quot;rails&quot;</span>, s3d.<span class="vb">at</span>(rail, rx=<span class="n">90</span>, on=sides))
+
+
+<span class="c"># ---------------------------------------------------------------- the parts</span>
+
+<span class="k">def</span> seat_board(width, depth, t):
+    <span class="k">return</span> s3d.<span class="vb">fillet</span>(s3d.<span class="vb">box</span>(<span class="s">&quot;seat&quot;</span>, width, depth, t), <span class="n">8</span>, edges=<span class="s">&quot;top&quot;</span>)
+
+
+<span class="k">def</span> leg(h, foot=<span class="n">26</span>, top=<span class="n">36</span>):
+    <span class="s">&quot;&quot;&quot;Tapered, its foot on z = 0.&quot;&quot;&quot;</span>
+    <span class="k">return</span> s3d.<span class="vb">cone</span>(<span class="s">&quot;leg&quot;</span>, foot, h, d2=top)
+
+
+<span class="k">def</span> back_panel(width, h, t):
+    <span class="k">return</span> s3d.<span class="vb">fillet</span>(s3d.<span class="vb">box</span>(<span class="s">&quot;back&quot;</span>, width, t, h), <span class="n">6</span>, edges=<span class="s">&quot;top&quot;</span>)</pre></details></article><h2 id="parts">2. Write one function per distinct part</h2><p>Build each part about its own origin. Parameters express what differs; return one object. Three differently sized levers should call one lever builder. A seesaw's matching crossrails should share one builder, with a mirrored copy for the opposite end, rather than duplicate six lines under two names.</p><div class="tablewrap"><table><thead><tr><th>How the pieces belong together</th><th>Use</th><th>Result</th></tr></thead><tbody><tr><td>Fused permanently</td><td><a class="vlink" href="../reference/edits.html#join"><code>join</code></a></td><td>One solid with the first object's material</td></tr><tr><td>Separate but moving together</td><td><a class="vlink" href="../reference/assembly.html#group"><code>group</code></a></td><td>Each keeps its mesh and material</td></tr><tr><td>Moving relative to one another</td><td><a class="vlink" href="../reference/assembly.html#joint"><code>joint</code></a> in the head</td><td>Parts connected through parent frames</td></tr></tbody></table></div><p><a class="vlink" href="../reference/assembly.html#assembly"><code>assembly</code></a> adds published anchors to a top-level group. A lone solid needs no wrapper group. Return it at its origin: if its builder places it at z = 50, a later <a class="vlink" href="../reference/frames.html#at"><code>at(..., z=100)</code></a> resets it to 100. A child inside a group retains its 50-unit offset when the group goes to 100, reaching 150. Choose this hierarchy deliberately.</p><p>The lamp publishes a <code>head</code> anchor so its shade can be attached without rebuilding the stand.</p><article class="scene" id="start_lamp"><h3>Lamp with an attached shade</h3><div class="stage "><img src="../assets/examples/start_lamp.webp" alt="Lamp with an attached shade" loading="lazy"><button type="button" class="activate" data-glb="../assets/examples/start_lamp.glb" aria-label="Lamp with an attached shade: turn in 3D"><span class="hint">Turn in 3D</span></button><span class="msg" role="status"></span></div><p>The stem stands on the base's top face. The shade attaches at the published head frame. The render adds a fallback material.</p><details><summary>The program, 14 lines</summary><pre class="code"><span class="k">import</span> sand3d <span class="k">as</span> s3d
+
+
+<span class="k">def</span> lamp(stem_h=<span class="n">300</span>):
+    base = s3d.<span class="vb">revolve</span>(<span class="s">&quot;base&quot;</span>, [(<span class="n">0</span>, <span class="n">0</span>), (<span class="n">70</span>, <span class="n">0</span>), (<span class="n">60</span>, <span class="n">20</span>), (<span class="n">0</span>, <span class="n">20</span>)])
+    stem = s3d.<span class="vb">at</span>(s3d.<span class="vb">cylinder</span>(<span class="s">&quot;stem&quot;</span>, <span class="n">12</span>, stem_h), on=base.face(<span class="s">&quot;top&quot;</span>))
+    lamp = s3d.<span class="vb">assembly</span>(<span class="s">&quot;lamp&quot;</span>, base, stem, head=s3d.<span class="vb">Frame</span>((<span class="n">0</span>, <span class="n">0</span>, <span class="n">20</span> + stem_h)))
+    add_shade(lamp)
+    <span class="k">return</span> lamp
+
+
+<span class="k">def</span> add_shade(lamp, d=<span class="n">180</span>):
+    shade = s3d.<span class="vb">shell</span>(s3d.<span class="vb">cone</span>(<span class="s">&quot;shade&quot;</span>, d, <span class="n">120</span>, d2=d / <span class="n">2</span>), <span class="n">1.5</span>, open=<span class="s">&quot;top bottom&quot;</span>)
+    s3d.<span class="vb">attach</span>(lamp, <span class="s">&quot;shade&quot;</span>, s3d.<span class="vb">at</span>(shade, on=lamp.head))</pre></details></article><h2 id="dimensions">3. Name each dimension once</h2><p>Put main dimensions in keyword arguments, in millimetres unless the program selects another unit. Write a measured value once and derive dependent values as expressions. A freezer's cavity and rim cuts should follow width, depth, height, wall, lip and slot dimensions; unrelated heights and widths break when the cabinet changes size. A collar's taper should have its own dimension, not borrow the base's fillet radius by accident.</p><p>Target 15 numeric literals per part, with a ceiling of 40. Count defaults too; exclude 0, 0.5, 1, 2, 45, 90, 180, 270 and 360. Read every argument you declare. Avoid special cases such as <code>if x == 28</code> and unexplained fractions that work only for the current measurements. Accept a slightly less exact match if fewer independent numbers make the model coherent. A joint origin copied from a source such as URDF is also a measurement: name it once.</p><p>The bracket is a small example: width, depth, thickness, hole diameter and pitch describe its purpose.</p><article class="scene" id="start_bracket"><h3>A parameterized plate</h3><div class="stage "><img src="../assets/examples/start_bracket.webp" alt="A parameterized plate" loading="lazy"><button type="button" class="activate" data-glb="../assets/examples/start_bracket.glb" aria-label="A parameterized plate: turn in 3D"><span class="hint">Turn in 3D</span></button><span class="msg" role="status"></span></div><p>The hole pitch is a dimension, not two unrelated hole coordinates. The render adds a fallback material.</p><details><summary>The program, 8 lines</summary><pre class="code"><span class="k">import</span> sand3d <span class="k">as</span> s3d
+
+
+<span class="k">def</span> bracket(w=<span class="n">80</span>, d=<span class="n">40</span>, t=<span class="n">6</span>, hole_d=<span class="n">6.6</span>, pitch=<span class="n">50</span>):
+    plate = s3d.<span class="vb">extrude</span>(<span class="s">&quot;plate&quot;</span>, s3d.<span class="vb">rect</span>(w, d, r=<span class="n">4</span>), t)
+    s3d.<span class="vb">hole</span>(plate, hole_d, on=s3d.<span class="vb">grid</span>(<span class="n">2</span>, <span class="n">1</span>, pitch, <span class="n">0</span>))
+    s3d.<span class="vb">fillet</span>(plate, <span class="n">1</span>, edges=<span class="s">&quot;top&quot;</span>)
+    <span class="k">return</span> plate</pre></details></article><h2 id="placement">4. Place each part once in its parent's frame</h2><p>The head places top-level parts with <a class="vlink" href="../reference/frames.html#at"><code>at</code></a>. Part functions place their own children. Derive a placement from a dimension when that is the relationship; use a face, <a class="vlink" href="../reference/frames.html#bbox"><code>bbox</code></a> or <a class="vlink" href="../reference/frames.html#local"><code>local</code></a> frame when contact or attachment is the relationship.</p><p>A lamp stem should stand on its base, rather than use two unrelated measured world heights. A bowl on a stem uses the stem's height. An eyeglass arm should be drawn in its own frame, not as world-coordinate spline points with the head's translation subtracted from every point. See <a href="../reference/frames.html">Frames and placement</a>.</p><h2 id="repeat">5. Repeat with frames and mirror a copy</h2><p>Use <code>on=grid(...)</code>, <a class="vlink" href="../reference/distributions.html#ring"><code>ring(...)</code></a> or <a class="vlink" href="../reference/distributions.html#along"><code>along(...)</code></a> for repeated placements. Use <a class="vlink" href="../reference/frames.html#transform"><code>transform(copy(placed), mirror=&quot;x&quot;)</code></a> for the opposite side of a pair. <a class="vlink" href="../reference/frames.html#at"><code>at</code></a> sets a place; <a class="vlink" href="../reference/frames.html#transform"><code>transform</code></a> makes the mirror image. Do not reconstruct rings with sine and cosine in a placement loop.</p><p>Three bunk-frame posts at -233, -140 and -47 hide a pitch of 93. Name the pitch and use a three-site grid centred at -140 instead. The rack shows both repetition and mirroring:</p><article class="scene" id="start_rack"><h3>A rack from one grid and one mirror</h3><div class="stage "><img src="../assets/examples/start_rack.webp" alt="A rack from one grid and one mirror" loading="lazy"><button type="button" class="activate" data-glb="../assets/examples/start_rack.glb" aria-label="A rack from one grid and one mirror: turn in 3D"><span class="hint">Turn in 3D</span></button><span class="msg" role="status"></span></div><p>The peg prototype is consumed by frame-list placement. The returned list can go directly into join. The render adds a fallback material.</p><details><summary>The program, 12 lines</summary><pre class="code"><span class="k">import</span> sand3d <span class="k">as</span> s3d
+
+
+<span class="k">def</span> rack(n=<span class="n">4</span>, pitch=<span class="n">30</span>, depth=<span class="n">40</span>, t=<span class="n">5</span>):
+    base = s3d.<span class="vb">extrude</span>(<span class="s">&quot;base&quot;</span>, s3d.<span class="vb">rect</span>(n * pitch, depth, r=<span class="n">3</span>), t)
+    pegs = s3d.<span class="vb">at</span>(s3d.<span class="vb">cylinder</span>(<span class="s">&quot;peg&quot;</span>, <span class="n">6</span>, <span class="n">20</span>), on=s3d.<span class="vb">grid</span>(n, <span class="n">1</span>, pitch), z=t)         <span class="c"># a copy per frame</span>
+    hook = s3d.<span class="vb">at</span>(s3d.<span class="vb">extrude</span>(<span class="s">&quot;hook&quot;</span>, s3d.<span class="vb">rect</span>(<span class="n">4</span>, <span class="n">12</span>), <span class="n">12</span>), x=n * pitch / <span class="n">2</span> - <span class="n">4</span>, z=t)
+    image = s3d.<span class="vb">transform</span>(s3d.<span class="vb">copy</span>(hook), mirror=<span class="s">&quot;x&quot;</span>)                                <span class="c"># its image across x = 0</span>
+    s3d.<span class="vb">join</span>(base, pegs, hook, image)                                                <span class="c"># a list is its elements</span>
+    s3d.<span class="vb">hole</span>(base, <span class="n">4</span>, on=s3d.<span class="vb">grid</span>(<span class="n">2</span>, <span class="n">1</span>, (n - <span class="n">1</span>) * pitch).move(y=depth / <span class="n">2</span> - <span class="n">6</span>))
+    s3d.<span class="vb">chamfer</span>(base, <span class="n">0.6</span>, edges=<span class="s">&quot;peg&quot;</span>)
+    <span class="k">return</span> base</pre></details></article><h2 id="vocabulary">6. Use the verb that names the shape</h2><p>Do not replace a named operation with a coordinate table. Assembly programs use neither <code>bpy</code> nor <code>bmesh</code>. A free form without a matching verb may still need points.</p><div class="tablewrap"><table><thead><tr><th>Shape</th><th>Expression</th></tr></thead><tbody><tr><td>Rotational body</td><td><a class="vlink" href="../reference/solids.html#revolve"><code>revolve(name, profile)</code></a></td></tr><tr><td>Hollow open solid</td><td><a class="vlink" href="../reference/edits.html#shell"><code>shell(ob, t=wall, open=&quot;top&quot;)</code></a></td></tr><tr><td>Bore or bolt circle</td><td><a class="vlink" href="../reference/edits.html#hole"><code>hole(ob, d=diameter, on=frames)</code></a></td></tr><tr><td>Bent tube</td><td><a class="vlink" href="../reference/solids.html#wire"><code>wire(name, path, d=diameter, fillet=radius)</code></a></td></tr><tr><td>Changing cross-section</td><td><a class="vlink" href="../reference/solids.html#loft"><code>loft(name, station(...), ...)</code></a></td></tr><tr><td>Long body drawn from views</td><td><a class="vlink" href="../reference/solids.html#body"><code>body(name, plan, top, bottom)</code></a></td></tr><tr><td>Band following a path</td><td><a class="vlink" href="../reference/profiles.html#stroke"><code>stroke(path, thickness)</code></a></td></tr></tbody></table></div><p>A <a class="vlink" href="../reference/profiles.html#station"><code>station</code></a> describes height, width, depth, x/y offset and squareness <code>n</code>: 2 for an ellipse, 4 for a rounded box. A few stations describe a taper, bulge or drift. A nail shaft can be three named sections; a tray is a box shelled open at the top. For a soup bowl, describe the outer profile and shell the revolved solid, rather than type a second inner curve point by point.</p><article class="scene" id="start_cutlery"><h3>Spoon and fork</h3><div class="stage "><img src="../assets/examples/start_cutlery.webp" alt="Spoon and fork" loading="lazy"><button type="button" class="activate" data-glb="../assets/examples/start_cutlery.glb" aria-label="Spoon and fork: turn in 3D"><span class="hint">Turn in 3D</span></button><span class="msg" role="status"></span></div><p>Two builders share a lofted handle. The spoon is hollowed; the fork intersects a slotted head with a curved plate. The render wrapper calls both builders, separates them along Y and adds a fallback material.</p><details><summary>The program, 61 lines</summary><pre class="code"><span class="s">&quot;&quot;&quot;A spoon and a fork, from generic verbs — the regression test for &quot;the vocabulary has a
+hole&quot;: MeshCoder had to hard-code both.
+
+Millimetres; the piece lies along +X from its business end, Z up. The handle is shared:
+a loft of rounded sections along a gently rising line, narrow at the neck and widening
+to a rounded end.
+&quot;&quot;&quot;</span>
+<span class="k">import</span> math
+
+<span class="k">import</span> sand3d <span class="k">as</span> s3d
+
+
+<span class="k">def</span> handle(length=<span class="n">135</span>, neck=(<span class="n">8.5</span>, <span class="n">2.6</span>), end=(<span class="n">24</span>, <span class="n">3.2</span>), rise=<span class="n">16</span>, start=(<span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>), stations=<span class="n">7</span>, end_steps=<span class="n">6</span>):
+    <span class="s">&quot;&quot;&quot;Sections from the neck to the end of the handle, square to its line; the last
+    ones close it on a half circle in plan, so the end is round.&quot;&quot;&quot;</span>
+    x0, y0, z0 = start
+    r = end[<span class="n">0</span>] / <span class="n">2</span>
+    body = length - r                      <span class="c"># where the round end begins</span>
+
+    <span class="k">def</span> place(x, width, thick):
+        u = (x - x0) / length
+        <span class="k">return</span> s3d.<span class="vb">at</span>(s3d.<span class="vb">superellipse</span>(width, thick, <span class="n">4</span>), x=x, y=y0, z=z0 + rise * (<span class="n">3</span> * u ** <span class="n">2</span> - <span class="n">2</span> * u ** <span class="n">3</span>), rz=<span class="n">90</span>)
+    sections = []
+    <span class="k">for</span> k <span class="k">in</span> range(stations):
+        u = k / (stations - <span class="n">1</span>)
+        sections.append(place(x0 + body * u, neck[<span class="n">0</span>] + (end[<span class="n">0</span>] - neck[<span class="n">0</span>]) * u ** <span class="n">1.6</span>,
+                              neck[<span class="n">1</span>] + (end[<span class="n">1</span>] - neck[<span class="n">1</span>]) * u))
+    <span class="k">for</span> k <span class="k">in</span> range(<span class="n">1</span>, end_steps + <span class="n">1</span>):
+        a = math.radians(<span class="n">85</span> * k / end_steps)
+        sections.append(place(x0 + body + r * math.sin(a), end[<span class="n">0</span>] * math.cos(a), end[<span class="n">1</span>] * (<span class="n">1</span> - <span class="n">0.3</span> * k / end_steps)))
+    <span class="k">return</span> s3d.<span class="vb">loft</span>(<span class="s">&quot;handle&quot;</span>, *sections, follow=<span class="k">True</span>)
+
+
+<span class="k">def</span> spoon(bowl=(<span class="n">62</span>, <span class="n">42</span>), depth=<span class="n">13</span>, wall=<span class="n">1.4</span>, rim_r=<span class="n">0.5</span>):
+    <span class="s">&quot;&quot;&quot;A bowl — half an ellipsoid, hollowed, its rim softened — and the handle.&quot;&quot;&quot;</span>
+    length, width = bowl
+    cup = s3d.<span class="vb">scale</span>(s3d.<span class="vb">sphere</span>(<span class="s">&quot;bowl&quot;</span>, <span class="n">1</span>), (length, width, <span class="n">2</span> * depth))
+    s3d.<span class="vb">split</span>(cup, s3d.<span class="vb">Frame</span>((<span class="n">0</span>, <span class="n">0</span>, depth)), keep=<span class="s">&quot;below&quot;</span>)
+    cup = s3d.<span class="vb">at</span>(cup, z=-depth)                                        <span class="c"># its rim on z = 0</span>
+    s3d.<span class="vb">shell</span>(cup, wall, open=<span class="s">&quot;cut&quot;</span>)
+    s3d.<span class="vb">fillet</span>(cup, rim_r, edges=<span class="s">&quot;shell&quot;</span>)
+    <span class="k">return</span> s3d.<span class="vb">join</span>(cup, s3d.<span class="vb">at</span>(handle(start=(length / <span class="n">2</span> - <span class="n">3</span>, <span class="n">0</span>, -wall / <span class="n">2</span>)), z=<span class="n">0</span>))
+
+
+<span class="k">def</span> fork(head=(<span class="n">48</span>, <span class="n">25</span>), tines=<span class="n">4</span>, gap=<span class="n">2.2</span>, root=<span class="n">17</span>, t=<span class="n">2.2</span>, bend_r=<span class="n">140</span>):
+    <span class="s">&quot;&quot;&quot;A flat head cut into `tines` from its tip back to `root`, bent to a curve by
+    keeping what a curved plate shares with it — and the handle.&quot;&quot;&quot;</span>
+    length, width = head
+    outline = s3d.<span class="vb">poly</span>([(-length, -width / <span class="n">2</span>), (<span class="n">0</span>, -width / <span class="n">2</span> + <span class="n">3</span>), (<span class="n">8</span>, -<span class="n">4.5</span>), (<span class="n">8</span>, <span class="n">4.5</span>), (<span class="n">0</span>, width / <span class="n">2</span> - <span class="n">3</span>),
+                        (-length, width / <span class="n">2</span>)], fillet=[<span class="n">4</span>, <span class="n">0</span>, <span class="n">3</span>, <span class="n">3</span>, <span class="n">0</span>, <span class="n">4</span>])
+    pitch = width / tines
+    <span class="k">for</span> k <span class="k">in</span> range(<span class="n">1</span>, tines):
+        y = -width / <span class="n">2</span> + k * pitch
+        outline = outline - s3d.<span class="vb">at</span>(s3d.<span class="vb">slot</span>(<span class="n">2</span> * (length - root) + gap, gap), x=-length, y=y)
+    prism = s3d.<span class="vb">extrude</span>(<span class="s">&quot;head&quot;</span>, outline, <span class="n">60</span>, both=<span class="k">True</span>)
+    steps = <span class="n">24</span>
+    curve = [(bend_r * math.sin(a), <span class="n">0</span>, bend_r * (<span class="n">1</span> - math.cos(a)))       <span class="c"># through the neck, rising to the tips</span>
+             <span class="k">for</span> a <span class="k">in</span> (-<span class="n">0.42</span> + <span class="n">0.5</span> * k / steps <span class="k">for</span> k <span class="k">in</span> range(steps + <span class="n">1</span>))]
+    plate = s3d.<span class="vb">sweep</span>(<span class="s">&quot;bend&quot;</span>, s3d.<span class="vb">rect</span>(t, <span class="n">4</span> * width), curve)
+    s3d.<span class="vb">intersect</span>(prism, plate)
+    <span class="k">return</span> s3d.<span class="vb">join</span>(prism, handle(start=(<span class="n">6</span>, <span class="n">0</span>, -t / <span class="n">4</span>)))</pre></details></article><h2 id="materials">7. Give visible parts materials</h2><p>When appearance matters, assign each part a material and colour once, before repeating it. Shape-only CAD data can omit materials. On a group, <a class="vlink" href="../reference/materials.html#material"><code>material</code></a> reaches descendants without their own material; the nearest material assignment wins.</p><p><a class="vlink" href="../reference/edits.html#join"><code>join</code></a> keeps the first object's material. Join only what should share one colour; use <a class="vlink" href="../reference/assembly.html#group"><code>group</code></a> to preserve separate materials. A row of oak planks should receive its material before the grid creates copies. See <a href="../reference/materials.html">Materials and media</a>.</p><article class="scene" id="start_tufted_chair"><h3>Tufted chair with removable trim</h3><div class="stage "><img src="../assets/examples/start_tufted_chair.webp" alt="Tufted chair with removable trim" loading="lazy"></div><p>Lofts describe the seat and back, dents form the tufts, and anchors carry buttons and rows of nails. This repository example is shape-only; the render adds a uniform fallback material, not an upholstery material scheme.</p><details><summary>The program, 135 lines</summary><pre class="code"><span class="s">&quot;&quot;&quot;A tufted chair: a buttoned back rolling over at the top, a domed seat on a nailed
+apron, four tapered legs.
+
+Millimetres, Z up, the chair&#x27;s front towards -Y; built as its left half&#x27;s legs, the
+right ones mirrored. The architecture is the seat on its legs; the back and every
+row of trim are details added to it: deleting `add_back` leaves a stool, and the
+back&#x27;s tufts follow the width they are given.
+&quot;&quot;&quot;</span>
+<span class="k">import</span> json
+<span class="k">import</span> math
+<span class="k">import</span> sys
+
+<span class="k">import</span> sand3d <span class="k">as</span> s3d
+
+
+<span class="k">def</span> tufted_chair(width=<span class="n">520</span>):
+    chair = chair_frame(width)
+    add_back(chair)
+    add_seat_nails(chair)
+    <span class="k">return</span> chair.root
+
+
+<span class="k">def</span> chair_frame(width=<span class="n">520</span>, depth=<span class="n">480</span>, seat_z=<span class="n">430</span>, inset=<span class="n">50</span>, floor=<span class="n">0</span>):
+    seat = upholstered_seat(width, depth)
+    legs = []
+    <span class="k">for</span> leg, y <span class="k">in</span> ((front_leg, -(depth / <span class="n">2</span> - inset)), (rear_leg, depth / <span class="n">2</span> - inset)):
+        left = s3d.<span class="vb">at</span>(leg(), x=-(width / <span class="n">2</span> - inset), y=y, z=floor)
+        legs += [left, s3d.<span class="vb">transform</span>(s3d.<span class="vb">copy</span>(left), mirror=<span class="s">&quot;x&quot;</span>)]   <span class="c"># the right one: its image across x = 0</span>
+    <span class="k">return</span> s3d.<span class="vb">assembly</span>(<span class="s">&quot;chair&quot;</span>, s3d.<span class="vb">at</span>(seat.root, z=seat_z), *legs,
+                        seat=seat, width=width, seat_z=seat_z, rear_y=depth / <span class="n">2</span>)
+
+
+<span class="k">def</span> add_back(chair, behind=-<span class="n">30</span>, above=<span class="n">200</span>):
+    back = tufted_back(chair.width)
+    s3d.<span class="vb">attach</span>(chair, <span class="s">&quot;back&quot;</span>, s3d.<span class="vb">at</span>(back.root, y=chair.rear_y + behind, z=chair.seat_z + above))
+    add_buttons(back)
+    add_back_nails(back)
+
+
+<span class="k">def</span> add_seat_nails(chair, pitch=<span class="n">22</span>, d=<span class="n">10</span>, h=<span class="n">5</span>):
+    <span class="s">&quot;&quot;&quot;One nail every `pitch` along the seat&#x27;s seam, round its front and sides.&quot;&quot;&quot;</span>
+    seat = chair.seat
+    spots = s3d.<span class="vb">snap</span>(seat.parts, s3d.<span class="vb">along</span>(seat.seam, pitch))
+    s3d.<span class="vb">attach</span>(seat, <span class="s">&quot;seat_nails&quot;</span>, *[s3d.<span class="vb">at</span>(s3d.<span class="vb">dome</span>(<span class="s">&quot;nail&quot;</span>, d, h), on=f) <span class="k">for</span> f <span class="k">in</span> spots])
+
+
+<span class="k">def</span> add_buttons(back, d=<span class="n">16</span>, h=<span class="n">3</span>):
+    s3d.<span class="vb">attach</span>(back, <span class="s">&quot;buttons&quot;</span>, *[s3d.<span class="vb">at</span>(s3d.<span class="vb">dome</span>(<span class="s">&quot;button&quot;</span>, d, h), on=f) <span class="k">for</span> f <span class="k">in</span> back.tufts])
+
+
+<span class="k">def</span> add_back_nails(back, pitch=<span class="n">22</span>, d=<span class="n">10</span>, h=<span class="n">5</span>, face=((<span class="n">220</span>, -<span class="n">230</span>), (<span class="n">226</span>, <span class="n">150</span>)), reach=<span class="n">400</span>):
+    <span class="s">&quot;&quot;&quot;A row up each side of the back&#x27;s face, where its cover is nailed to the frame,
+    from (x, z) to (x, z), found from in front, `reach` away.&quot;&quot;&quot;</span>
+    spots = []
+    <span class="k">for</span> side <span class="k">in</span> (-<span class="n">1</span>, <span class="n">1</span>):
+        (x0, z0), (x1, z1) = face
+        spots += s3d.<span class="vb">snap</span>(back.parts, s3d.<span class="vb">along</span>([(side * x0, -reach, z0), (side * x1, -reach, z1)], pitch),
+                          direction=(<span class="n">0</span>, <span class="n">1</span>, <span class="n">0</span>))
+    s3d.<span class="vb">attach</span>(back, <span class="s">&quot;back_nails&quot;</span>, *[s3d.<span class="vb">at</span>(s3d.<span class="vb">dome</span>(<span class="s">&quot;nail&quot;</span>, d, h), on=f) <span class="k">for</span> f <span class="k">in</span> spots])
+
+
+<span class="c"># ---------------------------------------------------------------- parts, in the order they are called</span>
+
+<span class="k">def</span> section(z, w, d, x=<span class="n">0</span>, y=<span class="n">0</span>, n=<span class="n">2</span>, taper=<span class="n">0</span>):
+    <span class="s">&quot;&quot;&quot;One cross-section of a loft: a superellipse `w` wide and `d` deep, squareness
+    `n` (2 an ellipse, 4 a box with round corners), its +Y side narrowed by `taper`,
+    centred at (x, y, z).&quot;&quot;&quot;</span>
+    <span class="k">return</span> s3d.<span class="vb">at</span>(s3d.<span class="vb">superellipse</span>(w, d, n, taper), x=x, y=y, z=z)
+
+
+<span class="k">def</span> upholstered_seat(width=<span class="n">520</span>, depth=<span class="n">480</span>, taper=<span class="n">0.04</span>, squareness=<span class="n">6</span>, board=-<span class="n">8</span>,
+                     crown=((<span class="n">15</span>, <span class="n">3</span>, <span class="n">3</span>, <span class="n">0</span>), (<span class="n">35</span>, <span class="n">12</span>, <span class="n">10</span>, <span class="n">4</span>), (<span class="n">55</span>, <span class="n">30</span>, <span class="n">24</span>, <span class="n">8</span>), (<span class="n">68</span>, <span class="n">90</span>, <span class="n">72</span>, <span class="n">12</span>), (<span class="n">76</span>, <span class="n">190</span>, <span class="n">160</span>, <span class="n">18</span>)),
+                     apron=<span class="n">60</span>, dip=<span class="n">15</span>, wall=<span class="n">8</span>, seam_up=<span class="n">6</span>, seam_out=<span class="n">10</span>):
+    <span class="s">&quot;&quot;&quot;A cushion domed over a board, an apron hanging round it. `crown` is the dome,
+    level by level: (height, inset at the sides, inset front and back, shift back).&quot;&quot;&quot;</span>
+    w = width / (<span class="n">1</span> + taper)  <span class="c"># the loft&#x27;s mean width; the front edge is `width`</span>
+    cushion = s3d.<span class="vb">loft</span>(<span class="s">&quot;cushion&quot;</span>, section(board, w, depth, n=squareness, taper=taper),
+                       *[section(z, w - <span class="n">2</span> * side, depth - <span class="n">2</span> * end, y=back, n=squareness, taper=taper)
+                         <span class="k">for</span> z, side, end, back <span class="k">in</span> crown])
+
+    <span class="k">def</span> drop(x):  <span class="c"># how far the apron hangs below the board: deepest mid-front</span>
+        <span class="k">return</span> apron + dip * math.cos(math.pi * x / width) ** <span class="n">2</span>
+
+    hem = s3d.<span class="vb">superellipse</span>(w - wall, depth - wall, squareness, taper).loops[<span class="n">0</span>].pts
+    skirt = s3d.<span class="vb">loft</span>(<span class="s">&quot;apron&quot;</span>, *[s3d.<span class="vb">at</span>(s3d.<span class="vb">superellipse</span>(drop(x), wall, squareness), x=x, y=y, z=board - drop(x) / <span class="n">2</span>,
+                                       ry=-<span class="n">90</span>) <span class="k">for</span> x, y <span class="k">in</span> hem], follow=<span class="k">True</span>, loop=<span class="k">True</span>)
+    <span class="c"># the seam the nails follow: just outside the apron, round the front and sides</span>
+    <span class="c"># but not the back, which the back of the chair covers — from the middle of the back round</span>
+    rim = s3d.<span class="vb">superellipse</span>(w + <span class="n">2</span> * seam_out, depth + <span class="n">2</span> * seam_out, squareness, taper).loops[<span class="n">0</span>].pts
+    start = min(range(len(rim)), key=<span class="k">lambda</span> i: abs(math.atan2(rim[i][<span class="n">1</span>], rim[i][<span class="n">0</span>]) - math.pi / <span class="n">2</span>))
+    seam = [(x, y, board - drop(x) + seam_up) <span class="k">for</span> x, y <span class="k">in</span> rim[start:] + rim[:start] <span class="k">if</span> y &lt; depth / <span class="n">2</span> - seam_out]
+    <span class="k">return</span> s3d.<span class="vb">assembly</span>(<span class="s">&quot;seat&quot;</span>, cushion, skirt, parts=[cushion, skirt], seam=seam)
+
+
+<span class="k">def</span> front_leg(height=<span class="n">420</span>, profile=((<span class="n">0</span>, -<span class="n">10</span>, <span class="n">30</span>, <span class="n">30</span>), (<span class="n">210</span>, -<span class="n">4</span>, <span class="n">36</span>, <span class="n">36</span>), (<span class="n">420</span>, <span class="n">0</span>, <span class="n">44</span>, <span class="n">44</span>))):
+    <span class="s">&quot;&quot;&quot;A square leg with round corners, tapering to its foot, which steps forward.
+    `profile` is (z, y, width, depth) from the floor up; its origin is under its foot.&quot;&quot;&quot;</span>
+    body = s3d.<span class="vb">loft</span>(<span class="s">&quot;front_leg&quot;</span>, *[section(z * height / profile[-<span class="n">1</span>][<span class="n">0</span>], w, d, y=y, n=<span class="n">4</span>) <span class="k">for</span> z, y, w, d <span class="k">in</span> profile])
+    <span class="k">return</span> s3d.<span class="vb">group</span>(<span class="s">&quot;front_leg&quot;</span>, s3d.<span class="vb">at</span>(body, y=-profile[<span class="n">0</span>][<span class="n">1</span>]))
+
+
+<span class="k">def</span> rear_leg(height=<span class="n">420</span>, profile=((<span class="n">0</span>, <span class="n">16</span>, <span class="n">30</span>, <span class="n">30</span>), (<span class="n">210</span>, <span class="n">6</span>, <span class="n">36</span>, <span class="n">36</span>), (<span class="n">420</span>, <span class="n">0</span>, <span class="n">44</span>, <span class="n">44</span>))):
+    <span class="s">&quot;&quot;&quot;The back leg, raking back to its foot. Its origin is under its foot.&quot;&quot;&quot;</span>
+    body = s3d.<span class="vb">loft</span>(<span class="s">&quot;rear_leg&quot;</span>, *[section(z * height / profile[-<span class="n">1</span>][<span class="n">0</span>], w, d, y=y, n=<span class="n">4</span>) <span class="k">for</span> z, y, w, d <span class="k">in</span> profile])
+    <span class="k">return</span> s3d.<span class="vb">group</span>(<span class="s">&quot;rear_leg&quot;</span>, s3d.<span class="vb">at</span>(body, y=-profile[<span class="n">0</span>][<span class="n">1</span>]))
+
+
+<span class="k">def</span> tufted_back(width=<span class="n">520</span>, drawn_for=<span class="n">520</span>, squareness=<span class="n">4</span>, profile=(
+        (-<span class="n">260</span>, <span class="n">0</span>, <span class="n">440</span>, <span class="n">50</span>),    <span class="c"># foot, behind the seat: z, y, width, depth</span>
+        (-<span class="n">140</span>, <span class="n">6</span>, <span class="n">460</span>, <span class="n">60</span>),
+        (-<span class="n">20</span>, <span class="n">14</span>, <span class="n">470</span>, <span class="n">64</span>),    <span class="c"># the cushioned middle</span>
+        (<span class="n">90</span>, <span class="n">24</span>, <span class="n">480</span>, <span class="n">66</span>),
+        (<span class="n">170</span>, <span class="n">36</span>, <span class="n">490</span>, <span class="n">72</span>),    <span class="c"># leaning back</span>
+        (<span class="n">205</span>, <span class="n">58</span>, <span class="n">490</span>, <span class="n">70</span>),    <span class="c"># over the top</span>
+        (<span class="n">180</span>, <span class="n">82</span>, <span class="n">490</span>, <span class="n">60</span>),    <span class="c"># down the back</span>
+        (<span class="n">130</span>, <span class="n">88</span>, <span class="n">490</span>, <span class="n">46</span>)),   <span class="c"># tucked under</span>
+        tuft_rows=((-<span class="n">60</span>, -<span class="n">120</span>), (-<span class="n">52</span>, -<span class="n">40</span>), (-<span class="n">44</span>, <span class="n">40</span>), (-<span class="n">34</span>, <span class="n">120</span>)), tuft_pitch=<span class="n">80</span>, tuft_margin=<span class="n">100</span>, tuft_r=<span class="n">55</span>,
+        tuft_depth=<span class="n">20</span>):
+    <span class="s">&quot;&quot;&quot;A cushioned panel rising from the seat and rolling over backwards, one loft
+    along its own centre line; buttoned on a diamond lattice, each tuft row (y, z),
+    the rows&#x27; columns staggered. The profile&#x27;s widths are those of a `drawn_for` chair.&quot;&quot;&quot;</span>
+    widen = width - drawn_for
+    body = s3d.<span class="vb">loft</span>(<span class="s">&quot;back&quot;</span>, *[section(z, w + widen, d, y=y, n=squareness) <span class="k">for</span> z, y, w, d <span class="k">in</span> profile], follow=<span class="k">True</span>)
+    reach = int((width / <span class="n">2</span> - tuft_margin) / tuft_pitch)  <span class="c"># columns each side of the middle</span>
+    lattice = [(j * tuft_pitch, y, z) <span class="k">for</span> i, (y, z) <span class="k">in</span> enumerate(tuft_rows)
+               <span class="k">for</span> j <span class="k">in</span> range(-reach, reach + <span class="n">1</span>) <span class="k">if</span> (i + j) % <span class="n">2</span> == <span class="n">0</span>]
+    tufts = s3d.<span class="vb">snap</span>(body, lattice)
+    s3d.<span class="vb">dent</span>(body, tufts, tuft_r, tuft_depth)
+    <span class="k">return</span> s3d.<span class="vb">assembly</span>(<span class="s">&quot;tufted_back&quot;</span>, body, parts=[body], tufts=s3d.<span class="vb">snap</span>(body, tufts))
+
+
+<span class="k">if</span> __name__ == <span class="s">&quot;__main__&quot;</span>:
+    s3d.<span class="vb">empty_scene</span>()
+    s3d.<span class="vb">export</span>(s3d.<span class="vb">group</span>(<span class="s">&quot;tufted_chair&quot;</span>, tufted_chair(**json.loads(sys.argv[<span class="n">2</span>] <span class="k">if</span> len(sys.argv) &gt; <span class="n">2</span> <span class="k">else</span> <span class="s">&quot;{}&quot;</span>))),
+               sys.argv[<span class="n">1</span>])</pre></details></article><h2 id="joints">8. Reuse one frame per joint</h2><p>Keep the parent frame, placed child and joint together in the head. For a numeric source pivot, read <code>f = local(parent, x, y, z, rx, ry, rz)</code> once. Use it in both <a class="vlink" href="../reference/frames.html#at"><code>at(child, on=f)</code></a> and <a class="vlink" href="../reference/assembly.html#joint"><code>joint(name, child, f, ...)</code></a>. Each moving part can then be removed with its own lines.</p><p><a class="vlink" href="../reference/frames.html#local"><code>local</code></a> works in the parent's own space even deep in a chain. Do not compose source coordinates into world coordinates. A source joint axis must first be turned by its source roll, pitch and yaw; direction-string joint axes use the space the parent lives in. Check the sign with the right-hand rule: a correct pivot with the wrong axis sign can open a door into its cabinet.</p><p>Fixed details need no joint. Put them in the moving parent's group before declaring its joint, or they can stay behind. Return mechanisms at rest, every joint at zero, with no <a class="vlink" href="../reference/assembly.html#pose"><code>pose</code></a> in the builder. Unjointed parts have nothing to pose. The gate example is an explicit demonstration exception: it poses one leaf to show the swing.</p><p>A sliding cabinet lid and its hatch illustrate a chain: the two lids use frames on the cabinet and opposite slide axes; the hatch uses a frame read on its moving lid. A rotary spindle must use the same pivot for placement and movement, rather than two nearby frames.</p><article class="scene" id="start_gate"><h3>Mirrored hinged leaves</h3><div class="stage "><img src="../assets/examples/start_gate.webp" alt="Mirrored hinged leaves" loading="lazy"><button type="button" class="activate" data-glb="../assets/examples/start_gate.glb" aria-label="Mirrored hinged leaves: turn in 3D"><span class="hint">Turn in 3D</span></button><span class="msg" role="status"></span></div><p>The second leaf copies the first leaf's joint, then mirrors the part and pivot. One leaf is posed to 60 degrees for this demonstration. The render adds a fallback material.</p><details><summary>The program, 14 lines</summary><pre class="code"><span class="k">import</span> sand3d <span class="k">as</span> s3d
+
+
+<span class="k">def</span> gate(w=<span class="n">750</span>, h=<span class="n">1200</span>, post=<span class="n">100</span>):
+    l_post = s3d.<span class="vb">at</span>(s3d.<span class="vb">box</span>(<span class="s">&quot;post&quot;</span>, post, post, h + <span class="n">300</span>), x=-w - post / <span class="n">2</span>)
+    r_post = s3d.<span class="vb">transform</span>(s3d.<span class="vb">copy</span>(l_post), mirror=<span class="s">&quot;x&quot;</span>)
+    board = s3d.<span class="vb">at</span>(s3d.<span class="vb">box</span>(<span class="s">&quot;board&quot;</span>, w, <span class="n">40</span>, h), x=-w / <span class="n">2</span>, z=<span class="n">150</span>)                    <span class="c"># from the post to x = 0</span>
+    handle = s3d.<span class="vb">at</span>(s3d.<span class="vb">cylinder</span>(<span class="s">&quot;handle&quot;</span>, <span class="n">20</span>, <span class="n">60</span>), on=s3d.<span class="vb">bbox</span>(board, <span class="s">&quot;+Y&quot;</span>).move(x=<span class="n">60</span> - w / <span class="n">2</span>))  <span class="c"># near x = 0</span>
+    leaf = s3d.<span class="vb">group</span>(<span class="s">&quot;leaf&quot;</span>, board, handle)                                        <span class="c"># the handle moves with it</span>
+    s3d.<span class="vb">joint</span>(<span class="s">&quot;hinge&quot;</span>, leaf, s3d.<span class="vb">bbox</span>(l_post, <span class="s">&quot;+X+Y&quot;</span>), axis=<span class="s">&quot;+Z&quot;</span>, range=(<span class="n">0</span>, <span class="n">90</span>))   <span class="c"># the post&#x27;s edge it opens toward: +X turns toward +Y</span>
+    twin = s3d.<span class="vb">transform</span>(s3d.<span class="vb">copy</span>(leaf), mirror=<span class="s">&quot;x&quot;</span>)                               <span class="c"># its image, hinged at x = +w: opens toward +Y too</span>
+    gate = s3d.<span class="vb">assembly</span>(<span class="s">&quot;gate&quot;</span>, l_post, r_post, leaf, twin)
+    s3d.<span class="vb">pose</span>(leaf, <span class="n">60</span>)   <span class="c"># shows the swing; a program returns at rest</span>
+    <span class="k">return</span> gate</pre></details></article><p>See <a href="../reference/assembly.html">Articulation and assembly</a> for the complete joint API.</p><h2 id="natural">Natural forms</h2><h3 id="seeds">Separate random streams</h3><p>Use one derived seed per call. Two <a class="vlink" href="../reference/distributions.html#vary"><code>vary</code></a> calls with the same seed replay the same stream, so the longest leaf also becomes the widest. Use <code>seed + 1</code>, <code>seed + 2</code>, or <code>seed * 100 + k</code> for part k, including calls to <code>jitter</code> and <a class="vlink" href="../reference/distributions.html#scatter"><code>scatter</code></a>.</p><p>For conditional draws in a loop, such as rejections, choices or colours, create one <code>random.Random(seed + k)</code> per part. Keep draw order stable. Use a declared seed parameter or leave it unused; do not hide it with <code>_ = seed</code>. A root with <code>seed=0</code> defines the reproducible build.</p><h3 id="outline">Shape the outline before the skin</h3><p>Small noise on a symmetric base gives a rough regular shape. First change proportions and silhouette: uneven hull points, varied lengths, a bend, twist or taper, or displacement with features as large as the part. Then add fine grain with a different seed. Inspect the outline before increasing sampling.</p><h3 id="organs">Grow organs from their attachment</h3><p><a class="vlink" href="../reference/distributions.html#along"><code>along</code></a> points frame Z along a curved stem's tangent; cylindrical <a class="vlink" href="../reference/distributions.html#phyllotaxis"><code>phyllotaxis</code></a> points it radially outward. Spin around the tangent before leaning away. A subsequent <code>turn(ry=60)</code> departs 60 degrees from that tangent.</p><p>Build each organ from its base at its origin, along its own +Z. A sweep scale law <code>[(0, 0), (.35, 1), (1, 0)]</code> puts its first pole at the attachment. Angular jitter preserves the root; positional jitter detaches it.</p><article class="scene" id="start_curved_stem"><h3>Leaves on a curved stem</h3><div class="stage "><img src="../assets/examples/start_curved_stem.webp" alt="Leaves on a curved stem" loading="lazy"></div><p>Tangent frames spin before they lean. Angular jitter and independently varied lengths keep each leaf's base on the stem.</p><details><summary>The program, 31 lines</summary><pre class="code"><span class="s">&quot;&quot;&quot;Lateral leaves attached by their bases to a curved stem.&quot;&quot;&quot;</span>
+<span class="k">import</span> sand3d <span class="k">as</span> s3d
+
+
+<span class="k">def</span> curved_stem():
+    path = stem_axis()
+    stem = stem_part(path)
+    frames = s3d.<span class="vb">along</span>(path, count=<span class="n">13</span>, spin=<span class="n">137.508</span>, span=(<span class="n">.12</span>, <span class="n">.92</span>))
+    frames = frames.turn(ry=<span class="n">60</span>).jitter(rx=<span class="n">5</span>, ry=<span class="n">8</span>, rz=<span class="n">12</span>, seed=<span class="n">2</span>)
+    lengths = s3d.<span class="vb">vary</span>(<span class="n">24</span>, <span class="n">5</span>, len(frames), seed=<span class="n">3</span>)
+    leaves = [s3d.<span class="vb">at</span>(leaf_part(<span class="s">f&quot;leaf{k}&quot;</span>, length), on=frame)
+              <span class="k">for</span> k, (frame, length) <span class="k">in</span> enumerate(zip(frames, lengths))]
+    <span class="k">return</span> s3d.<span class="vb">assembly</span>(<span class="s">&quot;curved_stem&quot;</span>, stem, leaves)
+
+
+<span class="k">def</span> stem_axis():
+    <span class="k">return</span> s3d.<span class="vb">spline</span>([(<span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>), (<span class="n">8</span>, <span class="n">0</span>, <span class="n">35</span>), (-<span class="n">5</span>, <span class="n">4</span>, <span class="n">75</span>), (<span class="n">12</span>, <span class="n">0</span>, <span class="n">110</span>)])
+
+
+<span class="k">def</span> stem_part(path):
+    stem = s3d.<span class="vb">wire</span>(<span class="s">&quot;stem&quot;</span>, path, [(<span class="n">0</span>, <span class="n">2.4</span>), (<span class="n">1</span>, <span class="n">.8</span>)])
+    s3d.<span class="vb">material</span>(stem, <span class="s">&quot;rubber&quot;</span>, color=<span class="s">&quot;#48643e&quot;</span>)
+    <span class="k">return</span> stem
+
+
+<span class="k">def</span> leaf_part(name, length=<span class="n">24</span>, width=<span class="n">9</span>, thickness=<span class="n">.8</span>):
+    leaf = s3d.<span class="vb">sweep</span>(name, s3d.<span class="vb">ellipse</span>(width, thickness),
+                     [(<span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>), (<span class="n">0</span>, <span class="n">0</span>, length)],
+                     scale=[(<span class="n">0</span>, <span class="n">0</span>), (<span class="n">.35</span>, <span class="n">1</span>), (<span class="n">1</span>, <span class="n">0</span>)])
+    s3d.<span class="vb">material</span>(leaf, <span class="s">&quot;rubber&quot;</span>, color=<span class="s">&quot;#749950&quot;</span>)
+    <span class="k">return</span> leaf</pre></details></article><h3 id="contact">Derive contact from geometry</h3><p>Attach to the actual parent with a face, <a class="vlink" href="../reference/distributions.html#snap"><code>snap</code></a>, or the final frame of <a class="vlink" href="../reference/distributions.html#along"><code>along(path, count=2)</code></a>. Do not measure offsets from a render: attachment must survive changes of seed. Compose frames with <code>on=</code>, not translations added across rotated parents. Keep local callback coordinates, sampled sites in the sampled mesh's parent space and world positions distinct.</p><article class="scene" id="start_pond"><h3>A pond filled against its banks</h3><div class="stage "><img src="../assets/examples/start_pond.webp" alt="A pond filled against its banks" loading="lazy"><button type="button" class="activate" data-glb="../assets/examples/start_pond.glb" aria-label="A pond filled against its banks: turn in 3D"><span class="hint">Turn in 3D</span></button><span class="msg" role="status"></span></div><p>The lawn is cut first, then filled to a level. The returned water follows the container rather than a separately measured shoreline. The render uses a 25 mm swell and sky lighting so the water surface is visible.</p><details><summary>The program, 14 lines</summary><pre class="code"><span class="k">import</span> sand3d <span class="k">as</span> s3d
+
+
+<span class="k">def</span> pond(size=<span class="n">3000</span>, depth=<span class="n">500</span>, basin=(<span class="n">1600</span>, <span class="n">1000</span>), dig=<span class="n">400</span>, margin=<span class="n">60</span>, swell=<span class="n">0</span>, wavelength=<span class="n">700</span>):
+    <span class="s">&quot;&quot;&quot;A garden pond: still water, or a wind-blown swell `swell` high.&quot;&quot;&quot;</span>
+    lawn = s3d.<span class="vb">material</span>(s3d.<span class="vb">box</span>(<span class="s">&quot;lawn&quot;</span>, size, size, depth), <span class="s">&quot;grass&quot;</span>)
+    hollow = s3d.<span class="vb">extrude</span>(<span class="s">&quot;hollow&quot;</span>, s3d.<span class="vb">ellipse</span>(*basin), dig + margin, taper=-<span class="n">30</span>)
+    s3d.<span class="vb">cut</span>(lawn, s3d.<span class="vb">at</span>(hollow, z=depth - dig))
+    water = s3d.<span class="vb">fill</span>(<span class="s">&quot;water&quot;</span>, lawn, depth - margin)
+    s3d.<span class="vb">material</span>(water, <span class="s">&quot;water&quot;</span>, absorb=<span class="s">&quot;#5f9c8a&quot;</span>, absorb_distance=<span class="n">800</span>)
+    <span class="k">if</span> swell:
+        waves = s3d.<span class="vb">waves</span>(wavelength, direction=<span class="n">30</span>, sharpness=<span class="n">0.5</span>, spread=<span class="n">15</span>)
+        s3d.<span class="vb">displace</span>(water, swell, wavelength / <span class="n">8</span>, noise=waves, direction=<span class="s">&quot;+Z&quot;</span>, faces=<span class="s">&quot;top&quot;</span>)
+    <span class="k">return</span> s3d.<span class="vb">group</span>(<span class="s">&quot;pond&quot;</span>, lawn, water)</pre></details></article><h3 id="sites">Select sites once</h3><p>Filter sampled frames with one predicate. Pass every kept site through one placement helper shared by populations such as stones and plants. Use the count that remains, not the requested sample count. For example, a terrain filter can keep frames above a height and outside a circular clearing before enumerating the retained sites and deriving one seed per stone.</p><h3 id="stages">Put repeated stages in a table</h3><p>Leaf tiers, flame layers, smoke columns and layered fungi should use one loop over a parameter table, with a derived seed per item. Store height, scale and rotation together. Refactoring must preserve table order, random draw order and fusion order.</p><h3 id="natural-materials">Dress every component and respect resolution</h3><p>Natural forms require materials. Give flesh, stalk and seeds their own assignments; likewise leaf blades and veins. Use natural presets with explicit colours for the intended mood.</p><p>For low-poly work, <a class="vlink" href="../reference/export.html#facets"><code>facets(n, smooth=False)</code></a> reaches field, displace and blend surfaces too; a hull follows its input points. Low-poly is not finer geometry with noise painted on it. Preserve intentional angular silhouettes, raise n if a branch or hole disappears, and use <a class="vlink" href="../reference/export.html#facets"><code>facets(&quot;auto&quot;)</code></a> to restore adaptive resolution. A face budget is a ceiling, not a target. See <a href="../guides/resolution.html">Resolution</a>.</p><h2 id="weight-stack">A larger plan with optional details</h2><article class="scene" id="start_weight_stack"><h3>Weight stack</h3><div class="stage "><img src="../assets/examples/start_weight_stack.webp" alt="Weight stack" loading="lazy"></div><p>The plate column publishes anchors for bumpers, guide rods and selector. Each detail can be removed independently. The shape-only source receives a fallback material in the render.</p><details><summary>The program, 116 lines</summary><pre class="code"><span class="s">&quot;&quot;&quot;The weight stack of a cable machine.
+
+A column of plates resting in two rubber bumpers, two guide rods standing over the
+top plate, and the selector: two nuts and a stem on top, the pin&#x27;s head at the
+chosen plate and a spring lanyard hanging from under the nuts down to it.
+
+Millimetres. The stack&#x27;s frame has its origin under the middle of the lowest
+plate, X along the plates, -Y towards the user.
+&quot;&quot;&quot;</span>
+<span class="k">import</span> json
+<span class="k">import</span> sys
+
+<span class="k">import</span> sand3d <span class="k">as</span> s3d
+
+
+<span class="c"># ---------------------------------------------------------------- the object: architecture first, then details</span>
+
+<span class="k">def</span> weight_stack(n_plates=<span class="n">14</span>, selected=<span class="n">9</span>):
+    <span class="s">&quot;&quot;&quot;The plates, then each detail on their anchors. Any `add_` line can be deleted:
+    the rest of the object does not change.&quot;&quot;&quot;</span>
+    stack = plate_column(n_plates)
+    add_bumpers(stack)
+    add_guide_rods(stack)
+    add_selector(stack, selected)
+    <span class="k">return</span> stack.root
+
+
+<span class="k">def</span> plate_column(n_plates=<span class="n">14</span>, pitch=<span class="n">24</span>, plate_h=<span class="n">22</span>, plate_d=<span class="n">100</span>, guide_spacing=<span class="n">300</span>):
+    <span class="s">&quot;&quot;&quot;`n_plates` plates `pitch` apart. Publishes where details go: every plate&#x27;s
+    height, the top face, the front face and the two guide lines.&quot;&quot;&quot;</span>
+    bottoms = [i * pitch <span class="k">for</span> i <span class="k">in</span> range(n_plates)]
+    plate_z = [z + plate_h / <span class="n">2</span> <span class="k">for</span> z <span class="k">in</span> bottoms]
+    <span class="k">return</span> s3d.<span class="vb">assembly</span>(<span class="s">&quot;weight_stack&quot;</span>,
+                        *[s3d.<span class="vb">at</span>(weight_plate(d=plate_d, h=plate_h), z=z) <span class="k">for</span> z <span class="k">in</span> bottoms],
+                        plate_z=plate_z, top=bottoms[-<span class="n">1</span>] + plate_h, front=-plate_d / <span class="n">2</span>,
+                        guides=(-guide_spacing / <span class="n">2</span>, guide_spacing / <span class="n">2</span>))
+
+
+<span class="c"># ---------------------------------------------------------------- details, each on the stack&#x27;s anchors</span>
+
+<span class="k">def</span> add_bumpers(stack, sink=<span class="n">10</span>):
+    <span class="s">&quot;&quot;&quot;Two rubber cups under the guide lines, taking the lowest plate `sink` deep.&quot;&quot;&quot;</span>
+    s3d.<span class="vb">attach</span>(stack, <span class="s">&quot;bumpers&quot;</span>, *[s3d.<span class="vb">at</span>(bumper(), x=x, z=sink, anchor=<span class="s">&quot;top&quot;</span>) <span class="k">for</span> x <span class="k">in</span> stack.guides])
+
+
+<span class="k">def</span> add_guide_rods(stack, gap=<span class="n">8</span>):
+    <span class="s">&quot;&quot;&quot;Two rods on the guide lines, standing `gap` above the top plate.&quot;&quot;&quot;</span>
+    s3d.<span class="vb">attach</span>(stack, <span class="s">&quot;guide_rods&quot;</span>, *[s3d.<span class="vb">at</span>(guide_rod(), x=x, z=stack.top + gap, anchor=<span class="s">&quot;bottom&quot;</span>)
+                                      <span class="k">for</span> x <span class="k">in</span> stack.guides])
+
+
+<span class="k">def</span> add_selector(stack, selected=<span class="n">9</span>, nut_t=<span class="n">6</span>, nut_gap=<span class="n">4</span>, head_out=<span class="n">12</span>, lanyard_y=-<span class="n">28</span>):
+    <span class="s">&quot;&quot;&quot;On the top plate, two nuts and the stem; the lanyard&#x27;s loop sits under the
+    upper nut and its spring hangs in front, down to the pin head at plate `selected`.&quot;&quot;&quot;</span>
+    upper = stack.top + nut_t + nut_gap     <span class="c"># under the upper nut</span>
+    pinned = stack.plate_z[selected]
+    s3d.<span class="vb">attach</span>(stack, <span class="s">&quot;selector&quot;</span>,
+               s3d.<span class="vb">at</span>(hex_nut(t=nut_t), z=stack.top, anchor=<span class="s">&quot;bottom&quot;</span>),
+               s3d.<span class="vb">at</span>(hex_nut(t=nut_t), z=upper, anchor=<span class="s">&quot;bottom&quot;</span>),
+               s3d.<span class="vb">at</span>(selector_stem(), z=stack.top),
+               s3d.<span class="vb">at</span>(pin_head(), y=stack.front - head_out, z=pinned, rx=<span class="n">90</span>),
+               s3d.<span class="vb">at</span>(spring_lanyard(length=upper - pinned), y=lanyard_y, z=(upper + pinned) / <span class="n">2</span>, rz=-<span class="n">90</span>))
+
+
+<span class="c"># ---------------------------------------------------------------- parts, in the order they are called</span>
+
+<span class="k">def</span> weight_plate(w=<span class="n">420</span>, d=<span class="n">100</span>, h=<span class="n">22</span>, hole_d=<span class="n">16</span>, edge_r=<span class="n">2</span>):
+    <span class="s">&quot;&quot;&quot;A steel plate with softened edges, drilled front to back for the selector pin.&quot;&quot;&quot;</span>
+    plate = s3d.<span class="vb">fillet</span>(s3d.<span class="vb">box</span>(<span class="s">&quot;weight_plate&quot;</span>, w, d, h), edge_r)
+    <span class="k">return</span> s3d.<span class="vb">hole</span>(plate, hole_d, on=plate.face(<span class="s">&quot;-Y&quot;</span>).move(y=h / <span class="n">2</span>))
+
+
+<span class="k">def</span> bumper(d_foot=<span class="n">50</span>, d_mouth=<span class="n">46</span>, h=<span class="n">60</span>, wall=<span class="n">2</span>):
+    <span class="s">&quot;&quot;&quot;A rubber cup the stack rests in, open at the top.&quot;&quot;&quot;</span>
+    cup = s3d.<span class="vb">revolve</span>(<span class="s">&quot;bumper&quot;</span>, [(<span class="n">0</span>, -h / <span class="n">2</span>), (d_foot / <span class="n">2</span>, -h / <span class="n">2</span>), (d_mouth / <span class="n">2</span>, h / <span class="n">2</span>), (<span class="n">0</span>, h / <span class="n">2</span>)])
+    <span class="k">return</span> s3d.<span class="vb">shell</span>(cup, wall, open=<span class="s">&quot;top&quot;</span>)
+
+
+<span class="k">def</span> guide_rod(d=<span class="n">25</span>, length=<span class="n">900</span>, collar_d=<span class="n">35</span>, collar_h=<span class="n">20</span>):
+    <span class="s">&quot;&quot;&quot;A round rod with a collar at its foot.&quot;&quot;&quot;</span>
+    foot, head = -length / <span class="n">2</span>, length / <span class="n">2</span>
+    <span class="k">return</span> s3d.<span class="vb">revolve</span>(<span class="s">&quot;guide_rod&quot;</span>, [(<span class="n">0</span>, foot), (collar_d / <span class="n">2</span>, foot), (collar_d / <span class="n">2</span>, foot + collar_h),
+                                     (d / <span class="n">2</span>, foot + collar_h), (d / <span class="n">2</span>, head), (<span class="n">0</span>, head)])
+
+
+<span class="k">def</span> hex_nut(across_corners=<span class="n">32</span>, hole_d=<span class="n">16.5</span>, t=<span class="n">6</span>):
+    <span class="k">return</span> s3d.<span class="vb">extrude</span>(<span class="s">&quot;hex_nut&quot;</span>, s3d.<span class="vb">polygon</span>(<span class="n">6</span>, across_corners) - s3d.<span class="vb">circle</span>(hole_d), t, both=<span class="k">True</span>)
+
+
+<span class="k">def</span> selector_stem(d=<span class="n">15</span>, h=<span class="n">30</span>, wall=<span class="n">1.5</span>):
+    <span class="s">&quot;&quot;&quot;The top of the stem that threads the plates, an open sleeve.&quot;&quot;&quot;</span>
+    <span class="k">return</span> s3d.<span class="vb">tube</span>(<span class="s">&quot;selector_stem&quot;</span>, d, d - <span class="n">2</span> * wall, h)
+
+
+<span class="k">def</span> pin_head(d=<span class="n">36</span>, t=<span class="n">3</span>, boss_d=<span class="n">12</span>, boss_t=<span class="n">6</span>, hole_d=<span class="n">8</span>):
+    <span class="s">&quot;&quot;&quot;The head of the selector pin, a disc with a boss, facing the user.&quot;&quot;&quot;</span>
+    <span class="k">return</span> s3d.<span class="vb">revolve</span>(<span class="s">&quot;pin_head&quot;</span>, [(hole_d / <span class="n">2</span>, -boss_t / <span class="n">2</span>), (boss_d / <span class="n">2</span>, -boss_t / <span class="n">2</span>), (boss_d / <span class="n">2</span>, boss_t / <span class="n">2</span> - t),
+                                    (d / <span class="n">2</span>, boss_t / <span class="n">2</span> - t), (d / <span class="n">2</span>, boss_t / <span class="n">2</span>), (hole_d / <span class="n">2</span>, boss_t / <span class="n">2</span>)])
+
+
+<span class="k">def</span> spring_lanyard(length=<span class="n">150</span>, loop_d=<span class="n">44</span>, loop_gap=<span class="n">40</span>, neck=<span class="n">40</span>, coil_x=<span class="n">24</span>, lean=<span class="n">12</span>, coil_d=<span class="n">4</span>, wire_d=<span class="n">2.2</span>,
+                   pitch=<span class="n">2.6</span>):
+    <span class="s">&quot;&quot;&quot;A loop lying flat on top, round the selector stem and open by `loop_gap`
+    degrees, and a close-wound spring hanging `length` down from it, `neck` away
+    from the loop&#x27;s centre and leaning `lean` outwards by its foot.&quot;&quot;&quot;</span>
+    top = length / <span class="n">2</span> - wire_d / <span class="n">2</span>
+    loop = s3d.<span class="vb">arc</span>((coil_x - neck, <span class="n">0</span>, top), loop_d / <span class="n">2</span>, loop_gap / <span class="n">2</span>, <span class="n">360</span> - loop_gap / <span class="n">2</span>)
+    hanging = s3d.<span class="vb">at</span>(s3d.<span class="vb">helix</span>(coil_d, pitch, <span class="n">2</span> * top), x=coil_x, z=top, rx=<span class="n">180</span>)   <span class="c"># from the loop, down</span>
+    coil = [(x + lean * (top - z) / (<span class="n">2</span> * top), y, z) <span class="k">for</span> x, y, z <span class="k">in</span> hanging.points]
+    <span class="k">return</span> s3d.<span class="vb">wire</span>(<span class="s">&quot;spring_lanyard&quot;</span>, list(loop.points) + coil, wire_d)
+
+
+<span class="k">if</span> __name__ == <span class="s">&quot;__main__&quot;</span>:
+    s3d.<span class="vb">empty_scene</span>()
+    s3d.<span class="vb">export</span>(s3d.<span class="vb">group</span>(<span class="s">&quot;weight_stack&quot;</span>, weight_stack(**json.loads(sys.argv[<span class="n">2</span>] <span class="k">if</span> len(sys.argv) &gt; <span class="n">2</span> <span class="k">else</span> <span class="s">&quot;{}&quot;</span>))),
+               sys.argv[<span class="n">1</span>] <span class="k">if</span> len(sys.argv) &gt; <span class="n">1</span> <span class="k">else</span> <span class="s">&quot;weight_stack.glb&quot;</span>)</pre></details></article><div class="fin"><span>sand3d 1.7.0 · Apache-2.0 · <a href="https://github.com/Sandflow-ai/sand3d">source</a></span><img src="../assets/sandflow-signature.svg" alt="Sandflow"></div></main><aside class="toc"><p class="grp">On this page</p><ul><li><a href="#head">1. Make the head a table of contents</a></li><li><a href="#parts">2. Write one function per distinct part</a></li><li><a href="#dimensions">3. Name each dimension once</a></li><li><a href="#placement">4. Place each part once in its parent&#x27;s frame</a></li><li><a href="#repeat">5. Repeat with frames and mirror a copy</a></li><li><a href="#vocabulary">6. Use the verb that names the shape</a></li><li><a href="#materials">7. Give visible parts materials</a></li><li><a href="#joints">8. Reuse one frame per joint</a></li><li><a href="#natural">Natural forms</a></li><li><a href="#weight-stack">A larger plan with optional details</a></li></ul></aside></div>
+<script src="../assets/docs.js"></script><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script><script type="module" src="../assets/viewer.js"></script></body></html>
