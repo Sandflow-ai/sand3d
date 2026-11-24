@@ -9,7 +9,7 @@ from mathutils import Matrix, Vector
 from mathutils.bvhtree import BVHTree
 
 from . import _core
-from .edit import _flat, _deform_parts, _tool_mesh, _solve, _offset, _is_strict, _warn, box_tool
+from .edit import _flat, _deform_parts, _tool_mesh, _solve, _eigen3, _offset, _is_strict, _warn, box_tool
 from .frames import Frame, local
 
 
@@ -140,18 +140,7 @@ def fill(name, container, level, clearance=None):
                 walls = [f for f in v.link_faces if f not in top]
                 if any(f in top for f in v.link_faces):
                     # Solve in the level plane: the free surface stays exactly at level.
-                    planes = []
-                    for f in walls:
-                        n = Vector((f.normal.x, f.normal.y, 0))
-                        if n.length > 1e-6:
-                            planes.append((n, -1))
-                    if planes:
-                        a = np.array([[n.x, n.y] for n, _ in planes])
-                        xy = np.linalg.lstsq(a, np.full(len(a), -clearance), rcond=0.03)[0]
-                        move = Vector((float(xy[0]), float(xy[1]), 0))
-                    else:
-                        move = Vector()
-                    move.z = 0
+                    move = _level_offset(walls, clearance)
                 else:
                     move = _offset([(f.normal, -1) for f in walls], clearance)
                 moves.append((v, move))
@@ -196,6 +185,32 @@ def fill(name, container, level, clearance=None):
         for mesh in meshes:
             if mesh.users == 0:
                 bpy.data.meshes.remove(mesh)
+
+
+def _level_offset(walls, clearance):
+    """Least squares in XY, with one row per wall and a 3% singular value cutoff."""
+    xx = xy = yy = bx = by = 0.0
+    for face in walls:
+        x, y, _ = face.normal
+        if Vector((x, y, 0)).length > 1e-6:
+            xx += x * x
+            xy += x * y
+            yy += y * y
+            bx -= x * clearance
+            by -= y * clearance
+
+    # Diagonalize A.T @ A in fixed scalar order. Its eigenvalues are the
+    # squares of the singular values, so square the relative cutoff too.
+    weights, axes = _eigen3([[xx, xy, 0.0], [xy, yy, 0.0], [0.0, 0.0, 0.0]])
+    cutoff = 0.03 ** 2 * max(weights)
+    dx = dy = 0.0
+    for i in range(2):
+        if weights[i] > cutoff:
+            x, y = axes[0][i], axes[1][i]
+            distance = (x * bx + y * by) / weights[i]
+            dx += x * distance
+            dy += y * distance
+    return Vector((dx, dy, 0))
 
 
 def _invalid_offset(bm, before, triangles):
