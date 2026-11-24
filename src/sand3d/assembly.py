@@ -61,7 +61,7 @@ def attach(handle, name, *children):
     return detail
 
 
-def export(root, path, trace=None, *, colors="material"):
+def export(root, path, colors="material", *, trace=None):
     """Write meshes and supported sand3d lights in metres.
 
     GLB, URDF and USDA follow parenting and joints. IFC, OBJ and STL follow parenting.

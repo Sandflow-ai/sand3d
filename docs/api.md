@@ -164,7 +164,7 @@ group(name, *children)  # Parent of children
 assembly(name, *children, **anchors)  # Parts and anchors
 attach(handle, name, *children)  # A detail, under a handle
 Handle(root, **anchors)  # Root and anchors
-export(root, path, trace=None, *, colors="material")  # Metres. GLB, URDF and USDA follow parenting and joints; IFC, OBJ and STL follow parenting only. GLB, IFC, OBJ and STL write the current pose; URDF and USDA write the mechanism at rest.
+export(root, path, colors="material", *, trace=None)  # Metres. GLB, URDF and USDA follow parenting and joints; IFC, OBJ and STL follow parenting only. GLB, IFC, OBJ and STL write the current pose; URDF and USDA write the mechanism at rest.
 empty_scene()  # Fresh scene
 facets(n=None, smooth=...)  # Read count, or set segments per turn (integer >=3 or "auto") at any point; with facets(n): one part, then the previous count
 units(name=None)  # Length unit: "mm" (default), "cm", "m"

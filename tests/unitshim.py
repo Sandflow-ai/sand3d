@@ -144,7 +144,7 @@ LENGTHS = {
     "assembly": {"name": "-", "children": "-", "anchors": "-"},
     "attach": {"handle": "-", "name": "-", "children": "-"},
     "Handle": {"root": "-", "anchors": "-"},
-    "export": {"root": "-", "path": "-", "trace": "-", "colors": "-"},
+    "export": {"root": "-", "path": "-", "colors": "-", "trace": "-"},
     "facets": {"n": "-", "smooth": "-"},
     "smooth": {"ob": "-", "angle": "-"},
     "lay": {"ob": "-", "over": "-", "reach": "L", "step": "L"},
