@@ -1,6 +1,6 @@
 """OBJ and STL: the meshes under a root, at the current pose, in metres, in one file.
 
-Geometry only — no material, no joint: the GLB and the USDA carry those. The meshes are
+OBJ writes diffuse colours in a companion MTL. The meshes are
 Blender's triangles (a reader that fans a concave face itself gets it wrong), each mesh in
 the order of the tree, its children by name. OBJ is written Y up (Z of the program
 becomes Y, Y becomes −Z), the axes OBJ readers expect and the GLB's; STL keeps Z up, as a
@@ -44,10 +44,33 @@ def _triangles(ob, y_up):
 
 def write_obj(root, path):
     lines = [f"# {_core.given_name(root)} — written by sand3d, metres, Y up"]
+    from . import materials
+    parts = [(ob, materials.mean_tag(ob)) for ob in _meshes(root)]
+    appearances = {}
+    names = {}
+    if any(tag is not None for _, tag in parts):
+        stem = os.path.splitext(os.fspath(path))[0]
+        for ob, tag in parts:
+            rgb = materials._linear(materials.look(tag)["color"])[:3] if tag else (.8, .8, .8)
+            names[ob] = appearances.setdefault(rgb, f"colour{len(appearances)}")
+        try:
+            with _core.text_file(stem + ".mtl") as f:
+                for rgb, name in appearances.items():
+                    f.write(f"newmtl {name}\nKd " + " ".join(_num(c) for c in rgb) + "\n")
+        except OSError as exc:
+            from .edit import _is_strict, _warn
+            if _is_strict():
+                raise
+            _warn(f"export: could not write OBJ colours: {exc}", RuntimeWarning)
+            names.clear()
+        else:
+            lines.append(f"mtllib {os.path.basename(stem)}.mtl")
     base = 1
-    for ob in _meshes(root):
+    for ob, _ in parts:
         verts, tris = _triangles(ob, y_up=True)
         lines.append(f"o {_core.given_name(ob)}")
+        if names:
+            lines.append(f"usemtl {names[ob]}")
         lines += ["v " + " ".join(_num(c) for c in v) for v in verts]
         lines += ["f " + " ".join(str(base + i) for i in t) for t in tris]
         base += len(verts)

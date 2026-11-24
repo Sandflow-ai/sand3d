@@ -329,13 +329,13 @@ def _segment_crossing(a, b, c, d):
     return None
 
 
-def _crossing(pts):
+def _crossing(pts, intersect=_segment_crossing):
     """The first point where a closed polyline crosses itself, or None."""
     n = len(pts)
     for i, a in enumerate(pts):
         b = pts[(i + 1) % n]
         for j in range(i + 2, n - (i == 0)):
-            q = _segment_crossing(a, b, pts[j], pts[(j + 1) % n])
+            q = intersect(a, b, pts[j], pts[(j + 1) % n])
             if q is not None:
                 return q
     return None
@@ -376,10 +376,20 @@ def _single(pts, sharp):
     loop = Loop(pts, sharp)
     if loop.area() < 0:
         loop = loop.reversed()
-    crossing = _crossing(loop.pts) if len(loop.pts) <= _CROSSING_LIMIT else None
-    if crossing is None:
+    if len(loop.pts) > _CROSSING_LIMIT:
         return Profile([loop])
+    crossing = _crossing(loop.pts)
+    if crossing is None:
+        rounded = [Vector(p) for p in loop.pts]
+        count = len({tuple(p) for p in rounded})
+        if (count == len(rounded) or count == len(set(loop.pts))
+                or _crossing(rounded, geometry.intersect_line_line_2d) is None):
+            return Profile([loop])
     profile = _from_region(_region([[loop]], lambda w: w != 0))
+    # The old float32 crossing check also resolved some near-duplicate joins.
+    # Keep that outline when it is still one loop; a false split needs the drawing.
+    if crossing is None and len(profile.loops) != 1:
+        return Profile([loop])
     if len(profile.loops) > 1:
         profile._crossing = crossing
     return profile
@@ -439,6 +449,8 @@ def superellipse(w, d, n=2, taper=0):
 
     A section between an ellipse and a rectangle: `n` 2 an ellipse, 4 a box with
     round corners, 1.5 a diamond; `taper` narrows its +Y side by that fraction."""
+    if w == 0 and d == 0:
+        return Profile([Loop([(0, 0)], [False])])
     sides = (_core.segments(max(w, d) / 2) if _core.FACETS is not None
              else max(SUPERELLIPSE_SIDES, _core.segments(max(w, d) / 2)))
     dense = []
@@ -469,7 +481,8 @@ def station(z, w, d, x=0, y=0, n=2, taper=0):
     `at(superellipse(w, d, n=n, taper=taper), x=x, y=y, z=z)`. A loft is a list of them:
     `loft(name, *[station(z, w, d) for z, w, d in rows])`."""
     from .frames import at
-    return at(superellipse(w, d, n=n, taper=taper), x=x, y=y, z=z)
+    out = at(superellipse(w, d, n=n, taper=taper), x=x, y=y, z=z)
+    return out
 
 
 # ---------------------------------------------------------------- outlines from points
@@ -524,10 +537,14 @@ def spline(pts, closed=False, tangents=None, loop=False):
     if closed:
         for p in pts:
             _flat_point(p, "spline", SPLINE_LIFT)
-    dense = _centripetal(pts, closed, tangents=(start, end))
+    record = []
+    dense = _centripetal(pts, closed, tangents=(start, end), _record=record)
     if closed:
         return _single([p[:2] for p in dense], [False] * len(dense))
-    return Path(dense)
+    path = Path(dense)
+    if _core.FACETS is not None:
+        _spline_curve(path, record)
+    return path
 
 
 def _phantom(end, inner, tangent):
@@ -550,7 +567,7 @@ def _phantom(end, inner, tangent):
     return end + 2 * along * t - chord
 
 
-def _centripetal(pts, closed, steps=12, tangents=(None, None)):
+def _centripetal(pts, closed, steps=12, tangents=(None, None), _record=None, angular=None, step=None):
     """Centripetal Catmull–Rom through `pts`, `steps` pieces per span: no loops, no overshoot."""
     m = len(pts)
     if m < 2:
@@ -571,18 +588,59 @@ def _centripetal(pts, closed, steps=12, tangents=(None, None)):
         t1 = t0 + max((p1 - p0).length, _core.mm(1e-9)) ** 0.5
         t2 = t1 + max((p2 - p1).length, _core.mm(1e-9)) ** 0.5
         t3 = t2 + max((p3 - p2).length, _core.mm(1e-9)) ** 0.5
-        for k in range(steps):
-            t = t1 + (t2 - t1) * k / steps
+        def evaluate(u, divisor=1, p0=p0, p1=p1, p2=p2, p3=p3, t0=t0, t1=t1, t2=t2, t3=t3):
+            t = t1 + (t2 - t1) * u / divisor
             a1 = (t1 - t) / (t1 - t0) * p0 + (t - t0) / (t1 - t0) * p1
             a2 = (t2 - t) / (t2 - t1) * p1 + (t - t1) / (t2 - t1) * p2
             a3 = (t3 - t) / (t3 - t2) * p2 + (t - t2) / (t3 - t2) * p3
             b1 = (t2 - t) / (t2 - t0) * a1 + (t - t0) / (t2 - t0) * a2
             b2 = (t3 - t) / (t3 - t1) * a2 + (t - t1) / (t3 - t1) * a3
             c = (t2 - t) / (t2 - t1) * b1 + (t - t1) / (t2 - t1) * b2
-            out.append(tuple(c)[:dim])
+            return c
+        pieces = steps
+        if _core.FACETS is not None:
+            pieces = _core.turn_steps([[evaluate(k, 64) for k in range(65)]])
+        if angular is not None and _core.FACETS is None:
+            probes = [evaluate(k, 64) for k in range(65)]
+            chords = [b-a for a,b in zip(probes, probes[1:])]
+            directions = [v.normalized() for v in chords if v.length > 1e-10]
+            turn = sum(math.atan2(a.cross(b).length, a.dot(b)) for a,b in zip(directions, directions[1:]))
+            pieces = max(1, math.ceil(turn / math.radians(angular)))
+        if step is not None and step > 0:
+            probes = [evaluate(k, 64) for k in range(65)]
+            pieces = max(1, math.ceil(sum((b-a).length for a,b in zip(probes, probes[1:])) / step))
+        if _record is not None:
+            _record.append((evaluate, pieces))
+        out.extend(tuple(evaluate(k, pieces))[:dim] for k in range(pieces))
     if not closed:
         out.append(tuple(vs[-1])[:dim])
     return out
+
+
+def _spline_curve(path, record):
+    """Arc-length lookup retaining the original cubic, independently of facets."""
+    import bisect
+    lengths, parameters = [0.], [0.]
+    previous = record[0][0](0)
+    for i,(evaluate,_) in enumerate(record):
+        for j in range(1,257):
+            point = evaluate(j/256)
+            lengths.append(lengths[-1]+(point-previous).length)
+            parameters.append(i+j/256)
+            previous = point
+    def distance(t):
+        k = min(int(t*256),len(lengths)-2)
+        return lengths[k]+(lengths[k+1]-lengths[k])*(t*256-k)
+    def at_length(d):
+        k = min(max(bisect.bisect_right(lengths,d)-1,0),len(lengths)-2)
+        t = parameters[k]+(parameters[k+1]-parameters[k])*(d-lengths[k])/max(lengths[k+1]-lengths[k],1e-12)
+        i = min(int(t),len(record)-1)
+        u = t-i
+        evaluate = record[i][0]
+        tangent = (evaluate(min(1.,u+1e-4))-evaluate(max(0.,u-1e-4))).normalized()
+        return evaluate(u),tangent
+    path._curve_lengths = [distance(i+j/pieces) for i,(_,pieces) in enumerate(record) for j in range(pieces)]+[lengths[-1]]
+    path._curve_at_length = at_length
 
 
 def _circle_through(a, b, c):
@@ -880,6 +938,9 @@ def offset(p, t):
     """Grown by `t`.
 
     `p` grown by `t` all round (shrunk if `t` < 0); grown corners come out round."""
+    if isinstance(p, Placed):
+        out = Placed(offset(p.profile, t), p.matrix.copy())
+        return out
     loops = []
     for loop in p.loops:
         pts, n = loop.pts, len(loop.pts)
@@ -902,7 +963,8 @@ def offset(p, t):
             out.append(tuple(b + bis * (t / max(bis.dot(n0), 0.1))))
             flags.append(loop.sharp[i])
         loops.append(Loop(*_clean(out, flags)))
-    return _from_region(_region([loops], lambda w: w > 0))
+    out = _from_region(_region([loops], lambda w: w > 0))
+    return out
 
 
 STROKE_LIFT = "a stroke is drawn flat, in x and y: place the profile it makes with s3d.at(profile, ...)"
@@ -1039,11 +1101,11 @@ def text(s, size, font=None):
     curve.resolution_u = 6
     if font:
         curve.font = bpy.data.fonts.load(str(font), check_existing=True)
-    ob = _core.link(bpy.data.objects.new("_text", curve))
-    depsgraph = bpy.context.evaluated_depsgraph_get()
-    mesh = bpy.data.meshes.new_from_object(ob.evaluated_get(depsgraph), depsgraph=depsgraph)
-    bpy.data.objects.remove(ob)
-    bpy.data.curves.remove(curve)
+    ob = bpy.data.objects.new("_text", curve)
+    try:
+        mesh = _core.evaluated_mesh(ob)
+    finally:
+        bpy.data.curves.remove(curve)
     co = [(v.co.x, v.co.y) for v in mesh.vertices]
     directed = set()
     for poly_ in mesh.polygons:

@@ -55,7 +55,7 @@ def _object_digest(ob):
                 h.update(repr([float(v).hex() for v in values]).encode())
         for mat in me.materials:   # only once a program sets a material: no other digest moves
             h.update(f"material:{mat.get('s3d_material') if mat else None}".encode())
-    if ob.type == "LIGHT":            # only once a program makes a light: no other digest moves
+    if ob.type == "LIGHT" and "s3d_light" in ob.data:            # only once a program makes a light: no other digest moves
         lamp = ob.data
         said = lamp["s3d_light"]
         values = [said["kind"], said["power"], said["color"], lamp.use_shadow, lamp.shadow_soft_size]

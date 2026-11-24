@@ -62,6 +62,38 @@ class Determinism(unittest.TestCase):
         differ = sorted(k for k in first if first[k] != second.get(k))
         self.assertEqual(differ, [], f"cases whose mesh differs between two processes: {differ}")
 
+    def test_field_in_two_fresh_processes(self):
+        first = run_cases("implicit_solid", seed="11")["digests"]["implicit_solid"]
+        second = run_cases("implicit_solid", seed="37")["digests"]["implicit_solid"]
+        self.assertFalse(first.startswith("error"), first)
+        self.assertEqual(first, second)
+
+    def test_hull_in_two_fresh_processes(self):
+        first = run_cases("convex_hulls", seed="11")["digests"]["convex_hulls"]
+        second = run_cases("convex_hulls", seed="37")["digests"]["convex_hulls"]
+        self.assertFalse(first.startswith("error"), first)
+        self.assertEqual(first, second)
+
+    def test_thick_curved_branches_in_two_fresh_processes(self):
+        code = """
+import sand3d as s3d
+import sys
+sys.path.insert(0, 'tests')
+from harness import digest
+axes = s3d.branches(200, 41, levels=1, children=2, wander=100,
+                    droop=90, jitter=.8, seed=17)
+for axis in axes:
+    s3d.wire(axis.name, axis.path, axis.d)
+    s3d.sweep(axis.name, s3d.polygon(8, axis.d[0][1]), axis.path,
+              scale=[(0, 1), (1, .15)])
+print(digest(None), flush=True)
+"""
+        results = [subprocess.run([sys.executable, "-c", code], cwd=ROOT,
+                                  env={**os.environ, "PYTHONPATH": str(ROOT / "src"),
+                                       "PYTHONHASHSEED": seed}, capture_output=True,
+                                  text=True, check=True, timeout=120).stdout for seed in ("11", "37")]
+        self.assertEqual(results[0], results[1])
+
     def test_the_harness_catches_a_nondeterministic_case(self):
         runs = [run_cases("selftest_unseeded", seed=s, SAND3D_HARNESS_SELFTEST="1")["digests"] for s in "01"]
         self.assertNotEqual(runs[0]["selftest_unseeded"], runs[1]["selftest_unseeded"])

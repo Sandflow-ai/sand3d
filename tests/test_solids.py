@@ -47,6 +47,19 @@ class Solids(unittest.TestCase):
         self.assertTrue(closed, f"{ob.name} is not closed")
         self.assertAlmostEqual(v, volume, delta=abs(volume) * rel, msg=ob.name)
 
+    def test_wire_does_not_override_the_callers_path(self):
+        points = [(0, 0, 0), (5, 0, 1), (10, 6, 2)]
+        path = s3d.spline(points)
+        before = [tuple(frame.origin) for frame in s3d.along(path, count=5)]
+        s3d.wire('fil', path, (.1, .15), closed=True)
+        self.assertFalse(path.closed)
+        self.assertEqual([tuple(frame.origin) for frame in s3d.along(path, count=5)], before)
+
+        straight = s3d.spline([(0, 0, 0), (0, 0, 10)])
+        s3d.wire('sampled', straight, (.1, .15), rings=[.2, .6])
+        self.assertFalse(hasattr(straight, '_at_length'))
+        self.assertFalse(hasattr(straight, '_lengths'))
+
     def test_extrude_names_caps_walls_and_corners(self):
         ob = s3d.extrude("plate", s3d.rect(80, 40), 6)
         self.assertSolid(ob, 80 * 40 * 6, rel=1e-9)

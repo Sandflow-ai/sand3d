@@ -9,11 +9,11 @@
 **3D modeling in Python, built for LLMs.**
 
 sand3d is a Python library for writing 3D objects as short programs: profiles, solids,
-edits, frames, joints and assemblies, over Blender's `bpy`. A program says *how* a shape
-is made, part by part and in its own words, so a model writes it in a few hundred tokens
-and a person can read it.
+edits, frames, joints and assemblies, and the forms of nature (grass, moss, trees, water,
+rock), over Blender's `bpy`. A program says *how* a shape is made, part by part and in its
+own words, so a model writes it in a few hundred tokens and a person can read it.
 
-<p align="center"><img src="https://raw.githubusercontent.com/Sandflow-ai/sand3d/main/docs/readme/hero.png" alt="Objects written in sand3d" width="830"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/Sandflow-ai/sand3d/main/docs/readme/cover.jpg" alt="A washing machine overgrown with moss, a fern and a flowering vine, on a riverbank at sunset, next to a jetty and a tree, written in sand3d" width="830"></p>
 
 <p align="center">
   <a href="https://sandflow.ai/sand3d/"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Sandflow-ai/sand3d/main/docs/readme/sandflow-symbol-white.svg"><img src="https://raw.githubusercontent.com/Sandflow-ai/sand3d/main/docs/readme/sandflow-symbol-black.svg" alt="" height="16" align="absmiddle"></picture>&nbsp;Website</a> ·
@@ -35,9 +35,9 @@ and a person can read it.
 <a href="https://sand3d.sandflow.ai/tokens.html">How it is measured, part by part</a></p>
 
 - **Short.** A part takes 2 to 6× fewer tokens than the same part in Blender Python, CadQuery or FeatureScript ([details](https://sand3d.sandflow.ai/tokens.html)).
-- **The whole API fits in a prompt**, about 3,600 tokens ([the API](https://sand3d.sandflow.ai/api.html)).
+- **One file to prompt.** Every signature, one line each, in [the API](https://sand3d.sandflow.ai/api.html); a short guide per technique (water, trees, terrain…) is read only when a task needs it.
 - **Named, not computed.** Parts, edges and faces are reached by name, never by hand-computed coordinates.
-- **Deterministic.** The same program builds the same mesh, bit for bit.
+- **Deterministic.** The same program builds the same mesh, bit for bit, in the same environment.
 
 ## A whole object, part by part
 
@@ -70,7 +70,8 @@ s3d.export(machine, "washer.glb")    # or .urdf, .usda, .ifc, .obj, .stl
 | **URDF** | a link per moving part, its joints and their limits, at rest; OBJ meshes beside it | ROS, PyBullet, MuJoCo, Isaac |
 | **USDA** | the same tree in OpenUSD (UsdGeom, UsdPhysics), with the materials and every light (UsdLux) | Omniverse, Isaac Sim, USD pipelines |
 | **IFC** | the part tree as an IFC4 project — assemblies, a proxy per part, triangulated face sets, the materials, a light fixture per point or spot | Revit, ArchiCAD, Tekla, BIM |
-| **OBJ**, **STL** | the meshes alone, at the current pose: OBJ Y up, binary STL Z up | any 3D tool, slicers |
+| **OBJ** | meshes in the root's tree at the current pose, Y up, with a mean colour per part for callable colours | any 3D tool |
+| **STL** | meshes in the root's tree at the current pose, binary, Z up | any 3D tool, slicers |
 
 `.usd`, `.usdc` and `.usdz` come from the `.usda` through USD's own tools (`usdcat`,
 `usdzip`). Revit's own `.rvt` is written by Revit alone — no library writes one — so
@@ -80,6 +81,9 @@ s3d.export(machine, "washer.glb")    # or .urdf, .usda, .ifc, .obj, .stl
 objects and anything else added with raw `bpy` are left out. Convert them to meshes first,
 or use Blender's own exporters.
 
+GLB, URDF and USDA also follow joints to parts outside the root's tree. IFC, OBJ and STL
+follow Blender parenting only.
+
 IFC exports the current pose, without joints. Its `GlobalId` values depend on geometry
 and placement: editing or moving a part can change its ID, and identical parts in separate
 models can share one. Do not use them to track parts across exports.
@@ -88,6 +92,7 @@ models can share one. Do not use them to track parts across exports.
 
 Python 3.13 (recommended) or 3.11. Blender comes with it, as the `bpy` module: 5.2 LTS on
 Python 3.13, 4.5 LTS on Python 3.11; CI runs bpy 5.2.
+NumPy ships with the `bpy` dependency; no other dependency is needed.
 
 ```bash
 pip install sand3d        # or, in a uv project: uv add sand3d
@@ -118,8 +123,8 @@ The programs themselves: [docs/examples/](https://github.com/Sandflow-ai/sand3d/
 ## Give it to your LLM
 
 Put [docs/api.md](https://github.com/Sandflow-ai/sand3d/blob/main/docs/api.md) in the system prompt: the rules of the vocabulary, every
-signature, and worked examples, in about 3 600 tokens; [llms.txt](https://github.com/Sandflow-ai/sand3d/blob/main/llms.txt) points a
-model at it. For objects of several parts, [the guidelines](https://sand3d.sandflow.ai/guidelines.html) give
+signature, and worked examples; [llms.txt](https://github.com/Sandflow-ai/sand3d/blob/main/llms.txt) points a
+model at it, and at the task guides it reads on demand. For objects of several parts, [the guidelines](https://sand3d.sandflow.ai/guidelines.html) give
 the eight rules of an assembly program: the plan first, then the details, then the parts.
 
 ## What is in it
@@ -129,9 +134,10 @@ Everything on one flat `s3d.<verb>` surface:
 | family | verbs |
 |---|---|
 | profiles | `rect` `circle` `slot` `polygon` `poly` `arc` `spline` `superellipse` `text` `offset` `stroke` … (16) |
-| solids and paths | `extrude` `revolve` `sweep` `loft` `wire` `helix` `box` `cylinder` `tube` `sphere` `torus` `dome` … (15) |
-| edits | `cut` `join` `intersect` `split` `hole` `pocket` `fillet` `chamfer` `shell` `dent` … (15) |
-| frames and placement | `Frame` `face` `edge` `bbox` `local` `at` `transform` `grid` `ring` `along` `snap` |
+| solids and paths | `extrude` `revolve` `sweep` `loft` `wire` `helix` `box` `cylinder` `tube` `sphere` `torus` `dome` `hull` `field` `fill` `waves` … (19) |
+| edits | `cut` `join` `intersect` `split` `hole` `pocket` `fillet` `chamfer` `shell` `dent` `bend` `twist` `taper` `displace` `smooth` `blend` … (21) |
+| frames and placement | `Frame` `face` `edge` `bbox` `local` `at` `transform` `grid` `ring` `along` `snap` `lay` |
+| distributions | `Frames` `scatter` `tufts` `branches` `phyllotaxis` `spiral` `vary` `noise` (8) |
 | articulation | `joint` `pose` `seat` |
 | assembly | `group` `assembly` `attach` `export` `units` `fingerprint` … (8) |
 | parts, materials and lights | `gear` `knurl` `thread` `material` `light` |
@@ -141,6 +147,8 @@ No category verbs (`chair()`, `table()`): a category is a program written *in* s
 ## Datasets
 
 sand3d programs for five sources of 3D objects, on Hugging Face under CC BY 4.0.
+
+<p align="center"><img src="https://raw.githubusercontent.com/Sandflow-ai/sand3d/main/docs/readme/hero.png" alt="Objects written in sand3d" width="830"></p>
 
 <table>
   <tr>

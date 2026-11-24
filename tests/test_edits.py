@@ -99,6 +99,40 @@ class Edits(unittest.TestCase):
         self.assertEqual(edges(m, "n.top"), 4)
         self.assertSolid(s3d.scale(s3d.box("s", 10, 10, 10), (2, 1, -1)), 2000, rel=1e-9)
 
+    def test_a_dent_lands_where_snap_found_the_surface(self):
+        for x, rz in ((0, 0), (1000, 30)):
+            ball = s3d.at(s3d.sphere(f"ball{x}", 20), x=x, rz=rz)
+            top = s3d.snap(ball, [(x, 0, 30)], direction=(0, 0, -1))[0]
+            s3d.dent(ball, [top], r=4, depth=2, coords="parent")
+            after = s3d.snap(ball, [(x, 0, 30)], direction=(0, 0, -1))[0]
+            self.assertAlmostEqual(after.origin.z, top.origin.z - 2, delta=.05,
+                                   msg=f"placed at x={x}, the hollow is where the frame was")
+
+    def test_dent_defaults_to_mesh_local_after_placement(self):
+        for placement in ({}, dict(x=100), dict(x=100, y=30, rx=20, ry=40, rz=30)):
+            for coords in ({}, dict(coords="local")):
+                pad = s3d.at(s3d.box("pad", 20, 20, 10), **placement)
+                s3d.dent(pad, [(0, 0, 10)], r=5, depth=1, **coords)
+                self.assertEqual(len(pad.data.vertices), 81)
+                self.assertAlmostEqual(min(v.co.z for v in pad.data.vertices if abs(v.co.x) < .01
+                                           and abs(v.co.y) < .01), 9)
+                if not placement and not coords:
+                    reference = [tuple(v.co) for v in pad.data.vertices]
+                self.assertEqual([tuple(v.co) for v in pad.data.vertices], reference)
+
+    def test_dent_parent_matches_local_on_rotated_part(self):
+        from mathutils import Vector
+        local = s3d.box("local", 20, 20, 10)
+        placed = s3d.at(s3d.box("placed", 20, 20, 10), x=100, y=30, rx=20, ry=40, rz=30)
+        s3d.dent(local, [(0, 0, 10)], r=5, depth=1)
+        point = placed.matrix_basis @ Vector((0, 0, 10))
+        s3d.dent(placed, [point], r=5, depth=1, coords="parent")
+        self.assertEqual(len(placed.data.vertices), len(local.data.vertices))
+        for a, b in zip(local.data.vertices, placed.data.vertices):
+            self.assertLess((a.co - b.co).length, 1e-4)
+        with self.assertRaisesRegex(ValueError, 'coords'):
+            s3d.dent(placed, [], r=5, depth=1, coords="world")
+
     def test_delete(self):
         s3d.delete(s3d.box("gone", 5, 5, 5))
         self.assertNotIn("gone", bpy.data.objects)

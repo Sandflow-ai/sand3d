@@ -296,12 +296,12 @@ def _effective_type(c, k, j):
 # ---------------------------------------------------------------- URDF
 
 def _colour(ob):
-    tag = materials._nearest(ob)
+    tag = materials.mean_tag(ob)
     if tag is None:
         return None
     v = materials.look(tag)
     h = v["color"]
-    rgb = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+    rgb = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)] if isinstance(h, str) else h
     return materials._name(tag), (*rgb, v["opacity"])
 
 
@@ -381,14 +381,13 @@ def write_urdf(root, path):
 
 # ---------------------------------------------------------------- GLB, nested by the joints
 
-def glb_tree(root, coll):
-    """Temporary objects in `coll` that the glTF exporter writes for `root`: its parts at
+def glb_tree(mech, coll):
+    """Temporary objects in `coll` that the glTF exporter writes for the mechanism: its parts at
     their current pose, nested by the joints, a node per joint carrying it in its extras.
     The program's objects are renamed meanwhile, so the nodes keep their names; returns
     what `undo` needs; on an error, undoes what it did before raising it."""
     renamed = []
     try:
-        mech = Mechanism(root)
         mech.check()
         renamed += [(ob, ob.name) for ob in mech.members]
         renamed += [(ob.data, ob.data.name) for ob in mech.lights()]   # a light is named after its data
@@ -462,9 +461,7 @@ def _twins(mech, renamed, coll):
 
 def undo(state, coll):
     renamed, temps = state
-    for t in temps:
-        bpy.data.objects.remove(t)
-    bpy.data.collections.remove(coll)
+    bpy.data.batch_remove([*temps, coll])
     for i, (ob, _) in enumerate(renamed):                # a light's data holds a name another may take back
         ob.name = f"s3d~export~{i}"
     for ob, name in renamed:

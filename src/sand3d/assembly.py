@@ -1,5 +1,6 @@
 """The assembly layer: groups, handles and their anchors, details, export, the unit."""
 import os
+import math
 
 import bpy
 
@@ -60,14 +61,19 @@ def attach(handle, name, *children):
     return detail
 
 
-def export(root, path, trace=None):
-    """root and what hangs on it by its joints, in metres: .glb at the current pose, joints
-    in extras; .urdf a link per moving part, at rest, meshes beside it; .usda the URDF's
-    tree as OpenUSD text, with the materials; .ifc the part tree as IFC4, the open standard
-    Revit opens and links (.rvt only Revit writes); .obj and .stl its meshes at the current pose.
-    Export writes meshes and sand3d lights where the format supports them. Curves, text
-    objects and anything else added with raw bpy are left out. Convert them to meshes
-    first, or use Blender's own exporters.
+def export(root, path, colors="material", *, trace=None):
+    """Write meshes and supported sand3d lights in metres.
+
+    GLB, URDF and USDA follow parenting and joints. IFC, OBJ and STL follow parenting.
+    GLB, IFC, OBJ and STL write the current pose. URDF and USDA write the mechanism at
+    rest. Convert raw Blender curves and text to meshes first.
+
+    colors="vertex" (.glb only) puts all base colours on corners, sharing a white
+    material per non-colour look; a surface that gives light keeps a material of its
+    own colour (the mean of a colour function's), which its emission reads.
+    colors="material" keeps plain colours on materials, as before.
+
+    Function colours use an area-weighted mean in .usda, .urdf, .ifc and .obj; STL has no colours.
 
     The program's unit to metres, then one file, its extension the format: a GLB — with
     the materials the program set, if it set any; nested by the joints, each in its
@@ -90,19 +96,25 @@ def export(root, path, trace=None):
     what was built, in the world in metres: boxes (with the parts under them), volumes, names,
     joints, materials, nested as the GLB nests them."""
     root = root.root if isinstance(root, Handle) else root
+    suffix = os.path.splitext(str(path))[1].lower()
+    if colors not in ("material", "vertex"):
+        raise ValueError('export: colors must be "material" or "vertex"')
+    if colors != "material" and suffix != ".glb":
+        raise ValueError('export: colors="vertex" requires .glb')
     if trace is None:
         trace = os.environ.get("SAND3D_TRACE") == "1"
     if trace and not isinstance(trace, (str, os.PathLike)):
         trace = os.path.splitext(str(path))[0] + ".trace.json"
     if trace and os.path.exists(trace):
         os.remove(trace)                    # no stale trace beside a failed export
-    _export(root, path)
+    materials.resolve()
+    _export(root, path, colors)
     if trace:
         from . import trace as tracefile
         tracefile.write(root, trace)
 
 
-def _export(root, path):
+def _export(root, path, colors):
     from . import ifcfile, lights, meshfile, urdf, usd
     suffix = os.path.splitext(str(path))[1].lower()
     if suffix in (".usd", ".usdc", ".usdz"):
@@ -120,7 +132,6 @@ def _export(root, path):
         lights.left_out(lights.lights([root, *root.children_recursive]), path, "an OBJ or an STL holds meshes only")
         (meshfile.write_obj if suffix == ".obj" else meshfile.write_stl)(root, path)
         return
-    materials.resolve()
     if suffix == ".ifc":
         lights.left_out([ob for ob in lights.lights([root, *root.children_recursive])
                          if lights.kind(ob) in ("sun", "ambient")], path,
@@ -134,14 +145,24 @@ def _export(root, path):
     if suffix == ".usda":
         usd.write_usda(root, path)
         return
-    lights.left_out([ob for ob in urdf.Mechanism(root).lights() if lights.kind(ob) == "ambient"], path,
+    mech = urdf.Mechanism(root)
+    lights.left_out([ob for ob in mech.lights() if lights.kind(ob) == "ambient"], path,
                     "glTF has no ambient light")
+    with materials.exporting(root, colors, members=mech.members):
+        with materials.volume_export(mech.members):
+            return _write_glb(mech, path)
+
+
+def _write_glb(mech, path):
+    from . import lights, urdf
+
+    root = mech.root
     lent = _lend_meshes()
     try:
         name = root.name                                   # the GLB's scene: the exporter names it after coll
         coll = bpy.data.collections.new("s3d~export")      # the exporter writes this, not the whole scene
         bpy.context.scene.collection.children.link(coll)
-        state = urdf.glb_tree(root, coll)
+        state = urdf.glb_tree(mech, coll)
         lit = [ob for ob in coll.objects if ob.type == "LIGHT"]
         dressed = materials.dressed()           # asked before the tags come off: it reads them
         tags = {m: m.pop(materials.TAG) for m in bpy.data.materials if materials.TAG in m}   # extras: joints only
@@ -153,6 +174,7 @@ def _export(root, path):
             with lights.gltf_spot_cones(lit):
                 bpy.ops.export_scene.gltf(filepath=str(path), export_format="GLB", collection=coll.name,
                                           export_extras=True, export_lights=bool(lit),
+                                          export_vertex_color="MATERIAL",
                                           export_materials="EXPORT" if dressed else "NONE")
         finally:
             coll.name = "s3d~export"
@@ -195,8 +217,8 @@ def _return_meshes(lent):
     objects, copies = lent
     for ob, mesh in objects:
         ob.data = mesh
+    bpy.data.batch_remove([own for own, name in copies.values()])
     for mesh, (own, name) in copies.items():
-        bpy.data.meshes.remove(own)
         mesh.name = name
 
 
@@ -214,8 +236,11 @@ def empty_scene():
     if built:
         _core.UNIT, _core.MM = "mm", _core.UNITS["mm"]
         _core.FACETS = None
+        _core.FACET_SMOOTH = False
+        _core.FACET_CONFIGURED = False
     _core.settled = False
     _core.dressed = False
+    materials.FUNCTIONS.clear()
 
 
 def units(name=None):
@@ -235,27 +260,62 @@ def units(name=None):
     return name
 
 
-def facets(n=None):
-    """Segments of a full circle: a whole number from 3, or "auto" (default).
+_FACET_DEFAULT = object()
 
-    Set how many straight pieces a full circle gets — in every circle, arc, revolve,
-    helix, fillet, wire corner and superellipse — before the program's first verb:
+class _FacetScope:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *error):
+        _core.FACETS, _core.FACET_SMOOTH, _core.FACET_CONFIGURED = self.previous
+        return False
+
+
+class _FacetCount(int, _FacetScope):
+    pass
+
+
+class _FacetAuto(str, _FacetScope):
+    pass
+
+
+def facets(n=None, smooth=_FACET_DEFAULT):
+    """Segments per full turn: a whole number from 3, or "auto".
+
+    Set how many straight pieces a full turn gets, at any point of a program, between "auto"
+    and fixed counts alike; `with facets(n):` sets it for one part and restores it after:
     `facets(8)` builds an octagonal cylinder and a quarter-round fillet in 2, for
-    low-poly or faceted assets. "auto", the default, sets the count by the size, to a
-    chord tolerance of 0.05 mm (24 to 64 a turn). Lengthwise sampling (a loft's steps,
-    a body's sections) is not a circle and stays, and so do the teeth of `gear` and the
-    turns of `knurl` and `thread`, which sample their own. Without `n`, the setting in force:
-    what a program records beside `units()`."""
-    if n is None:
-        return "auto" if _core.FACETS is None else _core.FACETS
-    if n == "auto":
+    low-poly or faceted assets. A fixed count rules every turn, round a section and along
+    a solid alike: a loft, a body or a wire gets about n × a / 360 pieces where it turns
+    by a degrees, and a straight span only its sections. Parts built at a fixed count have
+    flat faces by default and carry their shading through edits and copies.
+    Axisless field/blend surfaces and displace refinement use target edge π D / n,
+    D the largest local box dimension; hull preserves its explicit points.
+    `smooth=True` keeps the usual shading. "auto", the default, sets the count by the
+    size, to a chord tolerance of 0.05 mm (24 to 64 a turn), shaded as usual. The teeth
+    of `gear` and the turns of `knurl` and `thread` sample their own. Without `n`, the
+    count in force: what a program records beside `units()`."""
+    omitted = smooth is _FACET_DEFAULT
+    if omitted:
+        smooth = _core.FACET_SMOOTH
+    if not isinstance(smooth, bool):
+        raise ValueError(f"facets: smooth={smooth!r} is neither True nor False")
+    if n is None or n == "auto":
+        if smooth and not omitted:
+            raise ValueError('facets: smooth=True goes with a fixed count — "auto" is smooth already')
+        if n is None:
+            return "auto" if _core.FACETS is None else _core.FACETS
         value = None
     elif isinstance(n, int) and not isinstance(n, bool) and n >= 3:
         value = n
     else:
-        raise ValueError(f"facets: {n!r} is neither a whole number from 3 nor \"auto\"")
-    if value != _core.FACETS and _core.settled:
-        raise ValueError(f"facets: set {n!r} before the first verb — this scene is already built with "
-                         f"{facets()!r} (s3d.empty_scene() starts over)")
-    _core.FACETS = value
-    return n
+        raise ValueError(f'facets: {n!r} is neither a whole number from 3 nor "auto"')
+    if smooth != _core.FACET_SMOOTH and _core.FACET_CONFIGURED:
+        raise ValueError(f"facets: this program shades fixed counts with smooth={_core.FACET_SMOOTH}, chosen by its "
+                         f"first facets call; leave smooth out to keep that, or shade one part with s3d.smooth(ob)")
+    previous = (_core.FACETS, _core.FACET_SMOOTH, _core.FACET_CONFIGURED)
+    _core.FACET_CONFIGURED = True
+    _core.FACETS, _core.FACET_SMOOTH = value, smooth
+    result = _FacetAuto(n) if isinstance(n, str) else _FacetCount(n)
+    result.previous = previous
+    return result

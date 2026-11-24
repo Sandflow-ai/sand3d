@@ -112,6 +112,25 @@ class Frames(unittest.TestCase):
         self.assertTrue(close(hits[0].origin, (0, -25, 100)) and close(hits[0].normal, (0, -1, 0)))
         near = s3d.snap(body, [(0, 0, 200)])
         self.assertTrue(close(near[0].origin, (0, 0, 125)) and close(near[0].normal, (0, 0, 1)))
+        inside = s3d.snap(body, [(0, 0, 110)])
+        self.assertTrue(close(inside[0].origin, (0, 0, 125)) and close(inside[0].normal, (0, 0, 1)),
+                        "from inside, the normal still points out of the solid")
+        through = s3d.snap(body, [(0, 0, 75)], direction=(0, 1, 0))
+        self.assertTrue(close(through[0].origin, (0, 25, 75)) and close(through[0].normal, (0, 1, 0)),
+                        "a line from inside meets the far wall, its normal out of the solid")
+
+    def test_snap_takes_named_axes(self):
+        body = s3d.at(s3d.box("body", 100, 50, 50), z=75)
+        down = s3d.snap(body, [(0, 0, 300)], direction="-Z")
+        self.assertTrue(close(down[0].origin, (0, 0, 125)) and close(down[0].normal, (0, 0, 1)))
+        for name, vector in (("+Y", (0, 1, 0)), ("Y", (0, 1, 0)), ("-x", (-1, 0, 0))):
+            with self.subTest(name=name):
+                start = [(0, -100, 100)] if "Y" in name else [(200, 0, 75)]
+                self.assertEqual([tuple(f.origin) for f in s3d.snap(body, start, direction=name)],
+                                 [tuple(f.origin) for f in s3d.snap(body, start, direction=vector)])
+        for bad in ("down", "-W", (0, 0, 0), (0, "a", 1), 3):
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "snap: direction is"):
+                s3d.snap(body, [(0, 0, 300)], direction=bad)
 
 
 if __name__ == "__main__":

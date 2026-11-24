@@ -34,7 +34,8 @@ PYTHONPATH=src .venv/bin/python tests/run.py                         # the suite
 
 ## Code
 
-- The library imports only `bpy`, `bmesh`, `mathutils` and the standard library.
+- The library imports only `bpy`, `bmesh`, `mathutils`, `numpy` (shipped with bpy) and the standard library.
+- Programs may import `numpy` too.
 - Programs use `import sand3d as s3d`, never `from sand3d import *`.
 - Every public verb is deterministic: built in two fresh processes, it gives the same mesh, and
   it has that test.

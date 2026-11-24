@@ -55,6 +55,19 @@ class Trace(unittest.TestCase):
             self.assertEqual(sorted(p.name for p in Path(tmp).glob("*.json")),
                              ["b.trace.json", "e.trace.json", "f.trace.json", "mine.json"])
 
+    def test_colors_stays_third(self):
+        """A third positional argument is colors, as programs pass it; trace is keyword-only."""
+        box = s3d.box("box", 100, 60, 10)
+        here = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            try:
+                s3d.export(box, "a.glb", "vertex")
+                self.assertEqual(os.listdir(tmp), ["a.glb"])
+                self.assertRaises(TypeError, s3d.export, box, "b.glb", "vertex", True)
+            finally:
+                os.chdir(here)
+
     def test_a_box_in_metres(self):
         t = traced(s3d.box("box", 100, 60, 10))
         self.assertEqual((t["name"], t["bbox"], t["open_edges"], t["volume"], t["parts"]),
