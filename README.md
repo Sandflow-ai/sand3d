@@ -181,7 +181,7 @@ shows it as "Cite this repository".
   author = {Neveu, Thibault and Loy, Andr{\'e}a},
   title  = {sand3d},
   year   = {2026},
-  note   = {Version 1.6.3},
+  note   = {Version 1.7.0},
   url    = {https://github.com/Sandflow-ai/sand3d}
 }
 ```

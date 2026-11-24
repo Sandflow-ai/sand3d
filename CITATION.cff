@@ -1,5 +1,5 @@
 # How to cite sand3d: GitHub shows it as "Cite this repository". The README's BibTeX says the same.
-# Version and date are those of the public release, 1.6.3: update both at each public release.
+# Version and date are those of the public release, 1.7.0: update both at each public release.
 cff-version: 1.2.0
 message: "If you use sand3d in your work, please cite it as below."
 type: software
@@ -17,8 +17,8 @@ authors:
     family-names: "Loy"
     affiliation: "Sandflow"
 license: Apache-2.0
-version: 1.6.3
-date-released: 2026-11-06
+version: 1.7.0
+date-released: 2026-11-24
 repository-code: "https://github.com/Sandflow-ai/sand3d"
 keywords:
   - 3D

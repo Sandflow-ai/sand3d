@@ -30,7 +30,7 @@ from .profile import Path as _Path, Placed as _Placed, arc, circle, ellipse, mir
 from .solids import body, box, cone, cylinder, dome, extrude, helix, hull, loft, revolve, sphere, spiral, sweep, torus, tube, wedge, wire
 
 # x-release-please-start-version
-__version__ = "1.6.3"
+__version__ = "1.7.0"
 # x-release-please-end
 
 __all__ = [
