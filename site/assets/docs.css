@@ -1,0 +1,142 @@
+/* Docs layer over site.css: a sticky top bar, then sidebar | page | on-this-page; one column on a phone. */
+:root { --top: 56px; --side: 252px; --toc: 196px; --hl: #793CFF14 }
+html { scroll-padding-top: calc(var(--top) + 52px) }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--craie) }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--craie) 92%, transparent);
+  backdrop-filter: blur(8px); border-bottom: 1px solid var(--filet) }
+.topin { max-width: 1440px; margin: 0 auto; height: var(--top); display: flex; align-items: center; gap: 28px;
+  padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)) }
+.titre { display: inline-flex; align-items: center; gap: 9px; color: var(--encre); text-decoration: none; font-weight: 500; font-size: 16px }
+.titre img { height: 22px; width: auto }
+nav.main { display: flex; gap: 22px; font-size: 14px }
+nav.main a { color: var(--encre); text-decoration: none; padding: 6px 0 }
+nav.main a.on { color: var(--violet); box-shadow: inset 0 -2px 0 var(--violet) }
+nav.main a:hover { color: var(--violet) }
+.right { margin-left: auto; display: flex; align-items: center; gap: 16px; font-size: 14px }
+.ver { font-family: var(--mono); font-size: 12px; color: var(--gris); border: 1px solid var(--filet); border-radius: 999px; padding: 2px 9px }
+.gh { display: inline-flex; align-items: center; gap: 6px; color: var(--encre); text-decoration: none }
+.gh img { height: 15px; width: auto }
+.burger { display: none; width: 44px; height: 44px; margin-left: -10px; border: 0; background: none; cursor: pointer;
+  flex-direction: column; justify-content: center; align-items: center; gap: 5px }
+.burger span { width: 20px; height: 1.5px; background: var(--encre); display: block }
+
+.shell { max-width: 1440px; margin: 0 auto; display: grid; grid-template-columns: var(--side) minmax(0, 1fr) var(--toc);
+  padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)) }
+.side { position: sticky; top: calc(var(--top) + env(safe-area-inset-top, 0px)); align-self: start;
+  height: calc(100vh - var(--top) - env(safe-area-inset-top, 0px)); overflow-y: auto; padding: 28px 18px 40px 0;
+  border-right: 1px solid var(--filet); font-size: 14px }
+.side .mobile-gallery { display: none }
+.side ul, .toc ul, .toc-m ul { list-style: none; margin: 0 0 18px; padding: 0 }
+.side li, .toc li, .toc-m li { margin: 0 }
+.side a { display: block; padding: 5px 10px; border-radius: 6px; color: var(--encre); text-decoration: none; line-height: 1.35 }
+.side a:hover { background: var(--craie-2) }
+.side .cur > a { color: var(--violet); background: var(--violet-voile); font-weight: 500 }
+.side .subs { margin: 4px 0 8px 10px; padding-left: 10px; border-left: 1px solid var(--filet) }
+.side .subs a { font-size: 14px; color: var(--gris); padding: 3px 8px }
+.side .subs a.act, .toc a.act { color: var(--violet) }
+.grp { font-size: 12px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--gris); margin: 0 0 6px 10px }
+.toc { position: sticky; top: calc(var(--top) + env(safe-area-inset-top, 0px)); align-self: start; padding: 32px 0 0 24px; font-size: 14px }
+.toc .grp { margin-left: 0 }
+.toc a, .toc-m a { display: block; padding: 4px 0; color: var(--gris); text-decoration: none; background: none; border: 0; border-radius: 0; font-size: inherit }
+.toc a:hover { color: var(--violet) }
+.toc-m { display: none }
+.scrim { display: none }
+
+main.doc { min-width: 0; padding: 28px 0 80px 48px; max-width: 980px }
+.crumb { font-size: 14px; color: var(--gris); margin: 0 0 18px }
+.crumb span { margin: 0 4px }
+main.doc h1 { font-size: 44px }
+main.doc h2 { margin-top: 56px; font-weight: 400 }
+.lead2 { color: var(--gris); margin: -4px 0 8px }
+.verbindex { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px }
+.verbindex a { font-family: var(--mono); font-size: 12px; text-decoration: none; color: var(--encre); background: var(--blanc);
+  border: 1px solid var(--filet); border-radius: 999px; padding: 3px 10px }
+.verbindex a:hover { border-color: var(--violet); color: var(--violet) }
+
+article.verb { padding: 26px 0 10px; border-top: 1px solid var(--filet) }
+h2 + p + article.verb, h2 + article.verb { border-top: 0 }
+article.verb h3 { font-size: 20px; font-weight: 500; margin: 0 0 8px }
+article.verb h4 { font-size: 12px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--gris); margin: 22px 0 10px }
+.sigline { overflow-x: auto; margin: 0 0 12px }
+.sigline code { color: var(--violet); background: none; padding: 0; white-space: nowrap }
+.what { max-width: 70ch }
+.params { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 18px; font-size: 14px; margin: 12px 0 0 }
+.params dt code { color: var(--violet) }
+.params dd { margin: 0; color: #3B3842 }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start }
+.codecol { min-width: 0 }
+.codecol pre.code, .rules pre.code, .scene pre.code { margin: 0; overflow-x: auto; max-height: 440px }
+.cap { font-size: 14px; color: var(--gris); margin: 8px 0 0 }
+.limits { font-size: 14px; margin: 18px 0 0; max-width: 72ch }
+.limits b { font-weight: 500 }
+article.verb .sig { margin: 0 0 4px }
+article.verb .fnote { font-size: 14px; color: #3B3842; margin: 10px 0 14px; max-width: 72ch }
+
+.stage { position: relative; aspect-ratio: 4 / 3; max-width: 100%; border-radius: var(--radius); overflow: hidden;
+  background: #EDECEA }
+.stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none }
+.stage .hint { position: absolute; right: 8px; bottom: 8px; font-size: 12px; background: #FFFFFFE0; border-radius: 4px; padding: 3px 9px; color: var(--gris) }
+.stage.live { cursor: default } .stage.live .hint { display: none }
+.stage .msg:not(:empty) { pointer-events: none; background: #F7F6F3DD; position: absolute; inset: 0; display: grid; place-items: center; color: var(--gris); font-size: 14px }
+.stage:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px }
+.stage.hero { aspect-ratio: 16 / 8; margin: 6px 0 8px }
+.stage.hero img { object-fit: cover }
+
+.src { font-size: 14px; color: var(--gris) }
+ul.rules { list-style: none; padding: 0; margin: 0 }
+ul.rules li { padding: 14px 0; border-top: 1px solid var(--filet); margin: 0 }
+ul.rules li:first-child { border-top: 0 }
+ul.rules p { margin: 0 0 10px; max-width: 72ch }
+a.vlink code { color: var(--violet) }
+.scenes { display: grid; gap: 36px }
+.scene h3 { font-size: 20px; font-weight: 500; margin: 0 0 10px }
+.scene p { margin: 10px 0 6px; max-width: 72ch }
+.scene details summary { cursor: pointer; font-size: 14px; color: var(--violet); padding: 6px 0; min-height: 44px; display: flex; align-items: center }
+.chips { display: flex; flex-wrap: wrap; gap: 8px }
+.chips a { text-decoration: none; background: var(--blanc); border: 1px solid var(--filet); border-radius: 999px; padding: 5px 13px }
+.chips a code { background: none; color: var(--violet) }
+.next { margin-top: 36px }
+
+.stage.hero img { object-position: 50% 70% }
+
+ul.md, ol.md { margin: 0 0 16px; padding-left: 22px; max-width: 72ch }
+ul.md li, ol.md li { margin: 0 0 8px }
+ul.md li > p, ol.md li > p { margin: 0 0 6px }
+.tablewrap { overflow-x: auto; margin: 0 0 18px }
+.tablewrap table { margin: 0 }
+.what > p:last-child { margin-bottom: 0 }
+.limits > p { display: inline }
+.see { font-size: 14px; color: var(--gris); margin: 10px 0 0 }
+figure.fig { margin: 8px 0 22px }
+.pair.example { margin: 8px 0 22px }
+.chips .chip { background: var(--blanc); border: 1px solid var(--filet); border-radius: 999px; padding: 5px 13px }
+main.doc h3 { margin-top: 32px }
+article.verb h3, .scene h3 { margin-top: 0 }
+
+@media (max-width: 1180px) { .shell { grid-template-columns: var(--side) minmax(0, 1fr) } .toc { display: none }
+  .toc-m { display: block; background: var(--blanc); border: 1px solid var(--filet); border-radius: var(--radius); padding: 0 14px; margin: 0 0 20px; font-size: 14px }
+  .toc-m summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 500 }
+  .toc-m a { display: block; padding: 7px 0; color: var(--encre); text-decoration: none } }
+@media (max-width: 860px) {
+  .burger { display: flex } nav.main { display: none } .ver { display: none }
+  .shell { display: block; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+  .side { position: fixed; z-index: 40; top: 0; bottom: 0; left: 0; width: min(320px, 86vw); height: auto; background: var(--craie);
+    padding: calc(env(safe-area-inset-top, 0px) + 20px) 14px 40px max(14px, env(safe-area-inset-left, 0px));
+    border-right: 1px solid var(--filet); transform: translateX(-102%); transition: transform .22s ease; visibility: hidden }
+  body.menu .side { transform: none; visibility: visible }
+  .scrim { display: block; position: fixed; inset: 0; z-index: 35; background: #12111766; opacity: 0; pointer-events: none; transition: opacity .2s }
+  body.menu .scrim { opacity: 1; pointer-events: auto }
+  .side a { padding: 10px 10px } .side .subs a { padding: 8px 8px }
+  main.doc { padding: 18px 0 60px }
+  .crumb { position: sticky; top: calc(var(--top) + env(safe-area-inset-top, 0px)); z-index: 5; background: var(--craie);
+    margin: -18px 0 14px; padding: 10px 0; border-bottom: 1px solid var(--filet) }
+  .pair { grid-template-columns: minmax(0, 1fr) }
+  .params { grid-template-columns: minmax(0, 1fr); gap: 0 } .params dd { margin-bottom: 8px }
+  .side .mobile-gallery { display: block }
+  .stage.hero { aspect-ratio: 4 / 3 }
+  main.doc h1 { font-size: 32px } }
+@media (prefers-reduced-motion: reduce) { .side, .scrim { transition: none } }
+.stage .activate { position: absolute; inset: 0; width: 100%; border: 0; background: transparent; cursor: zoom-in }
+.stage .activate:focus-visible { outline: 2px solid var(--violet); outline-offset: -3px }
+.stage.live .activate { display: none }
