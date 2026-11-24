@@ -146,7 +146,7 @@ No category verbs (`chair()`, `table()`): a category is a program written *in* s
 
 ## Datasets
 
-sand3d programs for five sources of 3D objects, on Hugging Face under CC BY 4.0.
+sand3d programs for six sources of 3D objects, on Hugging Face under CC BY 4.0.
 
 <p align="center"><img src="https://raw.githubusercontent.com/Sandflow-ai/sand3d/main/docs/readme/hero.png" alt="Objects written in sand3d" width="830"></p>
 
@@ -162,14 +162,16 @@ sand3d programs for five sources of 3D objects, on Hugging Face under CC BY 4.0.
 </table>
 <table>
   <tr>
-    <td width="50%" valign="top"><a href="https://huggingface.co/datasets/Sandflow/sand3d-simready"><img src="https://raw.githubusercontent.com/Sandflow-ai/sand3d/main/docs/readme/datasets/sand3d-simready.jpg" alt="sand3d-simready" width="380"></a><br>
+    <td width="33%" valign="top"><a href="https://huggingface.co/datasets/Sandflow/sand3d-simready"><img src="https://raw.githubusercontent.com/Sandflow-ai/sand3d/main/docs/readme/datasets/sand3d-simready.jpg" alt="sand3d-simready" width="240"></a><br>
       <a href="https://huggingface.co/datasets/Sandflow/sand3d-simready"><b>sand3d-simready</b></a> · SimReady<br><sub>Simulation-ready assets from NVIDIA SimReady.</sub></td>
-    <td width="50%" valign="top"><a href="https://huggingface.co/datasets/Sandflow/sand3d-automate"><img src="https://raw.githubusercontent.com/Sandflow-ai/sand3d/main/docs/readme/datasets/sand3d-automate.jpg" alt="sand3d-automate" width="380"></a><br>
+    <td width="33%" valign="top"><a href="https://huggingface.co/datasets/Sandflow/sand3d-automate"><img src="https://raw.githubusercontent.com/Sandflow-ai/sand3d/main/docs/readme/datasets/sand3d-automate.jpg" alt="sand3d-automate" width="240"></a><br>
       <a href="https://huggingface.co/datasets/Sandflow/sand3d-automate"><b>sand3d-automate</b></a> · AutoMate<br><sub>Mechanical assemblies from AutoMate, each part a function of its program.</sub></td>
+    <td width="33%" valign="top"><a href="https://huggingface.co/datasets/Sandflow/sand3d-nature"><img src="https://raw.githubusercontent.com/Sandflow-ai/sand3d/main/docs/readme/datasets/sand3d-nature.jpg" alt="sand3d-nature" width="240"></a><br>
+      <a href="https://huggingface.co/datasets/Sandflow/sand3d-nature"><b>sand3d-nature</b></a> · Nature<br><sub>Plants, trees, rocks, corals and fungi, built with the organic verbs.</sub></td>
   </tr>
 </table>
 
-Browse them in [the explorer](https://huggingface.co/spaces/Sandflow/sand3d-explorer), or all five in [the collection](https://huggingface.co/collections/Sandflow/sand3d-6aec268fbdcd3bc174236168).
+Browse them in [the explorer](https://huggingface.co/spaces/Sandflow/sand3d-explorer), or all six in [the collection](https://huggingface.co/collections/Sandflow/sand3d-6aec268fbdcd3bc174236168).
 
 ## Citation
 
