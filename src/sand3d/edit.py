@@ -516,7 +516,7 @@ def _dissolve_coplanar(bm):
         and all(e.link_faces[0][lay] == e.link_faces[1][lay] for lay in flayers)
     ]
     if coplanar:
-        bmesh.ops.dissolve_edges(bm, edges=coplanar, use_verts=False, use_face_split=False)
+        bmesh.ops.dissolve_edges(bm, edges=coplanar, use_verts=True, use_face_split=False)
 
 
 def _replace_mesh(ob, bm, *, keep_shading=False):
