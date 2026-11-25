@@ -29,7 +29,8 @@ _watched = weakref.WeakSet()
 
 #: Why a verb uses up what it takes.
 REASONS = {"cut": "a tool is consumed by the boolean", "join": "a tool is consumed by the boolean",
-           "intersect": "a tool is consumed by the boolean", "merge": "an object merged into the first is used up",
+           "intersect": "a tool is consumed by the boolean", "blend": "a part blended into another is used up",
+           "merge": "an object merged into the first is used up",
            "at": "at with a list of frames uses the object up and returns one copy per frame: use the list it returns"}
 #: Keywords 1.0.0 took away, by verb, and what to write instead.
 REMOVED = {
@@ -46,7 +47,7 @@ REMOVED = {
                        "with no ends; without it, the two ends of a loft are capped"},
 }
 #: Verbs whose objects must all be different, from which argument on.
-DISTINCT = {"cut": 0, "join": 0, "intersect": 0, "merge": 0, "group": 1, "assembly": 1, "attach": 2, "at": 0, "transform": 0}
+DISTINCT = {"cut": 0, "join": 0, "intersect": 0, "merge": 0, "blend": 0, "group": 1, "assembly": 1, "attach": 2, "at": 0, "transform": 0}
 
 
 def reset():

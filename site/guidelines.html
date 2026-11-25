@@ -11,7 +11,7 @@
 <p class="repere">Writing an assembly</p>
 <h1>Writing an assembly program</h1>
 <div class="bande"></div>
-<p>Eight rules for any program that builds a multi-part object in sand3d, by hand or by model. They were drawn from a review of generated asset and articulated programs, and have not been tested as a prompt. Every example is a real program, run under 1.4.0, when sand3d was still named sky3d. A fault is followed by how it should have been written: <code># ←</code> comments are added to the original, and rewrites keep the original's shape.</p>
+<p>Eight rules for any program that builds a multi-part object in sand3d, by hand or by model. They were drawn from a review of generated asset and articulated programs, and have not been tested as a prompt. Every example is a real program, run under 1.4.0. A fault is followed by how it should have been written: <code># ←</code> comments are added to the original, and rewrites keep the original's shape.</p>
 <ol><li><strong>The head is the table of contents.</strong> First function, named after the object, no geometry.</li><li><strong>One function per distinct part.</strong> Built about its own origin; returns one object.</li><li><strong>Name each dimension once, derive the rest.</strong> Target 15 numbers per part, ceiling 40.</li><li><strong>Place each part once, in its parent's frame.</strong></li><li><strong>Repeat with frames, mirror with a copy.</strong></li><li><strong>Say each shape with the verb that names it.</strong> No <code>bpy</code>, no <code>bmesh</code>.</li><li><strong>Dress the parts when appearance matters.</strong> Optional on shape-only data.</li><li><strong>One frame per joint.</strong></li></ol>
 <h2 id="what-a-program-looks-like">What a program looks like</h2>
 <p>A short head, then one function per part, each with its dimensions in its signature.</p>
@@ -253,7 +253,7 @@
 <div class="fiche"><pre class="code">    s3d.<span class="vb">joint</span>(<span class="s">&quot;door_hinge&quot;</span>, door, f, kind=<span class="s">&quot;revolute&quot;</span>, axis=<span class="s">&quot;-Z&quot;</span>, range=(<span class="n">0</span>, <span class="n">114.59</span>))</pre></div>
 <p class="counts">the source of this page: <a href="https://github.com/Sandflow-ai/sand3d/blob/main/docs/guidelines.md">docs/guidelines.md</a></p>
 
-<div class="fin"><span>sand3d 1.6.3 · Apache-2.0 · <a href="https://github.com/Sandflow-ai/sand3d">source</a></span>
+<div class="fin"><span>sand3d 1.7.0 · Apache-2.0 · <a href="https://github.com/Sandflow-ai/sand3d">source</a></span>
 <img src="assets/sandflow-signature.svg" alt="Sandflow"></div>
 </div><script>
 document.querySelectorAll("[data-copy]").forEach(b => b.addEventListener("click", () => {

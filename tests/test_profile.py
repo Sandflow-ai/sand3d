@@ -4,6 +4,7 @@ import unittest
 
 import sand3d as s3d
 from mathutils import Vector
+from sand3d.edit import strict
 from sand3d.profile import _centripetal
 
 
@@ -61,7 +62,8 @@ class Profiles(unittest.TestCase):
         inner = s3d.poly(ell, fillet=[0, 0, 0, 3, 0, 0])
         self.assertEqual(corners(inner), 5)
         self.assertArea(inner, 500 + (1 - math.pi / 4) * 9)
-        self.assertRaises(ValueError, s3d.poly, ell, fillet=12)
+        with strict():      # too large for a side: an error in strict mode, clamped otherwise (test_clamped_radius)
+            self.assertRaises(ValueError, s3d.poly, ell, fillet=12)
 
     def test_offset(self):
         self.assertArea(s3d.offset(s3d.rect(40, 20), 2), 800 + 2 * 120 + math.pi * 4)

@@ -9,11 +9,17 @@ exists qualified by the solid's name: `plate.top`.
 """
 import bisect
 import math
+import re
+from copy import copy
+
+import bmesh
+import bpy
 
 from mathutils import Matrix, Vector, geometry
 
 from . import _core
-from .profile import EPS, Loop, Path, Placed, Profile, _as_path, arc, circle, poly, rect, superellipse
+from .profile import (EPS, _CROSSING_LIMIT, Loop, Path, Placed, Profile, _as_path, _fit, _large_crossing,
+                      _said, arc, circle, poly, rect, superellipse)
 
 
 # ---------------------------------------------------------------- shared pieces
@@ -314,6 +320,9 @@ def revolve(name, profile, angle=360):
         else:
             ring.append([b.vert((x * math.cos(math.radians(angle * k / n)),
                                  x * math.sin(math.radians(angle * k / n)), y)) for k in range(steps)])
+    low, high = min(y for _, y in pts), max(y for _, y in pts)
+    b.lengthwise(ring, [(y-low)/(high-low) if high != low else 0 for _, y in pts],
+                 [Vector((0,0,y)) for _,y in pts], [y-low for _,y in pts])
     surface = 0
     for loop in loops:
         m = len(loop)
@@ -349,6 +358,7 @@ def _frames_along(path, frenet):
     closed = path.closed
     seg = [(p[(i + 1) % m] - p[i]) for i in range(m if closed else m - 1)]
     tangents, bends = [], []
+    fitted = getattr(path, "_tangents", None)
     for i in range(m):
         if closed:
             d_in, d_out = seg[i - 1], seg[i]
@@ -357,8 +367,10 @@ def _frames_along(path, frenet):
             d_out = seg[i] if i < m - 1 else seg[-1]
         t = d_in.normalized() + d_out.normalized()
         t = t.normalized() if t.length > 1e-9 else d_out.normalized()
+        if fitted is not None:
+            t = Vector(fitted[i]).normalized()
         tangents.append(t)
-        bends.append((d_in.normalized(), d_out.normalized()))
+        bends.append((t, t) if fitted is not None else (d_in.normalized(), d_out.normalized()))
     r0 = Vector((0, 0, 1)).rotation_difference(tangents[0]) @ Vector((1, 0, 0))
     rs = [r0]
     for i in range(1, m):
@@ -406,45 +418,411 @@ def _frames_along(path, frenet):
     return p, tangents, rs, bends
 
 
-def sweep(name, profile, path, scale=1, twist=0, frenet=False):
+def _ring_options(tip, rings):
+    tips = (tip, tip) if isinstance(tip, str) else tip
+    if not isinstance(tips, (tuple, list)) or len(tips) != 2 or any(t not in ('round', 'sharp', 'flat') for t in tips):
+        raise ValueError("tip: use 'round', 'sharp', 'flat', or a (start, end) pair")
+    if isinstance(rings, bool) or not isinstance(rings, int) or rings < 0:
+        raise ValueError("rings: use a nonnegative integer")
+    return tuple(tips)
+
+
+def _tip_scale(law, u, tips):
+    for end, neighbour, tip in ((0, 1, tips[0]), (-1, -2, tips[1])):
+        if tip == 'sharp' and all(v == 0 for v in law.values[end]):
+            if (u <= law.u[neighbour] if end == 0 else u >= law.u[neighbour]):
+                t = (u - law.u[end]) / (law.u[neighbour] - law.u[end])
+                values = tuple(v * t for v in law.values[neighbour])
+                return values if law.pair else values[0]
+    return _soft_scale(law, u)
+
+
+def _linear_scale(end, u):
+    """A numeric end size, scalar or (sx, sy), linearly from one."""
+    return tuple(1 + (v - 1) * u for v in end) if isinstance(end, tuple) else 1 + (end - 1) * u
+
+
+def _law_path(path, laws, scale=1, twist=0, radius=1, smooth=False, tips=("round", "round"), rings=0):
+    """Refine the centre line and section laws to the common chord tolerance.
+
+    Smooth paths use C1 Hermite spans through their samples, with analytic
+    tangents: inserting a ring beside an old sample must not create a jump
+    in its normal. Point paths retain their corners and mitered sections.
+    """
+    points = [Vector(p) for p in path.points]
+    exact = getattr(path, "_at_length", None)
+    if exact is not None:
+        lengths = path._lengths
+    else:
+        lengths = [0.0]
+        for a, b in zip(points, points[1:]):
+            lengths.append(lengths[-1] + (b - a).length)
+    total = lengths[-1]
+    if total <= _core.mm(1e-9):
+        raise ValueError("sweep: a path needs a nonzero length")
+    directions = [(b - a) / max(h1 - h0, _core.mm(1e-12))
+                  for a, b, h0, h1 in zip(points, points[1:], lengths, lengths[1:])]
+    slopes = [directions[0]]
+    for i in range(1, len(points) - 1):
+        before, after = lengths[i] - lengths[i - 1], lengths[i + 1] - lengths[i]
+        slopes.append((directions[i - 1] * after + directions[i] * before)
+                      / max(before + after, _core.mm(1e-12)))
+    slopes.append(directions[-1])
+    samples = {}
+
+    def sample(d):
+        if d in samples:
+            return samples[d]
+        j = min(bisect.bisect_right(lengths, d) - 1, len(points) - 2)
+        h = max(lengths[j + 1] - lengths[j], _core.mm(1e-12))
+        t = (d - lengths[j]) / h
+        if exact is not None:
+            q, tangent = exact(d)
+        elif smooth:
+            delta = points[j + 1] - points[j]
+            q = (points[j] + delta * (3*t*t - 2*t**3)
+                 + h * slopes[j] * (t**3 - 2*t*t + t) + h * slopes[j + 1] * (t**3 - t*t))
+            tangent = (delta / h * (6*t - 6*t*t) + slopes[j] * (3*t*t - 4*t + 1)
+                       + slopes[j + 1] * (3*t*t - 2*t))
+        else:
+            q, tangent = points[j].lerp(points[j + 1], t), directions[j]
+        u = d / total
+        size = _tip_scale(scale, u, tips) if isinstance(scale, _core.Law) else _linear_scale(scale, u)
+        size = size if isinstance(size, tuple) else (size, size)
+        angle = twist(u) if isinstance(twist, _core.Law) else twist * u
+        samples[d] = q, tangent, size, angle
+        return samples[d]
+
+    tolerance = _core.mm(_core.CHORD)
+    spots = sorted(set(lengths + [total * k / 64 for k in range(64+1)]
+                       + [total * (a + (c - a) * k / 16) for law in laws
+                          for a, c in zip(law.u, law.u[1:]) for k in range(16+1)]))
+    if isinstance(scale, _core.Law) and _core.FACETS is None:
+        required = set(lengths + [total*u for law in laws for u in law.u])
+        for end, neighbour, tip in ((0,1,tips[0]),(-1,-2,tips[1])):
+            if tip == 'sharp' and all(v == 0 for v in scale.values[end]):
+                a,c = sorted((total*scale.u[end],total*scale.u[neighbour]))
+                spots = [d for d in spots if not a < d < c or d in required]
+    if not laws:
+        spots = lengths
+    if _core.FACETS is not None:
+        spots = sorted(set(lengths + [total * u for law in laws for u in law.u]))
+        refined_spots = [spots[0]]
+        for a, c in zip(spots, spots[1:]):
+            probes = [sample(a + (c-a)*k/64) for k in range(65)]
+            paths = [[q + Vector((radius * size[axis], 0, 0)) for q, _, size, _ in probes]
+                     for axis in range(2)]
+            pieces = max(_core.turn_steps(paths), _core.segments(1, abs(probes[-1][3]-probes[0][3])))
+            pieces += rings
+            refined_spots += [a + (c-a)*k/pieces for k in range(1, pieces+1)]
+        spots = refined_spots
+    if rings and _core.FACETS is None:
+        knots = sorted(set(lengths + [total * u for law in laws for u in law.u]))
+        for a,c in zip(knots,knots[1:]):
+            inside = [d for d in spots if a < d < c]
+            pieces = len(inside)+rings+1
+            spots = [d for d in spots if not a < d < c]
+            spots += [a+(c-a)*k/pieces for k in range(1,pieces)]
+        spots.sort()
+    # Uniform samples and law knots can coincide with an original station up
+    # to roundoff. Distinct float32 positions then give a microscopic backwards
+    # chord, not a real bend. Merge in the double-precision distance parameter,
+    # before evaluating positions/tangents; retain the exact final endpoint.
+    # At large placements, a float32 coordinate ULP can exceed the absolute
+    # floor. Leave several ULPs between rings so their forward advance survives
+    # both centre interpolation and adding the section offsets.
+    coordinate = max(abs(c) for p in points for c in p) + radius
+    separation = max(_core.mm(1e-4), total * 1e-7, coordinate * 2**-20)
+    distinct = [spots[0]]
+    for d in spots[1:]:
+        if d - distinct[-1] > separation:
+            distinct.append(d)
+        elif d == total:
+            if len(distinct) == 1:
+                distinct.append(d)
+            else:
+                distinct[-1] = d
+    spots = distinct
+    refined = [spots[0]]
+
+    def refine(a, b, depth=0):
+        qa, _, ka, aa = sample(a)
+        qb, _, kb, ab = sample(b)
+        r = radius * max(*ka, *kb)
+        error = r * (1 - math.cos(math.radians(min(abs(ab - aa), 180)) / 2))
+        for t in (0.25, 0.5, 0.75):
+            q, _, k, angle = sample(a + (b - a) * t)
+            # Distance to the meridian chord, not to its parametrised
+            # midpoint: sqrt ends need not be sampled below float precision.
+            size_error = max(abs((b - a) * radius * (v - x) - (b - a) * t * radius * (y - x))
+                             / math.hypot(b - a, radius * (y - x)) for v, x, y in zip(k, ka, kb))
+            error = max(error, (q - qa.lerp(qb, t)).length, size_error,
+                        r * math.radians(abs(angle - (aa + (ab - aa) * t))))
+        if laws and _core.FACETS is None and (error > tolerance or abs(ab - aa) > 15):
+            mid = (a + b) / 2
+            if depth >= 24 or len(refined) >= 65536 or not a < mid < b:
+                raise ValueError("sweep: path laws need too many samples at the chord tolerance")
+            refine(a, mid, depth + 1)
+            refine(mid, b, depth + 1)
+        else:
+            refined.append(b)
+
+    for a, b in zip(spots, spots[1:]):
+        refine(a, b)
+    out, tangents, distances = [], [], []
+    for d in refined:
+        q, tangent, _, _ = sample(d)
+        if out and q == out[-1]:
+            tangents[-1] = tangent
+            distances[-1] = d
+        else:
+            out.append(q)
+            tangents.append(tangent)
+            distances.append(d)
+    result = Path(out)
+    if smooth:
+        result._tangents = tangents
+    if exact is not None:
+        result._lengths = distances
+    return result
+
+
+def _size_law(law, verb, outlines=1):
+    """Only isolated, open-end poles on one outline are supported."""
+    if any(v < 0 for row in law.values for v in row):
+        raise ValueError(f"{verb}: sizes must be nonnegative")
+    zero = [all(v == 0 for v in row) for row in law.values]
+    if all(zero):
+        raise ValueError(f"{verb}: an all-zero size law has no solid")
+    if any(any(v == 0 for v in row) and not z for row, z in zip(law.values, zero)):
+        raise ValueError(f"{verb}: partially zero scale pairs are not supported")
+    if any(zero[1:-1]):
+        raise ValueError(f"{verb}: interior zeros are not supported; only open ends may be poles")
+    if any(zero) and outlines != 1:
+        raise ValueError(f"{verb}: a pole needs one outline without holes")
+
+
+def _soft_scale(law, u):
+    """Square-root caps, with the value and PCHIP derivative at the joining knot.
+
+    The squared size is a convex mixture of two monotone functions: 2t-t²
+    and t**p. Its initial slope is positive (a rounded pole), and its final
+    slope is twice the size's prescribed normalised slope. Thus the square
+    root joins PCHIP C1 without overshooting the neighbouring size.
+    """
+    value = law(u)
+    out = list(value if law.pair else (value,))
+    for end, neighbour in ((0, 1), (-1, -2)):
+        if all(v == 0 for v in law.values[end]):
+            inside = u <= law.u[neighbour] if end == 0 else u >= law.u[neighbour]
+            if inside:
+                h = law.u[neighbour] - law.u[end]
+                t = min(1.0, max(0.0, (u - law.u[end]) / h))
+                for k, target in enumerate(law.values[neighbour]):
+                    beta = max(0.0, 2 * h * law.slopes[k][neighbour] / target)
+                    power = max(2, math.ceil(beta) + 1)
+                    weight = beta / power
+                    squared = (1 - weight) * t * (2 - t) + weight * t ** power
+                    out[k] = target * math.sqrt(squared)
+    return tuple(out) if law.pair else out[0]
+
+
+class UndersampledTwist(UserWarning):
+    """The requested sweep rings are too sparse to represent the twist."""
+
+
+def sweep(name, profile, path, scale=1, twist=0, frenet=False, *, tip="round", rings=0):
     """Profile along a path.
 
     `profile` carried along `path`, square to it: its X and Y turn with the path
     as little as they can (`frenet` makes them follow its curvature). `scale` is its
-    size at the end against the start, `twist` the degrees it turns on the way. A
-    closed path makes a ring."""
+    size at the end against the start: a number, or a positive (sx, sy) pair,
+    linearly from 1 or (1, 1). `twist` is the degrees it turns on the way. A
+    closed path makes a ring. Scale and twist also take length laws: [(0, value),
+    ..., (1, value)], interpolated by monotone cubics; scale values may be (sx, sy).
+    On a zero-ended interval, a monotone square-root cap replaces PCHIP and
+    matches its value and slope at the neighbouring knot. An offset profile's
+    centre follows the unrounded scale while its outline rounds. Only isolated end
+    zeros on one outline without holes are supported: no interior zeros,
+    partially zero pairs or all-zero laws. Laws on closed paths are refused;
+    numeric scale and twist keep their existing meaning. Law paths are refined
+    with their changing size and twist; crossing rings are refused (reduce
+    the size or round the path). Extra rings sample a numeric twist; a span
+    that would still turn at least 180 degrees between rings warns and keeps
+    its original chord interpolation."""
+    path = getattr(path, "_mesh_path", path)
+    tips = _ring_options(tip, rings)
+    extra = rings
     profile, placement = _placed(profile)
     pts, sharp, loops, tris = profile.mesh()
-    path = _as_path(path)
-    p, tangents, rs, bends = _frames_along(path, frenet)
-    m = len(p)
-    lengths = [0.0]
-    for i in range(1, m):
-        lengths.append(lengths[-1] + (p[i] - p[i - 1]).length)
-    total = lengths[-1] or 1.0
     local = [placement @ Vector((x, y, 0)) for x, y in pts]
+    smooth = isinstance(path, Path) and not any(path.sharp[1:-1])
+    path = _as_path(path)
+    pair = (isinstance(scale, (list, tuple)) and len(scale) == 2
+            and all(isinstance(v, (int, float)) for v in scale))
+    if pair:
+        if not all(math.isfinite(v) and v > 0 for v in scale):
+            raise ValueError("sweep: an end scale pair needs two positive finite ratios")
+        scale = tuple(scale)
+    scale_law = None if pair or isinstance(scale, (int, float)) else _core.Law(scale, "sweep scale")
+    twist_law = None if isinstance(twist, (int, float)) else _core.Law(twist, "sweep twist", pairs=False)
+    if scale_law:
+        _size_law(scale_law, "sweep scale", len(loops))
+        rows = [(u, value if scale_law.pair else value[0]) for u,value in zip(scale_law.u,scale_law.values)]
+        for end,neighbour,t in ((0,1,tips[0]),(-1,-2,tips[1])):
+            if t == 'flat' and all(v == 0 for v in scale_law.values[end]):
+                rows[end] = (rows[end][0],rows[neighbour][1])
+        scale_law = _core.Law(rows, 'sweep scale')
+    laws = [law for law in (scale_law, twist_law) if law is not None]
+    curved_refinement = extra and _core.FACETS is not None and hasattr(path, "_curve_at_length") and not path.closed
+    if curved_refinement:
+        path._at_length = path._curve_at_length
+        path._lengths = path._curve_lengths
+    if laws or curved_refinement:
+        if path.closed:
+            raise ValueError("sweep: laws on closed paths are not supported")
+        path = _law_path(path, laws, scale_law or scale, twist_law or twist,
+                         max(q.xy.length for q in local), smooth, tips, rings)
+    p, tangents, rs, bends = _frames_along(path, frenet)
+    if extra and laws and _core.FACETS is not None and any(a.dot(c) < -0.9999 for a,c in bends):
+        raise ValueError("sweep: consecutive law rings cross; reduce the size or round the path")
+    m = len(p)
+    lengths = getattr(path, "_lengths", None)
+    if lengths is None:
+        lengths = [0.0]
+        for i in range(1, m):
+            lengths.append(lengths[-1] + (p[i] - p[i - 1]).length)
+    total = lengths[-1] + ((p[0] - p[-1]).length if path.closed and laws else 0) or 1.0
+    centre = sum(local, Vector()) / len(local) if scale_law else None
+    sample_twist = not laws and extra and not curved_refinement and twist != 0
+    section_axes = []
+    if sample_twist:
+        angles = [twist * (d / total) for d in lengths]
+        turns = [end - start for start, end in zip(angles, angles[1:])]
+        if path.closed:
+            # Keep the original seam stations and take the shortest way back.
+            turns.append(-math.remainder(angles[-1], 360))
+        if any(abs(turn) / (extra + 1) >= 180 for turn in turns):
+            from .edit import _is_strict, _warn
+            message = (f"sweep {name!r}: twist turns at least 180 degrees between rings; "
+                       "increase rings (using chord interpolation on undersampled spans)")
+            if _is_strict():
+                raise ValueError(message)
+            _warn(message, UndersampledTwist)
     b = _core.Builder(name)
     rings = []
     for i in range(m):
         u = lengths[i] / total
-        k = 1 + (scale - 1) * u
-        a = math.radians(twist * u)
+        k = (_tip_scale(scale_law, u, tips) if not path.closed else scale_law(u)) if scale_law else _linear_scale(scale, u)
+        kx, ky = k if isinstance(k, tuple) else (k, k)
+        raw = scale_law(u) if scale_law else k
+        if scale_law and any(tip == 'sharp' and all(v == 0 for v in scale_law.values[end])
+                             and (u <= scale_law.u[neighbour] if end == 0 else u >= scale_law.u[neighbour])
+                             for end,neighbour,tip in ((0,1,tips[0]),(-1,-2,tips[1]))):
+            raw = k
+        rawx, rawy = raw if isinstance(raw, tuple) else (raw, raw)
+        a = math.radians(twist_law(u) if twist_law else twist * u)
         t, r = tangents[i], rs[i]
         s = t.cross(r)
         d_in, d_out = bends[i]
         bend = d_out - d_in
         bend = bend - t * bend.dot(t)
+        bdir = bend.normalized() if bend.length > 1e-9 else None
         cos_half = max(t.dot(d_out), 0.2)
+        if sample_twist:
+            # The untwisted section map includes the station's miter.
+            if bdir is not None:
+                section_axes.append(tuple(axis + bdir * axis.dot(bdir) * (1 / cos_half - 1)
+                                          for axis in (r, s)))
+            else:
+                section_axes.append((r, s))
         ring = []
+        if scale_law and kx == 0 and ky == 0:
+            pole = b.vert(p[i])
+            rings.append([pole] * len(local))
+            continue
         for q in local:
-            x = k * (q.x * math.cos(a) - q.y * math.sin(a))
-            y = k * (q.x * math.sin(a) + q.y * math.cos(a))
+            if isinstance(k, tuple):
+                x = kx * q.x * math.cos(a) - ky * q.y * math.sin(a)
+                y = kx * q.x * math.sin(a) + ky * q.y * math.cos(a)
+            else:
+                x = kx * (q.x * math.cos(a) - q.y * math.sin(a))
+                y = ky * (q.x * math.sin(a) + q.y * math.cos(a))
+            if scale_law and raw != k:
+                # Move an offset profile's centre by the unrounded law, so
+                # its radial fan covers the tangent plane at the pole.
+                dx, dy = (rawx - kx) * centre.x, (rawy - ky) * centre.y
+                x += dx * math.cos(a) - dy * math.sin(a)
+                y += dx * math.sin(a) + dy * math.cos(a)
             off = r * x + s * y
-            if bend.length > 1e-9:
-                bdir = bend.normalized()
+            if bdir is not None:
                 off = off + bdir * off.dot(bdir) * (1 / cos_half - 1)
             ring.append(b.vert(p[i] + off))
         rings.append(ring)
+    parameter_total = lengths[-1] + ((p[0]-p[-1]).length if path.closed else 0) or 1.0
+    parameters = [d / parameter_total for d in lengths]
+    if not laws and extra and not curved_refinement:
+        original, original_p = rings, p
+        rings, p = [], []
+        for i in range(m if path.closed else m-1):
+            j = (i+1) % m
+            rings.append(original[i])
+            p.append(original_p[i])
+            turn = turns[i] if sample_twist else 0
+            rotate = 0 < abs(turn) / (extra + 1) < 180
+            for k in range(1, extra+1):
+                t = k/(extra+1)
+                p.append(original_p[i].lerp(original_p[j],t))
+                if rotate:
+                    u = ((lengths[i] + (lengths[j] - lengths[i]) * t) / total if j else 1 - t)
+                    size = _linear_scale(scale, u)
+                    sx, sy = size if pair else (size, size)
+                    angle = math.radians(angles[i] + turn * t)
+                    cs, sn = math.cos(angle), math.sin(angle)
+                    x0, y0 = section_axes[i]
+                    x1, y1 = section_axes[j]
+                    x, y = x0.lerp(x1, t), y0.lerp(y1, t)
+                    # Apply the sampled rotation before the interpolated
+                    # section map, so rotating cannot collapse the profile.
+                    rings.append([b.vert(p[-1] + x * (sx*q.x*cs - sy*q.y*sn)
+                                               + y * (sx*q.x*sn + sy*q.y*cs))
+                                  for q in local])
+                else:
+                    rings.append([b.vert(a.co.lerp(c.co,t)) for a,c in zip(original[i],original[j])])
+        if not path.closed:
+            rings.append(original[-1])
+            p.append(original_p[-1])
+        parameters = [(lengths[i] + ((lengths[j] if j else parameter_total) - lengths[i])*k/(extra+1))/parameter_total
+                      for i in range(m if path.closed else m-1)
+                      for j in [(i+1)%m] for k in range(extra+1)] + ([] if path.closed else [1.])
+        m = len(rings)
+    if laws and _core.FACETS is not None:
+        crossing = _rings_cross(rings, p)
+        _resolve_ring_crossings(rings, p)
+        if extra and crossing:
+            _clip_ring_slabs(rings, p)
+    if laws:
+        limit, worst = 1.0, None
+        for i, (lower, upper) in enumerate(zip(rings, rings[1:])):
+            step = p[i + 1] - p[i]
+            forward = ((tangents[i] + tangents[i + 1]).normalized() if smooth and not (extra and _core.FACETS is not None) else step.normalized())
+            advance = min((b_.co - a_.co).dot(forward) for a_, b_ in zip(lower, upper))
+            if advance < -_core.mm(1e-4):
+                centre_step = step.dot(forward)
+                factor = max(0.0, centre_step / (centre_step - advance))
+                if factor < limit:
+                    limit, worst = factor, i
+        if worst is not None:
+            i = worst
+            radius = max((v.co - p[j]).length for j in (i, i + 1) for v in rings[j])
+            factor = 0.95 * limit
+            u = (lengths[i] + lengths[i + 1]) / (2 * total)
+            point = tuple(round(c, 6) for c in (p[i] + p[i + 1]) / 2)
+            b.bm.free()
+            raise ValueError(f"sweep: consecutive law rings cross near u={u:.6g} at {point}; "
+                             f"section radius <= {factor * radius:.6g} {_core.UNIT} "
+                             f"(uniform size factor <= {factor:.6g}); otherwise round the path")
+    b.lengthwise(rings, parameters, p, [u * parameter_total for u in parameters])
     surface = 0
     spans = m if path.closed else m - 1
     for loop in loops:
@@ -460,41 +838,371 @@ def sweep(name, profile, path, scale=1, twist=0, frenet=False):
         caps = [b.face([rings[0][i] for i in reversed(t)], -1, ("start",)) for t in tris]
         caps += [b.face([rings[-1][i] for i in t], -2, ("end",)) for t in tris]
         b.dissolve(caps)
+    if laws and extra and _core.FACETS is not None and crossing:
+        _check_clipped_rings(b, "sweep: consecutive law rings cross; reduce the size or round the path")
     return _object(b, Matrix.Identity(4), "seam")
 
 
-def wire(name, path, d, closed=None, fillet=0):
+def wire(name, path, d, closed=None, fillet=0, *, tip="round", rings=0):
     """Round wire along a path: (x, y, z) points, a spline, an arc, a helix; fillet rounds the corners of
     points, d / 2 at least.
 
+    `d` also takes a length law, on open paths only; zero ends close with
+    rounded tips as in sweep, matching PCHIP's slope at the neighbouring knot.
+    On a filleted path, laws use exact line-and-arc length and continuous tangents,
+    keeping sections circular across arc samples and law knots. Interior zeros and all-zero diameter laws are refused.
     A round wire of diameter `d` along `path` — a pipe, a spring, a rod bent to shape.
     `fillet` rounds the corners of a path given as points to that radius, on the wire's
     centre line, as a tube bender does: one number for all of them, or a list giving
-    each point its own (0 leaves it), as `poly` takes it. It raises where it cannot bend:
-    too large for a side, under `d / 2` (the tube would fold on itself), at a point where
+    each point its own (0 leaves it), as `poly` takes it. A fillet too large for a side
+    is clamped to the largest that fits, with a warning (strict mode: an error). It raises
+    where it cannot bend: under `d / 2` (the tube would fold on itself), at a point where
     the path turns back. A point written twice is one. A stool's leg:
     `wire("leg", [(0, 0, 0), (0, 0, 650), (-250, 0, 650)], 33, fillet=60)`."""
+    path = getattr(path, "_mesh_path", path)
+    elliptical = (isinstance(d, (tuple, list)) and len(d) == 2
+                  and all(isinstance(v, (int, float)) for v in d))
+    explicit = not isinstance(rings, (int, bool))
+    if explicit:
+        try:
+            rings = tuple(rings)
+        except TypeError:
+            raise ValueError('wire: rings must be a count or fractions in (0, 1)') from None
+        if any(isinstance(u, bool) or not isinstance(u, (int, float)) or not math.isfinite(u)
+               or not 0 < u < 1 for u in rings):
+            raise ValueError('wire: rings fractions must be finite and in (0, 1)')
+    if explicit and not rings:
+        rings, explicit = 0, False
+    tips = _ring_options(tip, 0 if explicit else rings)
+    if elliptical or explicit:
+        return _shaped_wire(name, path, d, closed, fillet, tip, rings)
+    point_path = not isinstance(path, (Path, Profile, Placed))
+    law = None if isinstance(d, (int, float)) else _core.Law(d, "wire d", pairs=False)
+    if law:
+        _size_law(law, "wire diameter")
+        diameter = max(v[0] for v in law.values)
+    else:
+        diameter = d
     if fillet:
         if isinstance(path, (Path, Profile, Placed)):
             raise ValueError("wire: fillet rounds the corners of a path given as points, [(x, y, z), ...] — a "
                              "spline, an arc or a helix has none; a profile's are rounded on the profile "
                              "(rect(r=), poly(fillet=))")
         path = _as_path(path)
-        path = Path(_filleted(path.points, path.closed if closed is None else closed, fillet, least=d / 2),
-                    closed=path.closed if closed is None else closed)
-        return sweep(name, circle(d), path)
+        is_closed = path.closed if closed is None else closed
+        rounded = _filleted(path.points, is_closed, fillet, least=diameter / 2, curve=law is not None)
+        path = rounded if isinstance(rounded, Path) else Path(rounded, closed=is_closed)
+        if _core.FACETS is not None and law and 'flat' not in tips:
+            return _faceted_wire(name, path, law, tip, rings)
+        return sweep(name, circle(diameter), path, scale=[(u, v[0] / diameter) for u, v in zip(law.u, law.values)] if law else 1, tip=tip, rings=rings)
     path = _as_path(path)
     if closed is not None:
         path = Path(path.points, closed=closed)
-    return sweep(name, circle(d), path)
+    if law and point_path:
+        path.sharp = [True] * len(path.points)
+    if _core.FACETS is not None and law and 'flat' not in tips:
+        return _faceted_wire(name, path, law, tip, rings)
+    return sweep(name, circle(diameter), path, scale=[(u, v[0] / diameter) for u, v in zip(law.u, law.values)] if law else 1, tip=tip, rings=rings)
 
 
-def _filleted(points, closed, amount, least=0.0):
+def _shaped_wire(name, path, d, closed, fillet, tip, rings):
+    """Widened wire forms share the path frames and section-law sampler."""
+    elliptical = (isinstance(d, (tuple, list)) and len(d) == 2
+                  and all(isinstance(v, (int, float)) for v in d))
+    explicit = not isinstance(rings, int)
+    point_path = not isinstance(path, (Path, Profile, Placed))
+    law = None if elliptical or isinstance(d, (int, float)) else _core.Law(d, 'wire d', pairs=False)
+    if law:
+        _size_law(law, 'wire diameter')
+    width, depth = d if elliptical else (max(v[0] for v in law.values) if law else d,)*2
+    if any(isinstance(v, bool) or not math.isfinite(v) or v <= 0 for v in (width, depth)):
+        raise ValueError('wire: diameters must be positive finite lengths')
+    path = copy(path) if isinstance(path, Path) else _as_path(path)
+    if closed is not None:
+        path.closed = bool(closed)
+    if fillet:
+        rounded = _filleted(path.points, path.closed, fillet, least=max(width,depth)/2, curve=True)
+        path = rounded if isinstance(rounded, Path) else Path(rounded, closed=path.closed)
+    elif point_path:
+        path.sharp = [True]*len(path.points)
+    profile = superellipse(width, depth) if elliptical else circle(width)
+    scale = [(u, v[0]/width) for u,v in zip(law.u,law.values)] if law else 1
+    if explicit and path.closed:
+        if law:
+            raise ValueError('wire: laws on closed paths are not supported')
+        points = [Vector(p) for p in path.points]
+        lengths = [0.]
+        for a,b in zip(points, points[1:]+points[:1]):
+            lengths.append(lengths[-1]+(b-a).length)
+        us = sorted(set([d/lengths[-1] for d in lengths[:-1]]+list(rings)))
+        samples = []
+        for u in us:
+            distance = u*lengths[-1]
+            i = min(len(points)-1, bisect.bisect_right(lengths,distance)-1)
+            samples.append(points[i].lerp(points[(i+1)%len(points)],
+                           (distance-lengths[i])/(lengths[i+1]-lengths[i])))
+        sampled = Path(samples, closed=True)
+        return sweep(name, profile, sampled, tip=tip)
+    if explicit:
+        if hasattr(path, '_curve_at_length'):
+            path._at_length = path._curve_at_length
+            path._lengths = path._curve_lengths
+        elif not hasattr(path, '_at_length'):
+            points = [Vector(p) for p in path.points]
+            lengths = [0.]
+            for a,b in zip(points,points[1:]):
+                lengths.append(lengths[-1]+(b-a).length)
+            def at_length(distance):
+                i = min(len(points)-2, max(0,bisect.bisect_right(lengths,distance)-1))
+                step = points[i+1]-points[i]
+                return points[i]+step*((distance-lengths[i])/(lengths[i+1]-lengths[i])), step.normalized()
+            path._at_length, path._lengths = at_length, lengths
+    # A zero twist law inserts required knots without changing the diameter law.
+    twist = [(u,0) for u in sorted(set((0.,1.)+tuple(rings)))] if explicit else 0
+    return sweep(name, profile, path, scale=scale, twist=twist, tip=tip,
+                 rings=0 if explicit else rings)
+
+
+def _resolve_ring_crossings(rings, centres):
+    """Clip overlapping ring offsets to disjoint slabs between their centres.
+
+    Only crossing spans are changed. Midplanes leave a small forward gap;
+    clipping moves the inside of a bend rather than reducing its whole radius.
+    This is local: distant stretches of a returning path may still overlap.
+    """
+    for i, (lower, upper) in enumerate(zip(rings, rings[1:])):
+        step = centres[i+1] - centres[i]
+        if step.length <= _core.mm(1e-9):
+            continue
+        forward = step.normalized()
+        if min((v.co-u.co).dot(forward) for u,v in zip(lower,upper)) >= -_core.mm(1e-4):
+            continue
+        middle = (centres[i]+centres[i+1])/2
+        gap = max(step.length * 1e-5, _core.mm(1e-5))
+        for ring, sign in ((lower, -1), (upper, 1)):
+            for v in dict.fromkeys(ring):
+                distance = (v.co-middle).dot(forward)
+                if sign*distance < gap:
+                    v.co += forward * (sign*gap-distance)
+
+
+def _clip_ring_slabs(rings, centres):
+    """Project each ring into both neighbouring half-spaces at once.
+
+    Sequential clips can undo the previous clip on a thick bend. The closest
+    point satisfying two planes is on one plane or their intersection line.
+    First trim against other separating planes whose slabs contain the centre,
+    keeping inside strips from reaching through another strip on a tight bend.
+    Keep ring identities throughout.
+    """
+    planes = []
+    for a, b in zip(centres, centres[1:]):
+        step = b-a
+        normal = step.normalized()
+        planes.append((normal, (a+b)/2, max(step.length*1e-5, _core.mm(1e-5))))
+    for i, ring in enumerate(rings):
+        for v in dict.fromkeys(ring):
+            for _ in range(128):
+                worst = 0.
+                for j, (n, o, gap) in enumerate(planes):
+                    sign = 1 if j < i else -1
+                    if sign*(centres[i]-o).dot(n) < gap:
+                        continue
+                    excess = gap-sign*(v.co-o).dot(n)
+                    if excess > 0:
+                        v.co += n*(sign*excess)
+                        worst = max(worst,excess)
+                if worst <= _core.mm(1e-4):
+                    break
+        constraints = []
+        if i:
+            n, o, gap = planes[i-1]
+            constraints.append((n, n.dot(o)+gap))
+        if i < len(planes):
+            n, o, gap = planes[i]
+            constraints.append((-n, -n.dot(o)+gap))
+        for v in dict.fromkeys(ring):
+            point = v.co.copy()
+            candidates = []
+            if all(n.dot(point) >= d for n,d in constraints):
+                continue
+            for n,d in constraints:
+                q = point+n*(d-n.dot(point))
+                if all(m.dot(q) >= e-_core.mm(1e-5) for m,e in constraints):
+                    candidates.append(q)
+            if len(constraints) == 2:
+                (n,d),(m,e) = constraints
+                dot = n.dot(m)
+                determinant = 1-dot*dot
+                if determinant > 1e-8:
+                    a, b = d-n.dot(point), e-m.dot(point)
+                    candidates.append(point+n*((a-dot*b)/determinant)+m*((b-dot*a)/determinant))
+            if candidates:
+                v.co = min(candidates, key=lambda q: (q-point).length_squared)
+
+
+def _rings_cross(rings, centres):
+    return any(min((v.co-u.co).dot((b-a).normalized()) for u,v in zip(lower,upper)) < -_core.mm(1e-4)
+               for lower,upper,a,b in zip(rings,rings[1:],centres,centres[1:]))
+
+
+def _check_clipped_rings(builder, message):
+    """Do not return an inside fold that clipping could not separate."""
+    from mathutils.bvhtree import BVHTree
+    bm = builder.bm.copy()
+    try:
+        bmesh.ops.triangulate(bm, faces=list(bm.faces))
+        bm.verts.index_update()
+        triangles = [tuple(v.index for v in f.verts) for f in bm.faces]
+        tree = BVHTree.FromPolygons([v.co for v in bm.verts], triangles, all_triangles=True)
+        pair = next(((i,j) for i,j in tree.overlap(tree)
+                     if i < j and not set(triangles[i]) & set(triangles[j])), None)
+        crossing = pair is not None
+        if crossing and builder.parameters:
+            ids = set(triangles[pair[0]]) | set(triangles[pair[1]])
+            u = sum(builder.parameters[i] for i in ids)/len(ids)
+            message += f" near u={u:.6g}"
+    finally:
+        bm.free()
+    if crossing:
+        builder.bm.free()
+        raise ValueError(message)
+
+
+def _faceted_wire(name, path, law, tip="round", rings=0):
+    try:
+        return _faceted_wire_mesh(name, path, law, tip, rings)
+    except ValueError as exc:
+        if "rings cross" not in str(exc):
+            raise
+        # Report a verified working uniform scale, using the same curve and
+        # ring rules. Failed trials free their builder before raising.
+        low, high = 0., 1.
+        for _ in range(16):
+            factor = (low+high)/2
+            trial = _core.Law([(u,v[0]*factor) for u,v in zip(law.u,law.values)], "wire d", pairs=False)
+            try:
+                ob = _faceted_wire_mesh(name, path, trial, tip, rings)
+            except ValueError:
+                high = factor
+            else:
+                mesh = ob.data
+                bpy.data.objects.remove(ob, do_unlink=True)
+                if not mesh.users:
+                    bpy.data.meshes.remove(mesh)
+                low = factor
+        low *= .99999
+        peak = max(v[0] for v in law.values)
+        location = re.search(r"near u=([0-9.e+-]+)",str(exc))
+        where = f" near u={location[1]} (diameter <= {law(float(location[1]))*low:.6g} {_core.UNIT})" if location else ""
+        raise ValueError(f"wire: consecutive diameter rings cross{where}; largest verified maximum diameter "
+                         f"{peak*low:.6g} {_core.UNIT} (uniform diameter factor <= {low:.6g}); "
+                         "reduce every diameter or round the path") from None
+
+
+def _faceted_wire_mesh(name, path, law, tip="round", rings=0):
+    extra = rings
+    tips = _ring_options(tip, rings)
+    """Wire-only angular sampling of diameter meridians; sweep laws stay independent."""
+    if path.closed:
+        raise ValueError("wire: laws on closed paths are not supported")
+    points = [Vector(q) for q in path.points]
+    lengths = getattr(path, "_lengths", None)
+    if lengths is None:
+        lengths = [0.0]
+        for a, b in zip(points, points[1:]):
+            lengths.append(lengths[-1] + (b - a).length)
+    total = lengths[-1]
+    if total <= _core.mm(1e-9):
+        raise ValueError("wire: a path needs a nonzero length")
+    if extra and hasattr(path, "_curve_at_length"):
+        path._at_length = path._curve_at_length
+        lengths = path._curve_lengths
+        total = lengths[-1]
+    exact = getattr(path, "_at_length", None)
+
+    def centre(u):
+        d = u * total
+        if exact is not None:
+            return exact(d)[0]
+        j = min(max(bisect.bisect_right(lengths, d) - 1, 0), len(points) - 2)
+        return points[j].lerp(points[j + 1], (d - lengths[j]) / (lengths[j + 1] - lengths[j]))
+
+    def radius(u):
+        return _tip_scale(law, u, tips) / 2
+
+    knots = sorted(set([d / total for d in lengths] + list(law.u)))
+    us = [0.0]
+    for a, c in zip(knots, knots[1:]):
+        # Lift the diameter into a meridian coordinate independent of path orientation.
+        probes = [Vector(((a + (c - a) * k / 128) * total,
+                          radius(a + (c - a) * k / 128), 0)) for k in range(129)]
+        pieces = _core.turn_steps([probes])
+        pole = (radius(a) == 0 and tips[0] == "round") or (radius(c) == 0 and tips[1] == "round")
+        if pole:
+            pieces = max(pieces, _core.segments(1, 90))
+        pieces += rings
+        for k in range(1, pieces + 1):
+            t = k / pieces
+            if pole:
+                t = math.sin(math.pi / 2 * t) ** 2
+            us.append(c if k == pieces else a + (c - a) * t)
+    sampled = Path([centre(u) for u in us])
+    if exact is not None:
+        sampled._tangents = [exact(u * total)[1] for u in us]
+    p, tangents, axes, bends = _frames_along(sampled, False)
+    folded = next((i for i,(a,c) in enumerate(bends) if a.dot(c) < -0.9999), None)
+    if extra and folded is not None:
+        raise ValueError(f"wire: consecutive diameter rings cross near u={us[folded]:.6g}; "
+                         "reduce the diameter or round the path")
+    b = _core.Builder(name)
+    rings = []
+    n = _core.FACETS
+    for u, o, t, r, (din, dout) in zip(us, p, tangents, axes, bends):
+        size = radius(u)
+        if size == 0:
+            rings.append([b.vert(o)] * n)
+            continue
+        side = t.cross(r)
+        bend = dout - din
+        bend -= t * bend.dot(t)
+        ring = []
+        for k in range(n):
+            angle = 2 * math.pi * k / n
+            off = size * (math.cos(angle) * r + math.sin(angle) * side)
+            if bend.length > 1e-9:
+                direction = bend.normalized()
+                off += direction * off.dot(direction) * (1 / max(t.dot(dout), 0.2) - 1)
+            ring.append(b.vert(o + off))
+        rings.append(ring)
+    b.lengthwise(rings, us, p, [u * total for u in us])
+    crossing = _rings_cross(rings, p)
+    _resolve_ring_crossings(rings, p)
+    if extra and crossing:
+        _clip_ring_slabs(rings, p)
+    for i, (lower, upper) in enumerate(zip(rings, rings[1:])):
+        forward = (p[i + 1] - p[i]).normalized()
+        if min((v.co - u.co).dot(forward) for u, v in zip(lower, upper)) < -_core.mm(1e-4):
+            b.bm.free()
+            raise ValueError(f"wire: consecutive diameter rings cross near u={(us[i]+us[i+1])/2:.6g}; reduce the diameter or round the path")
+    for lower, upper in zip(rings, rings[1:]):
+        for j in range(n):
+            j1 = (j + 1) % n
+            b.face([lower[j], lower[j1], upper[j1], upper[j]], 0, ("side",))
+    for ring, tag, flip in ((rings[0], "start", True), (rings[-1], "end", False)):
+        b.face(list(reversed(ring)) if flip else ring, -1 if flip else -2, (tag,))
+    if extra and crossing:
+        _check_clipped_rings(b, "wire: consecutive diameter rings cross; reduce the diameter or round the path")
+    return _object(b, Matrix.Identity(4), "seam")
+
+
+def _filleted(points, closed, amount, least=0.0, curve=False):
     """The polyline `points` with each corner turned into an arc of its radius (`amount`: one
     number, or one per point, 0 leaving it), tangent to both sides, in the plane they make.
     A point written twice is one; a radius under `least` (the wire's own), or a corner where
-    the path turns back, raises. Turns are read in double precision: `Vector` is single, and
-    put a path that doubles back past 180°, which made the setback negative."""
+    the path turns back, raises; one too large for a side is clamped to the largest that
+    fits, with a warning (strict mode raises). Turns are read in double precision: `Vector`
+    is single, and put a path that doubles back past 180°, which made the setback negative."""
     p = [tuple(float(c) for c in q) + (0.0,) * (3 - len(q)) for q in points]
     if isinstance(amount, (int, float)):
         radii = [float(amount)] * len(p)
@@ -541,13 +1249,40 @@ def _filleted(points, closed, amount, least=0.0):
             raise ValueError(f"wire: fillet {r:g} at {said(b)} sets the bend back by {setback:g}: a radius is more "
                              f"than 0")
         corners[i] = (setback, r, (p[i] - p[i - 1]).normalized(), (p[(i + 1) % m] - p[i]).normalized(), turn)
+    over = []
     for i in range(m if closed else m - 1):
         j = (i + 1) % m
         used = corners.get(i, (0,))[0] + corners.get(j, (0,))[0]
         length = math.dist(pts[i], pts[j])
         if used > length + _core.mm(1e-9):
-            a, b = (tuple(round(c, 6) for c in q) for q in (pts[i], pts[j]))
-            raise ValueError(f"wire: fillet too large for the side from {a} to {b} ({used:.4g} > {length:.4g})")
+            over.append((i, j, used, length))
+    if over:
+        i, j, used, length = over[0]
+        a, b = (tuple(round(c, 6) for c in q) for q in (pts[i], pts[j]))
+        error = ValueError(f"wire: fillet too large for the side from {a} to {b} ({used:.4g} > {length:.4g})")
+        from .edit import _clamped, _is_strict
+        if _is_strict():
+            raise error
+        minimums = {k: min(t, least * math.tan(turn / 2)) for k, (t, _, _, _, turn) in corners.items()}
+        for i, j, _, length in over:
+            if minimums.get(i, 0) + minimums.get(j, 0) <= length + _core.mm(1e-9):
+                continue
+            k = i if i in corners else j
+            other = j if k == i else i
+            largest = max(0.0, length - minimums.get(other, 0)) / math.tan(corners[k][4] / 2)
+            raise ValueError(f"{error}: the largest fillet that fits at {said(pts[k])}, {largest:.4g}, is tighter "
+                             f"than the wire's radius {least:g} (d / 2), and a tube bent tighter than its radius "
+                             f"folds on itself")
+        factors, (i, j, length) = _fit(corners, over, minimums)
+        k = max((k for k in (i, j) if k in factors), key=lambda k: corners[k][1])
+        r = corners[k][1]
+        _clamped(error, f"wire: fillet={r:g} too large for the side of {length:.4g} from {_said(pts[i])} to "
+                        f"{_said(pts[j])}; clamped to {r * factors[k]:.4g}")
+        for k, fk in factors.items():
+            t, rk, u, v, turn = corners[k]
+            corners[k] = (t * fk, rk * fk, u, v, turn)
+    if curve:
+        return _fillet_path(pts, closed, corners)
     out = []
     for i in range(m):
         if i not in corners:
@@ -566,6 +1301,90 @@ def _filleted(points, closed, amount, least=0.0):
     if closed and len(kept) > 1 and (kept[-1] - kept[0]).length <= _core.mm(EPS):
         kept.pop()
     return [tuple(q) for q in kept]
+
+
+def _fillet_path(points, closed, corners):
+    """Exact line/circle spans for law wires, with physical arc-length samples.
+
+    Re-fitting the sampled arcs changes their curvature and makes a tube's
+    admissible diameter depend on where the law adds rings. Keep the analytic
+    centre line instead, and carry its distances through to section sizing.
+    """
+    def unit(v):
+        length = math.hypot(*v)
+        return tuple(c / length for c in v)
+
+    def cross(a, b):
+        return (a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0])
+
+    arcs = {}
+    for i, (setback, radius, _, _, turn) in corners.items():
+        a, b, c = points[i - 1], points[i], points[(i + 1) % len(points)]
+        u = unit(tuple(y - x for x, y in zip(a, b)))
+        v = unit(tuple(y - x for x, y in zip(b, c)))
+        dot = sum(x*y for x, y in zip(u, v))
+        normal = unit(tuple(y - dot*x for x, y in zip(u, v)))
+        start = tuple(x - setback*d for x, d in zip(b, u))
+        centre = tuple(x + radius*d for x, d in zip(start, normal))
+        radial = tuple(x - y for x, y in zip(start, centre))
+        arcs[i] = (start, centre, radial, unit(cross(u, v)), radius, turn)
+    current = arcs[0][0] if closed and 0 in arcs else points[0]
+    initial = current
+    spans, lengths, spots = [], [0.0], [0.0]
+
+    def line_to(end):
+        nonlocal current
+        length = math.dist(current, end)
+        if length > _core.mm(EPS):
+            spans.append(("line", current, end))
+            lengths.append(lengths[-1] + length)
+            spots.append(lengths[-1])
+        current = end
+
+    def evaluate(span, distance):
+        if span[0] == "line":
+            _, a, b = span
+            tangent = unit(tuple(y - x for x, y in zip(a, b)))
+            return tuple(x + distance*d for x, d in zip(a, tangent)), tangent
+        _, centre, radial, axis, radius, turn = span
+        angle = min(turn, max(0.0, distance / radius))
+        c, t = math.cos(angle), math.sin(angle)
+        side = cross(axis, radial)
+        parallel = sum(x*y for x, y in zip(axis, radial))
+        r = tuple(x*c + y*t + z*parallel*(1-c) for x, y, z in zip(radial, side, axis))
+        point = tuple(x + y for x, y in zip(centre, r))
+        return point, unit(cross(axis, r))
+
+    for i in range(len(points)):
+        if i in arcs:
+            start, centre, radial, axis, radius, turn = arcs[i]
+            line_to(start)
+            span = ("arc", centre, radial, axis, radius, turn)
+            spans.append(span)
+            before = lengths[-1]
+            lengths.append(before + radius * turn)
+            count = _core.segments(radius, math.degrees(turn))
+            spots.extend(before + radius * turn * j / count for j in range(1, count))
+            spots.append(lengths[-1])
+            # The outgoing straight line meets the same circle endpoint.
+            current = tuple(evaluate(span, radius * turn)[0])
+        elif i or not closed:
+            line_to(points[i])
+    if closed:
+        line_to(initial)
+    if not spans:
+        return Path([initial], closed=closed)
+
+    def at_length(distance):
+        j = min(max(bisect.bisect_right(lengths, distance) - 1, 0), len(spans) - 1)
+        point, tangent = evaluate(spans[j], distance - lengths[j])
+        return Vector(point), Vector(tangent)
+
+    sample_spots = spots[:-1] if closed else spots
+    result = Path([at_length(d)[0] for d in sample_spots], closed=closed)
+    result._at_length = at_length
+    result._lengths = sample_spots
+    return result
 
 
 # ---------------------------------------------------------------- loft
@@ -691,7 +1510,8 @@ def _correspond(shapes):
         return rings, flags
     rings = []
     for i, pts in enumerate(loops):
-        ring = _arclength(pts + pts[:1], target)
+        ring = (list(pts) if _core.FACETS is not None and len(pts) == target
+                else _arclength(pts + pts[:1], target))
         start = _start(ring, range(len(ring)))
         ring = ring[start:] + ring[:start]
         if rings:
@@ -729,11 +1549,12 @@ def _cap(ring):
 LOFT_STEPS = 6
 
 
-def _through(values, params, ts):
+def _through(values, params, ts, derivative=False):
     """Points at parameters `ts` on the natural cubic spline through `values` at
     `params` — global and C2, as a CAD loft runs (measured against OpenCascade's
     ThruSections on a CAD loft: F@2 % 0.996, against 0.972 for a local Catmull–Rom
-    and 0.972 for the interpolating polynomial)."""
+    and 0.972 for the interpolating polynomial). `derivative` returns the
+    first derivative with respect to the parameter instead of the position."""
     m = len(values)
     h = [params[i + 1] - params[i] for i in range(m - 1)]
     dim = len(values[0])
@@ -763,8 +1584,48 @@ def _through(values, params, ts):
         u, w = (t1 - t) / hk, (t - t0) / hk
         y0, y1 = values[k], values[k + 1]
         s0, s1 = Vector(second[k]), Vector(second[k + 1])
-        out.append(y0 * u + y1 * w + ((u ** 3 - u) * s0 + (w ** 3 - w) * s1) * (hk * hk / 6))
+        if derivative:
+            out.append((y1 - y0) / hk + ((1 - 3 * u * u) * s0 + (3 * w * w - 1) * s1) * (hk / 6))
+        else:
+            out.append(y0 * u + y1 * w + ((u ** 3 - u) * s0 + (w ** 3 - w) * s1) * (hk * hk / 6))
     return out
+
+
+def _loft_through(values, params, ts):
+    """Retain natural cubics unless uneven stations make a span overshoot.
+
+    PCHIP bounds every component between its section values. Probe the cubic's
+    exact derivative roots so a narrow extremum cannot escape the decision.
+    """
+    hs = [b-a for a,b in zip(params,params[1:])]
+    if max(hs) <= 4*min(hs):
+        return _through(values, params, ts)
+    slopes = _through(values, params, params, derivative=True)
+    unsafe = False
+    for i,h in enumerate(hs):
+        margin = max((values[i+1]-values[i]).length*.05, _core.mm(1e-4))
+        for axis in range(len(values[0])):
+            a,b = values[i][axis],values[i+1][axis]
+            # Hermite derivative A*t*t+B*t+C in normalised span space.
+            c = h*slopes[i][axis]
+            d = h*slopes[i+1][axis]
+            A,B,C = 6*a-6*b+3*c+3*d, -6*a+6*b-4*c-2*d, c
+            roots = []
+            if abs(A) < 1e-12:
+                if abs(B) > 1e-12:
+                    roots = [-C/B]
+            elif B*B-4*A*C >= 0:
+                root = math.sqrt(B*B-4*A*C)
+                roots = [(-B-root)/(2*A),(-B+root)/(2*A)]
+            for t in roots:
+                if 0 < t < 1:
+                    value = a+(b-a)*(3*t*t-2*t**3)+c*(t**3-2*t*t+t)+d*(t**3-t*t)
+                    unsafe |= value < min(a,b)-margin or value > max(a,b)+margin
+    if not unsafe:
+        return _through(values, params, ts)
+    normalised = [(p-params[0])/(params[-1]-params[0]) for p in params]
+    laws = [_core.Law([(u,v[k]) for u,v in zip(normalised,values)]) for k in range(len(values[0]))]
+    return [Vector([law((t-params[0])/(params[-1]-params[0])) for law in laws]) for t in ts]
 
 
 def _catmull(values, steps, closed):
@@ -785,14 +1646,165 @@ def _catmull(values, steps, closed):
     return out if closed else out + [values[-1]]
 
 
-def loft(name, *sections, follow=False, loop=False):
+def _loft_local_shapes(shapes):
+    """Recenter the mesh if doing so separates points that collapse in a Vector."""
+    for outline in dict.fromkeys(outline for outline, _ in shapes):
+        count = len({tuple(Vector(p)) for p in outline.pts})
+        if count == len(outline.pts):
+            continue
+        x, y = outline.pts[0]
+        if len({tuple(Vector((a - x, b - y))) for a, b in outline.pts}) > count:
+            break
+    else:
+        return shapes, Matrix.Identity(4), None
+
+    def placed_origin(mat, x, y):
+        return [math.fsum((mat[k][0] * x, mat[k][1] * y, mat[k][3])) for k in range(3)]
+
+    first, mat = shapes[0]
+    origin = placed_origin(mat, *first.pts[0])
+    local, offsets = [], []
+    for loop, mat in shapes:
+        x, y = loop.pts[0]
+        offsets.append(Vector((x, y)))
+        shift = placed_origin(mat, x, y)
+        mat = mat.copy()
+        mat.translation = Vector([a - b for a, b in zip(shift, origin)])
+        local.append((Loop([(a - x, b - y) for a, b in loop.pts], loop.sharp), mat))
+    return local, Matrix.Translation(origin), offsets
+
+
+def _bounded_loft(name, shapes, rings2d, flags, zero, follow, tip="round", extra=0):
+    tips = _ring_options(tip, extra)
+    """Shape-preserving station fields, with caps confined to the end spans.
+
+    Centres and transported offsets each use PCHIP, so a short end interval
+    cannot make the body overshoot. A degree-eight Bezier cap has monotone
+    component controls, the neighbouring section's tangent plane at its pole,
+    and the same joining derivative as the body. No cap is fitted back into it.
+    """
+    origins = [mat.to_translation() for _, mat in shapes]
+    distances = [0.0]
+    for a, b in zip(origins, origins[1:]):
+        distances.append(distances[-1] + max((b - a).length, _core.mm(1e-9)))
+    params = [d / distances[-1] for d in distances]
+
+    def fields(values):
+        return [_core.Law([(u, v[k]) for u, v in zip(params, values)]) for k in range(3)]
+
+    centre_fields = fields(origins)
+    offsets, centres = [], []
+    n = len(rings2d[0])
+    for i, (ring, (_, mat)) in enumerate(zip(rings2d, shapes)):
+        if follow:
+            tangent = Vector([law.slopes[0][i] for law in centre_fields]).normalized()
+            if tangent.length < 1e-9:
+                tangent = (origins[min(i + 1, len(origins) - 1)] - origins[max(0, i - 1)]).normalized()
+            x = mat.col[0].xyz
+            x = (x - tangent * x.dot(tangent)).normalized()
+            y = tangent.cross(x)
+            placed = [q.x * x + q.y * y for q in ring]
+        else:
+            placed = [mat.to_3x3() @ Vector((q.x, q.y, 0)) for q in ring]
+        mean = sum(placed, Vector()) / n
+        centres.append(origins[i] + mean)
+        offsets.append([q - mean for q in placed])
+    centre_fields = fields(centres)
+    point_fields = [fields([ring[k] for ring in offsets]) for k in range(n)]
+    controls = {}
+    for end, join in ((0, 1), (len(shapes) - 1, len(shapes) - 2)):
+        if not zero[end]:
+            continue
+        h = params[join] - params[end]
+        cap = []
+        for q, laws in zip(offsets[join], point_fields):
+            tangent = Vector([law.slopes[0][join] * h for law in laws])
+            # PCHIP limits h*slope/q to [0, 3] on this zero-ended span.
+            # These ordered Bezier controls stay between zero and q in
+            # every component; their endpoint derivatives are 2q and 2tangent.
+            first, last = q / 4, q - tangent / 4
+            cap.append([Vector()] + [first.lerp(last, k / 6) for k in range(7)] + [q])
+        controls[end] = cap
+    bernstein = (1, 8, 28, 56, 70, 56, 28, 8, 1)
+    b = _core.Builder(name)
+    rings = []
+    ring_params = []
+    for span in range(len(shapes) - 1):
+        end = span if zero[span] else (span + 1 if zero[span + 1] else None)
+        if end is None:
+            fractions = sorted(set([k / (4 * LOFT_STEPS) for k in range(4 * LOFT_STEPS + 1)]
+                                   + [1 / 256, 255 / 256]))
+        else:
+            fractions = [math.sin(math.pi / 2 * k / 64) ** 2 for k in range(64+1)]
+            if end == span + 1:
+                fractions = [1 - t for t in reversed(fractions)]
+        def evaluate(t):
+            u = params[span] + (params[span + 1] - params[span]) * t
+            centre = Vector([law(u) for law in centre_fields])
+            if end is not None and tips[0 if end == 0 else 1] == 'sharp':
+                join = 1 if end == 0 else len(shapes)-2
+                amount = t if end == span else 1-t
+                return [origins[end].lerp(centres[join] + q, amount) for q in offsets[join]]
+            if end is None:
+                qs = [Vector([law(u) for law in laws]) for laws in point_fields]
+            else:
+                s = math.sqrt(t if end == span else 1 - t)
+                weights = [c * s**k * (1 - s)**(8 - k) for k, c in enumerate(bernstein)]
+                qs = [sum((q * w for q, w in zip(control, weights)), Vector()) for control in controls[end]]
+            return [centre + q for q in qs]
+        if _core.FACETS is not None:
+            if end is not None:
+                pieces = _core.segments(1, 90)
+                fractions = [math.sin(math.pi / 2 * k / pieces) ** 2 for k in range(pieces + 1)]
+                if end == span + 1:
+                    fractions = [1 - t for t in reversed(fractions)]
+            else:
+                probes = [evaluate(k / 64) for k in range(65)]
+                pieces = _core.turn_steps([[ring[q] for ring in probes] for q in range(n)])
+                fractions = [k / pieces for k in range(pieces + 1)]
+        if end is not None and tips[0 if end == 0 else 1] == 'sharp':
+            fractions = [0., 1.]
+        if extra:
+            pieces = len(fractions)-1+extra
+            fractions = [k/pieces for k in range(pieces+1)]
+        for t in fractions[bool(span):]:
+            ring_params.append(span + t)
+            if end is not None and ((end == span and t == 0) or (end == span + 1 and t == 1)):
+                pole = b.vert(origins[end])
+                rings.append([pole] * n)
+                continue
+            rings.append([b.vert(q) for q in evaluate(t)])
+    b.lengthwise(rings, [u / (len(shapes)-1) for u in ring_params])
+    runs = _runs(flags, list(range(n)))
+    for lower, upper in zip(rings, rings[1:]):
+        for j in range(n):
+            j1 = (j + 1) % n
+            b.face([lower[j], lower[j1], upper[j1], upper[j]], runs[j], ("side",))
+    caps = []
+    for i, tag, flip in ((0, "start", True), (-1, "end", False)):
+        if not zero[i]:
+            for tri in _cap(rings2d[i]):
+                caps.append(b.face([rings[i][v] for v in (reversed(tri) if flip else tri)], -1 - (i < 0), (tag,)))
+    b.dissolve(caps)
+    return _object(b, Matrix.Identity(4), "seam")
+
+
+def loft(name, *sections, follow=False, loop=False, tip="round", rings=0):
     """Through placed sections, capped; loop: a ring.
 
     A solid through its cross-sections — profiles placed with `at` — smooth between
     them, first to last, its two ends capped: each point runs on a spline through its
     places in the sections, as in a CAD loft. With `follow`, each section is turned
     square to the line through their centres, keeping its X across it. `loop` joins the
-    last back to the first: a ring, with no ends."""
+    last back to the first: a ring, with no ends. A zero-size end section closes
+    on a rounded cap whose tangent matches the continuing body's spline.
+    Its pole has the tangent plane of the neighbouring full section (after
+    follow's reorientation); the zero section supplies its position only,
+    and its rotation is ignored. With poles, centre and section offsets use
+    shape-preserving cubics between the original stations; rounding stays in
+    the terminal interval, without making the neighbouring body overshoot."""
+    _ring_options(tip, rings)
+    extra = rings
     if len(sections) < 2:
         raise ValueError("loft needs two sections")
     if loop and len(sections) < 3:
@@ -803,16 +1815,66 @@ def loft(name, *sections, follow=False, loop=False):
                             "(profile, Frame) pair")
         if hasattr(s, "data") and hasattr(s, "matrix_basis"):
             raise TypeError(f"loft: a section is a profile placed with at, not a solid ({_core.given_name(s)!r})")
+    from .edit import _is_strict, _warn
     placed = [_placed(s) for s in sections]
     shapes = []
-    for prof, mat in placed:
+    checked = set()
+    for rank, (prof, mat) in enumerate(placed, 1):
         if len(prof.loops) != 1:
+            if prof._crossing is not None:
+                raise ValueError(f"loft: section {rank} crosses itself near {_said(prof._crossing)} — its outline "
+                                 f"split into {len(prof.loops)} pieces, and a section is one outline: move its points "
+                                 f"so that its sides do not cross")
             raise ValueError("loft: each section must be one outline, without holes")
-        shapes.append((prof.loops[0], mat))
-    rings2d, flags = _correspond(shapes)
+        outline = prof.loops[0]
+        if len(outline.pts) > _CROSSING_LIMIT and outline not in checked:
+            q = _large_crossing(outline.pts)
+            if q is not None:
+                message = (f"loft: section {rank} crosses itself near {_said(q)} — "
+                           "move its points so that its sides do not cross")
+                if _is_strict():
+                    raise ValueError(message)
+                _warn(message, UserWarning)
+            checked.add(outline)
+        if outline.pts and all(q == outline.pts[0] for q in outline.pts):
+            mat = mat.copy()
+            mat.translation = mat @ Vector((*outline.pts[0], 0))
+            outline = Loop([(0, 0)], [False])
+        shapes.append((outline, mat))
+    zero = [all(x == 0 and y == 0 for x, y in outline.pts) for outline, _ in shapes]
+    frame, offsets = Matrix.Identity(4), None
+    if not any(zero):
+        shapes, frame, offsets = _loft_local_shapes(shapes)
+    tips = _ring_options(tip, extra)
+    for end,neighbour,t in ((0,1,tips[0]),(-1,-2,tips[1])):
+        if t == 'flat' and zero[end]:
+            shapes[end] = (shapes[neighbour][0],shapes[end][1])
+            zero[end] = False
+    if any(zero):
+        if loop or any(zero[1:-1]) or all(zero):
+            raise ValueError("loft: zero sections belong only at open ends, beside a nonzero section")
+        for i in (0, len(shapes) - 1):
+            if zero[i]:
+                neighbour = shapes[1 if i == 0 else -2][1].copy()
+                neighbour.translation = shapes[i][1].translation
+                shapes[i] = (shapes[i][0], neighbour)
+        compatible = [(shapes[1 if i == 0 else -2][0] if z else outline, mat)
+                      for i, ((outline, mat), z) in enumerate(zip(shapes, zero))]
+        rings2d, flags = _correspond(compatible)
+        for i, z in enumerate(zero):
+            if z:
+                rings2d[i] = [Vector((0, 0)) for _ in rings2d[i]]
+    else:
+        rings2d, flags = _correspond(shapes)
+    if any(zero):
+        return _bounded_loft(name, shapes, rings2d, flags, zero, follow, tip, extra)
     n = len(rings2d[0])
-    steps = 1 if len(sections) == 2 and not loop else LOFT_STEPS
-    origins = [mat.to_translation() for _, mat in shapes]
+    steps = (max(64, 4 * _core.FACETS) if _core.FACETS is not None
+             else (1 if len(sections) == 2 and not loop else LOFT_STEPS))
+    base_steps = steps
+    if extra:
+        steps *= extra + 1
+    origins = [mat.to_translation() for _, mat in placed]
     xs = [mat.to_3x3() @ Vector((1, 0, 0)) for _, mat in shapes]
     ys = [mat.to_3x3() @ Vector((0, 1, 0)) for _, mat in shapes]
     dense_o = _catmull(origins, steps, loop)
@@ -820,9 +1882,13 @@ def loft(name, *sections, follow=False, loop=False):
         dense_x = _catmull(xs, steps, loop)
         dense_y = _catmull(ys, steps, loop)
         dense_pts = [_catmull([ring[k] for ring in rings2d], steps, loop) for k in range(n)]
+        if offsets is not None:
+            dense_offsets = _catmull(offsets, steps, loop)
+            world_origin = frame.translation
     count = len(dense_o)
     b = _core.Builder(name)
     rings = []
+    ring_params = [i / steps for i in range(count)]
     if not follow and not loop:  # as a CAD loft: each point on a spline through its places, chord-length
         placed3d = [[mat @ Vector((q.x, q.y, 0)) for q in ring] for ring, (_, mat) in zip(rings2d, shapes)]
         params = [0.0]
@@ -832,8 +1898,17 @@ def loft(name, *sections, follow=False, loop=False):
         ts = [params[0]]
         for i in range(len(params) - 1):
             k = 1 if len(sections) == 2 else max(2, round(LOFT_STEPS * (params[i + 1] - params[i]) / mean))
-            ts += [params[i] + (params[i + 1] - params[i]) * j / k for j in range(1, k + 1)]
-        paths = [_through([sec[k] for sec in placed3d], params, ts) for k in range(n)]
+            if _core.FACETS is not None:
+                probes = [params[i] + (params[i + 1] - params[i]) * j / 64 for j in range(65)]
+                k = _core.turn_steps([_loft_through([sec[q] for sec in placed3d], params, probes) for q in range(n)])
+            k += extra
+            ts += [params[i] + (params[i+1]-params[i])*j/k for j in range(1,k+1)]
+        paths = [_loft_through([sec[k] for sec in placed3d], params, ts) for k in range(n)]
+        import bisect
+        ring_params = []
+        for t in ts:
+            span = min(bisect.bisect_right(params, t) - 1, len(params) - 2)
+            ring_params.append(span + (t - params[span]) / (params[span + 1] - params[span]))
         count = len(ts)
         rings = [[b.vert(paths[k][i]) for k in range(n)] for i in range(count)]
     elif not follow:
@@ -854,7 +1929,31 @@ def loft(name, *sections, follow=False, loop=False):
             z = x.cross(y).normalized()
             x = x.normalized()
             y = z.cross(x)
+        if offsets is not None:
+            shift = dense_offsets[i]
+            o = Vector([math.fsum((o[j], shift.x * x[j], shift.y * y[j], -world_origin[j])) for j in range(3)])
         rings.append([b.vert(o + dense_pts[k][i].x * x + dense_pts[k][i].y * y) for k in range(n)])
+    if (_core.FACETS is not None or extra) and (follow or loop):
+        # Probe the transported meridians, then keep the original station rings.
+        kept = []
+        spans = len(sections) if loop else len(sections) - 1
+        for span in range(spans):
+            indices = [(span * steps + j) % count for j in range(steps + 1)]
+            pieces = (_core.turn_steps([[rings[i][q].co for i in indices] for q in range(n)])
+                      if _core.FACETS is not None else base_steps)
+            pieces += extra
+            fractions = [j/pieces for j in range(pieces)]
+            kept += [indices[round(t * steps)] for t in fractions]
+        if not loop:
+            kept.append(count - 1)
+        retained = set(kept)
+        discarded = [v for i, ring in enumerate(rings) if i not in retained for v in ring]
+        rings = [rings[i] for i in kept]
+        ring_params = [ring_params[i] for i in kept]
+        for v in discarded:
+            b.bm.verts.remove(v)
+        count = len(rings)
+    b.lengthwise(rings, [u / (len(shapes) if loop else len(shapes)-1) for u in ring_params])
     runs = _runs(flags, list(range(n)))
     for i in range(count if loop else count - 1):
         lower, upper = rings[i], rings[(i + 1) % count]
@@ -864,10 +1963,12 @@ def loft(name, *sections, follow=False, loop=False):
     if not loop:
         caps = []
         for ring, k, tag, flip in ((rings2d[0], 0, "start", True), (rings2d[-1], count - 1, "end", False)):
+            if zero[0 if k == 0 else -1]:
+                continue
             for t in _cap(ring):
                 caps.append(b.face([rings[k][v] for v in (reversed(t) if flip else t)], -1 - (k > 0), (tag,)))
         b.dissolve(caps)
-    return _object(b, Matrix.Identity(4), "seam")
+    return _object(b, frame, "seam")
 
 
 # ---------------------------------------------------------------- body
@@ -918,6 +2019,20 @@ def body(name, plan, top, bottom, n=2):
     curved = any(isinstance(v, Path) for v in (plan, top, bottom, n)) or not isinstance(n, (int, float))
     ys = {y0 + (y1 - y0) * (1 - math.cos(math.pi * i / BODY_SECTIONS)) / 2
           for i in range(BODY_SECTIONS + 1)} if curved else {y0, y1}
+    if _core.FACETS is not None and curved:
+        def meridians(y):
+            w, hi, lo = wide(y), high(y), low(y)
+            k = square(y)
+            if not k > 0:
+                raise ValueError(f"body: n must be positive, not {k:g} at y = {y:g}")
+            section = superellipse(max(w, _core.mm(1e-9)), max(hi - lo, _core.mm(1e-9)), n=k).loops[0].pts
+            return [Vector((x, y, z + (hi + lo) / 2)) for x, z in section]
+        probes = [meridians(y0 + (y1 - y0) * k / 128) for k in range(129)]
+        pieces = _core.turn_steps([[r[q] for r in probes] for q in range(len(probes[0]))])
+        ys = {y0 + (y1 - y0) * k / pieces for k in range(pieces + 1)}
+        for view in (plan, top, bottom, n):
+            if isinstance(view, Path):
+                ys |= {float(q[0]) for q in view.points if y0 <= q[0] <= y1}
     for view in (plan, top, bottom, n):
         if isinstance(view, (list, tuple)):
             ys |= {float(q[0]) for q in view if y0 <= float(q[0]) <= y1}
@@ -1049,6 +2164,106 @@ def helix(d, pitch, h, left=False):
                   d / 2 * math.sin(sign * 2 * math.pi * turns * i / n), h * i / n) for i in range(n + 1)])
 
 
+def spiral(d, d2, turns, h=0, left=False):
+    """Spiral path from diameter d to d2, geometrically, rising h over turns turns.
+
+    Starts on +X at z = 0, anticlockwise about +Z; left mirrors the turning, not
+    the rise. h may be negative. Always open, even when its ends meet.
+    """
+    for name, value in (("d", d), ("d2", d2), ("turns", turns), ("h", h)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise TypeError(f"spiral: {name} is a finite number, not {value!r}")
+        if name != "h" and value <= 0:
+            raise ValueError(f"spiral: {name} must be more than 0, not {value:g}")
+    if not isinstance(left, bool):
+        raise TypeError(f"spiral: left is True or False, not {left!r}")
+    n = _core.segments(max(d, d2) / 2, 360 * turns)
+    # An even number of intervals samples the geometric mean exactly halfway.
+    n += n % 2
+    sign = -1 if left else 1
+    ratio = d2 / d
+    log_ratio = math.log(ratio) if 0 < ratio < math.inf else None
+    points = []
+    for i in range(n + 1):
+        t = i / n
+        # A ratio keeps exact changes of unit exact. The fallback avoids overflow
+        # or underflow when the two finite diameters have an unrepresentable ratio.
+        diameter = (d * math.exp(log_ratio * t) if log_ratio is not None else
+                    math.exp(math.log(d) * (1 - t) + math.log(d2) * t))
+        r = (d if i == 0 else d2 if i == n else diameter) / 2
+        theta = sign * 2 * math.pi * turns * t
+        points.append((r * math.cos(theta), r * math.sin(theta), h * t))
+    return Path(points)
+
+
+def hull(name, points):
+    """Closed convex hull of points, where they are given, with crisp planar faces.
+
+    `points` is an iterable of (x, y, z) coordinates or Frames (their origins),
+    in the program's unit and the solid's own frame. Coordinates are not recentered.
+    Duplicate and interior points are ignored. Faces have no names; read a face by
+    direction, such as ob.face("+Z"). Edges are named "rim".
+
+    At least four distinct, non-coplanar points are required. Degeneracy is checked
+    within 1e-6 mm or 1e-7 of the extent, whichever is larger.
+    Non-finite coordinates are refused.
+    """
+    from .frames import Frame
+
+    coords = []
+    for point in points:
+        try:
+            co = tuple(point.origin if isinstance(point, Frame) else point)
+            if len(co) != 3 or any(isinstance(c, bool) or not isinstance(c, (int, float))
+                                   or not math.isfinite(c) for c in co):
+                raise ValueError
+        except (TypeError, ValueError):
+            raise ValueError("hull: each point is a finite (x, y, z) or a Frame") from None
+        coords.append(tuple(float(c) for c in co))
+    coords = sorted(set(coords))
+    if len(coords) < 4:
+        raise ValueError("hull: at least 4 distinct points are required")
+    # Work about a nearby origin at unit extent: hull's float tolerances must not
+    # depend on the program's unit or on its distance from the origin.
+    origin = coords[0]
+    extent = max(max(p[i] for p in coords) - min(p[i] for p in coords) for i in range(3))
+    qs = [Vector(tuple((c - o) / extent for c, o in zip(p, origin))) for p in coords]
+    tolerance = max(_core.mm(1e-6) / extent, 1e-7)
+    a = qs[0]
+    b = max(qs, key=lambda p: (p - a).length_squared)
+    axis = (b - a).normalized()
+    c = max(qs, key=lambda p: (p - a).cross(axis).length_squared)
+    normal = (c - a).cross(axis)
+    if normal.length <= tolerance:
+        raise ValueError("hull: points are coplanar or degenerate")
+    normal.normalize()
+    if max(abs((p - a).dot(normal)) for p in qs) <= tolerance:
+        raise ValueError("hull: points are coplanar or degenerate")
+    bm = bmesh.new()
+    try:
+        verts = [bm.verts.new(p) for p in qs]
+        source = {v: i for i, v in enumerate(verts)}
+        bmesh.ops.convex_hull(bm, input=verts, use_existing_faces=False)
+        bm.normal_update()
+        if not bm.faces or any(not e.is_manifold for e in bm.edges if e.link_faces):
+            raise ValueError("hull: points are coplanar or degenerate")
+        # Rebuild from canonical loops, rather than inherit the operator's order.
+        loops = []
+        for face in bm.faces:
+            loop = [source[v] for v in face.verts]
+            start = loop.index(min(loop))
+            loops.append(tuple(loop[start:] + loop[:start]))
+        loops.sort()
+    finally:
+        bm.free()
+    builder = _core.Builder(name)
+    used = sorted({i for loop in loops for i in loop})
+    verts = {i: builder.vert(coords[i]) for i in used}
+    for surface, loop in enumerate(loops):
+        builder.face([verts[i] for i in loop], surface, ())
+    return builder.finish("rim")
+
+
 # ---------------------------------------------------------------- primitives
 
 def box(name, w, d, h):
@@ -1064,7 +2279,10 @@ def cylinder(name, d, h):
     """Along Z, from Z = 0.
 
     A cylinder of diameter `d` and height `h` along Z, from Z = 0 up."""
-    return extrude(name, circle(d), h)
+    ob = extrude(name, circle(d), h)
+    from ._coordinates import height_coordinates
+    height_coordinates(ob, h)
+    return ob
 
 
 def tube(name, d, d_in, h):

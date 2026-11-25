@@ -11,8 +11,9 @@ builds the golden corpus once plain and once through this shim under the matchin
 `LENGTHS` says, for every parameter of the public surface, whether it is a length:
 `L` a length (a number, or None), `P` numbers nested in points or lists (objects
 inside pass through), `csk` a countersink — a diameter, or (diameter, angle) —, `sv` a number,
-or (position, value) points whose positions alone are lengths (`body`'s `n`), `-`
-anything else. `test_units` holds it complete against the surface `apicompat` reads,
+or (position, value) points whose positions alone are lengths (`body`'s `n`), `law` a length
+or a law whose values are lengths, `-` anything else. `test_units` holds it complete
+against the surface `apicompat` reads,
 so a new verb cannot slip past the invariance test unclassified.
 
 Lengths read back: `Frame.point`, `Frame.origin`, `Frame.matrix` and a placed profile's `matrix` (their
@@ -47,14 +48,23 @@ LENGTHS = {
     "wrap": {"profiles": "P"},
     "mirror": {"p": "-", "flip": "-"},
     # solids, paths
+    "tufts": {"name": "-", "sites": "-", "height": "L", "width": "L", "blades": "-",
+              "lean": "-", "direction": "-", "shape": "-", "seed": "-"},
+    "fill": {"name": "-", "container": "-", "level": "P", "clearance": "L"},
+    "field": {"name": "-", "size": "P", "density": "density", "cell": "L", "level": "-", "min_component_cells": "-"},
+    "waves": {"wavelength": "L", "direction": "-", "centers": "P", "sharpness": "-",
+              "spread": "-", "decay": "L", "phase": "-", "seed": "-"},
+    "noise": {"x": "-", "y": "-", "z": "-", "seed": "-", "kind": "-"},
+    "hull": {"name": "-", "points": "P"},
     "extrude": {"name": "-", "profile": "P", "h": "L", "taper": "-", "twist": "-", "both": "-", "h2": "L",
                 "on": "-", "until": "-"},
     "revolve": {"name": "-", "profile": "P", "angle": "-"},
-    "sweep": {"name": "-", "profile": "P", "path": "P", "scale": "-", "twist": "-", "frenet": "-"},
-    "loft": {"name": "-", "sections": "P", "follow": "-", "loop": "-"},
+    "sweep": {"name": "-", "profile": "P", "path": "P", "scale": "-", "twist": "-", "frenet": "-", "tip": "-", "rings": "-"},
+    "loft": {"name": "-", "sections": "P", "follow": "-", "loop": "-", "tip": "-", "rings": "-"},
     "body": {"name": "-", "plan": "P", "top": "P", "bottom": "P", "n": "sv"},
-    "wire": {"name": "-", "path": "P", "d": "L", "closed": "-", "fillet": "P"},
+    "wire": {"name": "-", "path": "P", "d": "law", "closed": "-", "fillet": "P", "tip": "-", "rings": "-"},
     "helix": {"d": "L", "pitch": "L", "h": "L", "left": "-"},
+    "spiral": {"d": "L", "d2": "L", "turns": "-", "h": "L", "left": "-"},
     "box": {"name": "-", "w": "L", "d": "L", "h": "L"},
     "cylinder": {"name": "-", "d": "L", "h": "L"},
     "tube": {"name": "-", "d": "L", "d_in": "L", "h": "L"},
@@ -74,11 +84,17 @@ LENGTHS = {
     "pocket": {"ob": "-", "profile": "P", "depth": "L", "on": "-"},
     "merge": {"obs": "-"},
     "scale": {"ob": "-", "s": "-"},
+    "bend": {"ob": "-", "angle": "-", "axis": "-", "toward": "-", "step": "L"},
+    "twist": {"ob": "-", "angle": "-", "axis": "-", "step": "L"},
+    "taper": {"ob": "-", "s": "-", "axis": "-"},
     "fillet": {"ob": "-", "r": "L", "edges": "-"},
     "chamfer": {"ob": "-", "d": "L", "edges": "-", "d2": "L", "angle": "-"},
     "soften": {"ob": "-", "r": "L", "angle": "-"},
     "shell": {"ob": "-", "t": "L", "open": "-"},
-    "dent": {"ob": "-", "points": "P", "r": "L", "depth": "L"},
+    "dent": {"ob": "-", "points": "P", "r": "L", "depth": "L", "coords": "-"},
+    "blend": {"ob": "-", "others": "-", "r": "L", "step": "L"},
+    "displace": {"ob": "-", "amount": "L", "size": "L", "noise": "-", "octaves": "-", "seed": "-", "direction": "-", "coords": "-", "faces": "-",
+                 "fade": "P", "step": "L"},
     # frames, placement
     "Frame": {"origin": "P", "normal": "-", "up": "-"},
     "Frame.offset": {"d": "L"},
@@ -89,11 +105,22 @@ LENGTHS = {
     "Frame.point": {"x": "L", "y": "L", "z": "L"},
     "Frame.normal": {},
     "Frame.matrix": {},
-    "at": {"ob": "-", "x": "L", "y": "L", "z": "L", "rx": "-", "ry": "-", "rz": "-", "on": "-", "anchor": "-"},
+    "Frames": {},
+    "Frames.offset": {"d": "L"},
+    "Frames.turn": {"rx": "-", "ry": "-", "rz": "-"},
+    "Frames.move": {"x": "L", "y": "L", "z": "L"},
+    "Frames.jitter": {"rx": "-", "ry": "-", "rz": "-", "x": "L", "y": "L", "z": "L", "seed": "-"},
+    "at": {"ob": "-", "x": "L", "y": "L", "z": "L", "rx": "-", "ry": "-", "rz": "-", "on": "-", "anchor": "-", "scale": "-"},
     "transform": {"ob": "-", "x": "L", "y": "L", "z": "L", "rx": "-", "ry": "-", "rz": "-", "mirror": "-"},
     "grid": {"nx": "-", "ny": "-", "px": "L", "py": "L", "stagger": "-", "on": "-"},
     "ring": {"n": "-", "r": "L", "start": "-", "angle": "-", "on": "-"},
-    "along": {"path": "P", "pitch": "L", "count": "-"},
+    "along": {"path": "P", "pitch": "L", "count": "-", "spin": "-", "span": "-"},
+    "vary": {"value": "-", "spread": "-", "n": "-", "seed": "-"},
+    "scatter": {"n": "-", "size": "P", "seed": "-", "surface": "-", "on": "-"},
+    "phyllotaxis": {"n": "-", "d": "L", "h": "L", "angle": "-", "on": "-"},
+    "branches": {"length": "L", "d": "L", "levels": "-", "children": "-", "attach": "-", "angle": "-",
+                 "azimuth": "-", "length_ratio": "-", "diameter_ratio": "-", "tip_ratio": "-",
+                 "jitter": "-", "seed": "-", "on": "-", "wander": "-", "droop": "-", "step": "L"},
     "snap": {"targets": "-", "points": "P", "direction": "-"},
     "ob.face": {"which": "-"},
     "ob.edge": {"which": "-"},
@@ -107,17 +134,23 @@ LENGTHS = {
     "pose": {"ob": "-", "value": "-", "joint": "-"},
     "seat": {"host": "-", "part": "-"},
     # assembly
+    "light": {"name": "-", "kind": "-", "lm": "-", "lux": "-", "color": "-", "angle": "-", "blend": "-",
+              "shadow": "-", "size": "L"},
     "material": {"ob": "-", "kind": "-", "color": "-", "roughness": "-", "metallic": "-", "opacity": "-",
-                 "emission": "-"},
+                 "emission": "-", "absorb": "-", "absorb_distance": "L", "thickness": "P",
+                 "ior": "-", "transmission": "-", "scatter": "-", "scatter_distance": "L",
+                 "scatter_anisotropy": "-"},
     "group": {"name": "-", "children": "-"},
     "assembly": {"name": "-", "children": "-", "anchors": "-"},
     "attach": {"handle": "-", "name": "-", "children": "-"},
     "Handle": {"root": "-", "anchors": "-"},
-    "export": {"root": "-", "path": "-"},
+    "export": {"root": "-", "path": "-", "colors": "-", "trace": "-"},
+    "facets": {"n": "-", "smooth": "-"},
+    "smooth": {"ob": "-", "angle": "-"},
+    "lay": {"ob": "-", "over": "-", "reach": "L", "step": "L"},
     "empty_scene": {},
     "fingerprint": {},
     "units": {"name": "-"},
-    "facets": {"n": "-"},
 }
 
 #: Calls of the library under way: the shim converts only at depth 0, the program's side.
@@ -138,6 +171,12 @@ def scaled(value, k):
 
 
 def _convert(kind, value, k):
+    if kind == "density":
+        return lambda x, y, z: value(x / k, y / k, z / k)
+    if kind == "law":      # a length, an elliptical pair, or a length law
+        if isinstance(value, (tuple, list)) and len(value) == 2 and all(isinstance(v, (int,float)) for v in value):
+            return scaled(value,k)
+        return value * k if isinstance(value, (int, float)) else [(u, scaled(v, k)) for u, v in value]
     if kind == "L":
         return None if value is None else value * k
     if kind == "P":
@@ -219,7 +258,7 @@ def install(k):
     """Wrap `sand3d`'s public surface in place so a millimetre program runs × `k`."""
     import bpy
     import sand3d
-    from sand3d.frames import Frame
+    from sand3d.frames import Frame, _Axis
     from sand3d.profile import Loop, Path, Placed, Profile
 
     for name in sand3d.__all__:
@@ -236,6 +275,7 @@ def install(k):
     for cls in (Profile, Placed):
         for op in ("__add__", "__sub__"):
             setattr(cls, op, _wrap(getattr(cls, op), {}, k))
+    _Axis.d = _read_back("d", lambda v: _convert("law", v, 1 / k))
     Path.points = _read_back("points", lambda v: scaled(v, 1 / k))
     slot = Loop.pts
     Loop.pts = property(lambda self: slot.__get__(self) if _depth else scaled(slot.__get__(self), 1 / k),

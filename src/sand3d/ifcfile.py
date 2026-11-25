@@ -34,6 +34,15 @@ so the clearer of them wins: `1 - opacity`, or most of `transmission`. Multiplyi
 as the GLB and the USDA do would put plain `glass` at 1, and a reader draws nothing at
 all at 1 — while `opacity=0` still does mean invisible, as `material` says it does.
 
+IOR, volume absorption and thickness are not represented by this surface style.
+
+A point or a spot `light` is an `IfcLightFixture`: its `Lighting` representation holds an
+`IfcLightSourceGoniometric`, the one IFC light source with a physical unit — the lamp's
+lumens, its colour (sRGB) and the colour temperature nearest to it, and how it spreads, in
+candela per lumen by the angle off the way it shines. A sun or the sky has only a share of
+0..1 in IFC, not lux: `export` leaves them out and says so. The units of light are assigned
+only in a file that has one.
+
 No joint: IFC says no mechanism, so the file is the pose it was written at — the URDF
 and the USDA carry the joints. No timestamp either, and the ids are digests rather than
 chance — of a part's name and its geometry, of a group's name and its parts, of the
@@ -44,11 +53,12 @@ moving a part can change its ID, and identical parts in separate models can shar
 They do not provide persistent identity across exports.
 """
 import hashlib
+import math
 import os
 
-from . import _core, materials
+from . import _core, lights, materials
 from .meshfile import _triangles
-from .urdf import _Names, _clean
+from .urdf import _Names, _clean, _metres
 
 #: The alphabet of an IfcGloballyUniqueId, in IFC's order.
 _B64 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_$"
@@ -108,10 +118,36 @@ def _refs(items):
     return "(" + ",".join(items) + ")"
 
 
-def _srgb(hex_color):
-    """'#rrggbb' as the three numbers of an `IfcColourRGB`: sRGB, the hex over 255, as
-    Revit reads a colour and the URDF writes one."""
-    return [int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+def _srgb(color):
+    """Hex or an sRGB triplet as the three numbers of an IfcColourRGB."""
+    return [int(color[i:i + 2], 16) / 255 for i in (1, 3, 5)] if isinstance(color, str) else color
+
+
+def _kelvin(hex_color):
+    """The correlated colour temperature of an sRGB colour, in kelvin (McCamy's cubic on its
+    chromaticity), held to 1 000..25 000 K: what IFC asks of a light source besides its colour."""
+    r, g, b = (c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in _srgb(hex_color))
+    x, y, z = (0.4124 * r + 0.3576 * g + 0.1805 * b, 0.2126 * r + 0.7152 * g + 0.0722 * b,
+               0.0193 * r + 0.1192 * g + 0.9505 * b)
+    if x + y + z == 0 or abs(0.1858 - y / (x + y + z)) < 1e-9:
+        return 6504.0                                     # black, or the pole of the cubic: D65's
+    n = (x / (x + y + z) - 0.3320) / (0.1858 - y / (x + y + z))
+    return float(min(25000, max(1000, round(449 * n ** 3 + 3525 * n ** 2 + 6823.3 * n + 5520.33))))
+
+
+def _distribution(ob):
+    """A point's or a spot's light, per lumen of its lamp, by the angle off the way it shines
+    (C-γ, γ from nadir, the same in every C plane): (angles in radians, candela per lumen). A
+    point gives 1/4π every way; a spot as much inside its cone, fading to nothing over `blend`
+    of it, linearly, and nothing outside."""
+    every = 1 / (4 * math.pi)
+    if lights.kind(ob) == "point":
+        return [0.0, math.pi], [every, every]
+    half = min(ob.data.spot_size, lights.MAX_SPOT_SIZE) / 2
+    inner = half * (1 - max(ob.data.spot_blend, lights.MIN_CONE_BLEND))
+    if inner == 0:
+        return [0.0, half, math.pi], [every, 0.0, 0.0]
+    return [0.0, inner, half, math.pi], [every, every, 0.0, 0.0]
 
 
 def _closed(tris):
@@ -154,17 +190,29 @@ def write_ifc(root, path):
     # which is a clock (IfcOwnerHistory's CorrectChangeAction rule).
     owner = step("IFCOWNERHISTORY", who, app, "$", "$", "$", "$", "$", "0")
 
+    fixtures = [ob for ob in lights.lights([root, *root.children_recursive]) if lights.kind(ob) in ("point", "spot")]
+    photometric = []
+    if fixtures:                                          # only then: a file with no light is as it was
+        lumen = step("IFCSIUNIT", "*", ".LUMINOUSFLUXUNIT.", "$", ".LUMEN.")
+        candela = step("IFCSIUNIT", "*", ".LUMINOUSINTENSITYUNIT.", "$", ".CANDELA.")
+        photometric = [lumen, candela, step("IFCSIUNIT", "*", ".THERMODYNAMICTEMPERATUREUNIT.", "$", ".KELVIN."),
+                       step("IFCDERIVEDUNIT", _refs([step("IFCDERIVEDUNITELEMENT", candela, "1"),
+                                                     step("IFCDERIVEDUNITELEMENT", lumen, "-1")]),
+                            ".LUMINOUSINTENSITYDISTRIBUTIONUNIT.", "$")]
     units = step("IFCUNITASSIGNMENT", _refs([
         step("IFCSIUNIT", "*", ".LENGTHUNIT.", "$", ".METRE."),
         step("IFCSIUNIT", "*", ".AREAUNIT.", "$", ".SQUARE_METRE."),
         step("IFCSIUNIT", "*", ".VOLUMEUNIT.", "$", ".CUBIC_METRE."),
         step("IFCSIUNIT", "*", ".PLANEANGLEUNIT.", "$", ".RADIAN."),
+        *photometric,
     ]))
 
     here = step("IFCAXIS2PLACEMENT3D", step("IFCCARTESIANPOINT", "(0.,0.,0.)"), "$", "$")
     model = step("IFCGEOMETRICREPRESENTATIONCONTEXT", "$", _text("Model"), "3", _real(1e-5), here, "$")
     body = step("IFCGEOMETRICREPRESENTATIONSUBCONTEXT", _text("Body"), _text("Model"),
                 "*", "*", "*", "*", model, "$", ".MODEL_VIEW.", "$")
+    lighting = step("IFCGEOMETRICREPRESENTATIONSUBCONTEXT", _text("Lighting"), _text("Model"),
+                    "*", "*", "*", "*", model, "$", ".MODEL_VIEW.", "$") if fixtures else None
 
     def placed(under):
         return step("IFCLOCALPLACEMENT", under, here)
@@ -202,14 +250,41 @@ def write_ifc(root, path):
                 "(" + ",".join("(" + ",".join(str(i + 1) for i in t) + ")" for t in tris) + ")",
                 _closed(tris))
 
+    def source(ob):
+        """A point's or a spot's `IfcLightSourceGoniometric` — its lumens, its colour, the colour
+        temperature nearest to it, and how it spreads, the C-γ system's nadir on the way it
+        shines, where it stands in the world, in metres — and the text its id digests."""
+        m, unit = _core.world(ob), _metres()
+
+        def axis(c):
+            v = [m[r][c] for r in range(3)]
+            n = math.sqrt(sum(a * a for a in v))
+            return "(" + ",".join(_real(a / n) for a in v) + ")"
+        where, up, across = "(" + ",".join(_real(m[r][3] * unit) for r in range(3)) + ")", axis(2), axis(0)
+        colour, flux = lights.color(ob), _real(lights.power(ob))
+        angles, candela = ("(" + ",".join(_real(v) for v in vs) + ")" for vs in _distribution(ob))
+        spread = step("IFCLIGHTINTENSITYDISTRIBUTION", ".TYPE_C.",
+                      _refs([step("IFCLIGHTDISTRIBUTIONDATA", "0.", angles, candela)]))
+        position = step("IFCAXIS2PLACEMENT3D", step("IFCCARTESIANPOINT", where), step("IFCDIRECTION", up),
+                        step("IFCDIRECTION", across))
+        light = step("IFCLIGHTSOURCEGONIOMETRIC", _text(_core.given_name(ob)),
+                     step("IFCCOLOURRGB", "$", *(_real(c) for c in _srgb(colour))), "$", "$", position, "$",
+                     _real(_kelvin(colour)), flux, ".NOTDEFINED.", spread)
+        return light, _digest(where, up, across, colour, flux, angles, candela)
+
     def product(ob, kind, key, geometry, *tail):
-        """`ob` as an IFC product of `kind`: its face set where it has `geometry`, its look
-        on both the geometry (a style) and the product (a material), and its reference.
-        `key` is what its id digests, besides its name."""
+        """`ob` as an IFC product of `kind`: its face set where it has `geometry` — or its light
+        source, for a light fixture — its look on both the geometry (a style) and the product
+        (a material), and its reference. `key` is what its id digests, besides its name."""
         name = names.unique("element", _core.given_name(ob))
-        tag = materials._nearest(ob)
+        tag = None
+        if ob.type != "LIGHT":
+            tag = materials.mean_tag(ob, fallback=True) if geometry is not None else materials._nearest(ob)
         shape = "$"
-        if geometry is not None:
+        if kind == "IFCLIGHTFIXTURE":
+            shape = step("IFCPRODUCTDEFINITIONSHAPE", "$", "$", _refs([
+                step("IFCSHAPEREPRESENTATION", lighting, _text("Lighting"), _text("LightSource"), _refs([geometry]))]))
+        elif geometry is not None:
             coords, indices, closed = geometry
             faces = step("IFCTRIANGULATEDFACESET", step("IFCCARTESIANPOINTLIST3D", coords), "$",
                          ".T." if closed else ".F.", indices, "$")
@@ -225,11 +300,16 @@ def write_ifc(root, path):
         return ref
 
     def walk(ob, top=False):
-        """`ob` as a product — a mesh a proxy, anything that groups an assembly — and its
-        children under it; nothing, where nothing under it has geometry."""
+        """`ob` as a product — a mesh a proxy, a point or a spot a light fixture, anything that
+        groups an assembly — and its children under it; nothing, where nothing under it has
+        geometry or light."""
         kids = [r for r in (walk(c) for c in sorted(ob.children, key=lambda c: c.name)) if r is not None]
         geometry = mesh(ob)
-        if geometry is not None:
+        if ob in fixtures:
+            light, key = source(ob)
+            ref = product(ob, "IFCLIGHTFIXTURE", key, light,
+                          ".POINTSOURCE." if lights.kind(ob) == "point" else ".DIRECTIONSOURCE.")
+        elif geometry is not None:
             ref = product(ob, "IFCBUILDINGELEMENTPROXY", _digest(*geometry[:2]), geometry, ".ELEMENT.")
         elif kids or top:
             ref = product(ob, "IFCELEMENTASSEMBLY", _digest(*(ids[k] for k in kids)), None,

@@ -12,6 +12,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE.parent / "src")]
+# Tests that build in a fresh process start `sys.executable`: give it the library too.
+os.environ["PYTHONPATH"] = os.pathsep.join(filter(None, [str(HERE.parent / "src"), os.environ.get("PYTHONPATH")]))
 
 if __name__ == "__main__":
     argv = sys.argv[1:]

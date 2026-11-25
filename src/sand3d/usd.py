@@ -8,6 +8,7 @@ under it three scopes:
 - `Geometry`: an `Xform` per link, the URDF's, at its frame (`PhysicsRigidBodyAPI`); in
   it a `Mesh` per part, in that frame, triangulated as the URDF's OBJs are, with
   Blender's normals per corner. A mirror image is baked into its points, as in the OBJ.
+  Beside them a UsdLux light per `light` of the link, in UsdLux's physical units (`_light`).
 - `Joints`: `PhysicsRevoluteJoint` (revolute, continuous) or `PhysicsPrismaticJoint`,
   `physics:body0` the parent link, `body1` the child. UsdPhysics names the axis by a
   token, so the joint frame is the child link's, turned to put the token's axis on the
@@ -32,8 +33,8 @@ import math
 import os
 import re
 
-from . import _core, materials
-from .urdf import Mechanism, _clean, _d, _det3, _inv, _metres, _mul, _num
+from . import _core, lights, materials
+from .urdf import Mechanism, _clean, _d, _det3, _inv, _metres, _mul, _num, _orthonormal
 
 _I3 = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 
@@ -168,6 +169,41 @@ def _mesh(out, name, ob, m, unit, look):
     out.close()
 
 
+def _light(out, name, ob, m, unit):
+    """A light placed by `m` (rows: its link's frame from its own) as a UsdLux prim, in UsdLux's
+    physical units: a point or a spot a `SphereLight` that keeps its power whatever its radius
+    (`normalize`), its intensity lm / π; a spot shaped by `ShapingAPI`, its cone's half
+    opening; a sun a `DistantLight` in lux (`normalize`); the sky a `DomeLight`, its luminance
+    lux / π. A light that casts no shadow carries `ShadowAPI`, disabled."""
+    data, kind, power = ob.data, lights.kind(ob), lights.power(ob)
+    schemas = (["ShapingAPI"] if kind == "spot" else []) + ([] if data.use_shadow else ["ShadowAPI"])
+    prim = {"point": "SphereLight", "spot": "SphereLight", "sun": "DistantLight", "ambient": "DomeLight"}[kind]
+    out.open(f'def {prim} "{name}"', schemas)
+    if kind == "sun":
+        out(f"float inputs:angle = {_num(math.degrees(data.angle))}")
+    out(f"color3f inputs:color = {_tuple(materials._linear(lights.color(ob))[:3])}")
+    out(f"float inputs:intensity = {_num(power if kind == 'sun' else power / math.pi)}")
+    if kind != "ambient":
+        out("bool inputs:normalize = 1")
+    if kind in ("point", "spot"):
+        out(f"float inputs:radius = {_num(data.shadow_soft_size * unit)}")
+    if not data.use_shadow:
+        out("bool inputs:shadow:enable = 0")
+    if kind == "spot":
+        out(f"float inputs:shaping:cone:angle = {_num(min(math.degrees(data.spot_size) / 2, 90))}")
+        out(f"float inputs:shaping:cone:softness = {_num(data.spot_blend)}")
+    if kind in ("point", "spot") and not data.shadow_soft_size:
+        out("bool treatAsPoint = 1")
+    if kind != "ambient":                                 # the sky has no place and no turn
+        m = _orthonormal(m)
+        if _det3(m) < 0:                                  # a mirror image: X turns over, -Z still shines
+            m = [[-row[0], row[1], row[2], row[3]] for row in m[:3]] + [m[3]]
+        out(f"quatf xformOp:orient = {_tuple(_quat(m))}")
+        out(f"double3 xformOp:translate = {_tuple(m[r][3] * unit for r in range(3))}")
+        out('uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient"]')
+    out.close()
+
+
 def _look(out, path, tag):
     """The Material of a tag, at `path`: a UsdPreviewSurface of its values."""
     v = materials.look(tag)
@@ -180,6 +216,9 @@ def _look(out, path, tag):
     out(f"float inputs:roughness = {_num(v['roughness'])}")
     out(f"float inputs:metallic = {_num(v['metallic'])}")
     out(f"float inputs:opacity = {_num(v['opacity'] * (1 - v['transmission']))}")
+    if v["ior"] != 1.5:  # Preview Surface defaults to 1.5; keep existing files unchanged.
+        out(f"float inputs:ior = {_num(v['ior'])}")
+    # Preview Surface has no volume absorption or thickness.
     if v["coat"]:
         out(f"float inputs:clearcoat = {_num(v['coat'])}")
         out("float inputs:clearcoatRoughness = 0.05")
@@ -218,10 +257,12 @@ def write_usda(root, path):
         if key is None or body is not None:              # between two joints of one child: no geometry
             for ob in mech.meshes(body):
                 name = mech.names.visual(_core.given_name(ob))
-                tag = materials._nearest(ob)
+                tag = materials.mean_tag(ob)
                 if tag is not None and tag not in looks:
                     looks[tag] = f"/{top}/Looks/{mech.names.unique('look', materials._name(tag))}"
                 _mesh(out, name, ob, _mul(_inv(F), _d(k.rest_world(ob))), unit, looks.get(tag))
+            for ob in mech.lights(body):
+                _light(out, mech.names.visual(_core.given_name(ob)), ob, _mul(_inv(F), _d(k.rest_world(ob))), unit)
         out.close()
     out.close()
 
