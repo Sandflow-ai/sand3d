@@ -840,7 +840,7 @@ def sweep(name, profile, path, scale=1, twist=0, frenet=False, *, tip="round", r
         b.dissolve(caps)
     if laws and extra and _core.FACETS is not None and crossing:
         _check_clipped_rings(b, "sweep: consecutive law rings cross; reduce the size or round the path")
-    return _object(b, Matrix.Identity(4), "seam")
+    return _core.keep_spine(_object(b, Matrix.Identity(4), "seam"), list(p) + list(p[:1]) if path.closed else list(p))
 
 
 def wire(name, path, d, closed=None, fillet=0, *, tip="round", rings=0):
@@ -1968,7 +1968,8 @@ def loft(name, *sections, follow=False, loop=False, tip="round", rings=0):
             for t in _cap(ring):
                 caps.append(b.face([rings[k][v] for v in (reversed(t) if flip else t)], -1 - (k > 0), (tag,)))
         b.dissolve(caps)
-    return _object(b, frame, "seam")
+    centres = [sum((v.co for v in ring), Vector()) / len(ring) for ring in rings]
+    return _core.keep_spine(_object(b, frame, "seam"), centres + centres[:1] if loop else centres)
 
 
 # ---------------------------------------------------------------- body
@@ -2049,7 +2050,7 @@ def body(name, plan, top, bottom, n=2):
     ys = [y for i, y in enumerate(ys) if i == 0 or y - ys[i - 1] > reach]
     tiny = _core.mm(1e-3)
     b = _core.Builder(name)
-    rings, caps2d = [], []
+    rings, caps2d, line = [], [], []
     for i, y in enumerate(ys):
         side = y in before or i == len(ys) - 1
         width, z_top, z_bottom, k = wide(y, side), high(y, side), low(y, side), square(y, side)
@@ -2059,6 +2060,7 @@ def body(name, plan, top, bottom, n=2):
         if not k > 0:
             raise ValueError(f"body: n is a squareness, more than 0 (2 round, 4 boxy), not {k:g} at y = {y:g}")
         closes = (width <= tiny, z_top - z_bottom <= tiny)
+        line.append((0.0, y, (z_top + z_bottom) / 2))
         if all(closes) and i in (0, len(ys) - 1):
             rings.append([b.vert((0, y, (z_top + z_bottom) / 2))])
             caps2d.append(None)
@@ -2089,7 +2091,7 @@ def body(name, plan, top, bottom, n=2):
         if section is not None:
             caps += [b.face([ring[v] for v in t], surface, (tag,)) for t in _cap([Vector(q) for q in section])]
     b.dissolve(caps)
-    return _object(b, Matrix.Identity(4), "seam")
+    return _core.keep_spine(_object(b, Matrix.Identity(4), "seam"), line)
 
 
 def _view(value, what, unit):

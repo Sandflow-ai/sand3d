@@ -16,6 +16,15 @@ from mathutils import Matrix, Vector, geometry
 
 #: Custom property holding the name a program gave an object (Blender may suffix ob.name).
 NAME = "s3d_name"
+#: Custom property holding a solid's spine (`sculpt.spine`): the (x, y, z) points of its own
+#: space it runs through, flat, from u = 0 to u = 1.
+SPINE = "s3d_spine"
+
+
+def keep_spine(ob, points):
+    """`ob`, its spine through `points` (its own space) from now on."""
+    ob[SPINE] = [float(c) for p in points for c in p]
+    return ob
 
 
 def evaluated_mesh(ob, *, collection=None, preserve_all_data_layers=False):
