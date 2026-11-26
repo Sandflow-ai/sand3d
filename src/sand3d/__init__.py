@@ -28,6 +28,9 @@ from .lights import light
 from .joints import joint, placed_again as _placed_again, placed_on as _placed_on, pose
 from .profile import Path as _Path, Placed as _Placed, arc, circle, ellipse, mirror, offset, poly, polygon, rect, slot, spline, station, stroke, superellipse, tangent_arc, text, wrap
 from .solids import body, box, cone, cylinder, dome, extrude, helix, hull, loft, revolve, sphere, spiral, sweep, torus, tube, wedge, wire
+from .sculpt import clay, crease, describe, grab, inflate, pinch, relax, spot, stamp
+from .anatomy import muscle, skeleton
+from .bodies import band, chain, detail, flesh, fuse, limb, lobe, posture, rig, spindle, stack
 
 # x-release-please-start-version
 __version__ = "1.7.0"
@@ -43,6 +46,12 @@ __all__ = [
     # edits
     "cut", "join", "intersect", "split", "delete", "copy", "hole", "pocket", "merge", "scale",
     "fillet", "chamfer", "soften", "shell", "dent", "lay", "blend", "displace", "bend", "twist", "taper",
+    # sculpting
+    "spot", "grab", "inflate", "pinch", "relax", "crease", "stamp", "clay", "describe",
+    # anatomy
+    "skeleton", "muscle",
+    # bodies: flesh on joints, skinned and posed
+    "stack", "limb", "lobe", "spindle", "fuse", "flesh", "band", "chain", "rig", "posture", "detail",
     # frames, placement
     "Frame", "Frames", "bbox", "local", "at", "transform", "grid", "ring", "along", "phyllotaxis", "branches", "vary", "scatter", "snap",
     # parts

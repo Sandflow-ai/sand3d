@@ -10,7 +10,8 @@ builds the golden corpus once plain and once through this shim under the matchin
 
 `LENGTHS` says, for every parameter of the public surface, whether it is a length:
 `L` a length (a number, or None), `P` numbers nested in points or lists (objects
-inside pass through), `csk` a countersink — a diameter, or (diameter, angle) —, `sv` a number,
+inside pass through), `csk` a countersink — a diameter, or (diameter, angle) —, `rows:LL-` rows of numbers whose columns marked L
+are lengths, `D` points by name, `share` a chain's shares, `sv` a number,
 or (position, value) points whose positions alone are lengths (`body`'s `n`), `law` a length
 or a law whose values are lengths, `-` anything else. `test_units` holds it complete
 against the surface `apicompat` reads,
@@ -95,6 +96,31 @@ LENGTHS = {
     "blend": {"ob": "-", "others": "-", "r": "L", "step": "L"},
     "displace": {"ob": "-", "amount": "L", "size": "L", "noise": "-", "octaves": "-", "seed": "-", "direction": "-", "coords": "-", "faces": "-",
                  "fade": "P", "step": "L"},
+    # sculpting
+    "spot": {"ob": "-", "u": "-", "side": "-"},
+    "grab": {"ob": "-", "move": "P", "r": "L", "on": "P"},
+    "inflate": {"ob": "-", "by": "L", "r": "L", "on": "P"},
+    "pinch": {"ob": "-", "by": "L", "r": "L", "on": "P"},
+    "relax": {"ob": "-", "r": "L", "on": "P", "passes": "-"},
+    "crease": {"ob": "-", "path": "P", "depth": "L", "r": "L"},
+    "stamp": {"ob": "-", "profile": "P", "depth": "L", "on": "P", "soft": "L"},
+    "clay": {"ob": "-", "others": "-", "detail": "L"},
+    "describe": {"ob": "-"},
+    # anatomy
+    "skeleton": {"joints": "P"},
+    "muscle": {"name": "-", "a": "P", "b": "P", "belly": "L", "flat": "-", "side": "-", "peak": "-", "bow": "L"},
+    # bodies
+    "stack": {"name": "-", "stations": "rows:LLLL--", "cap": "L"},
+    "limb": {"name": "-", "joints": "P", "sections": "rows:LLL", "up": "-"},
+    "lobe": {"name": "-", "centre": "P", "radii": "P"},
+    "spindle": {"name": "-", "a": "P", "b": "P", "sections": "rows:-LL-", "up": "-"},
+    "fuse": {"pieces": "-", "r": "L", "wide": "P"},
+    "flesh": {"name": "-", "pieces": "-", "cell": "L", "soften": "L", "box": "P", "crisp": "P"},
+    "band": {"bone": "-", "lo": "L", "hi": "L", "normal": "-", "carry": "-", "twist": "-"},
+    "chain": {"pieces": "-", "first": "-", "bands": "-", "whole": "-", "share": "share"},
+    "rig": {"ob": "-", "joints": "D", "bones": "-", "chains": "-", "linear": "-", "smooth": "L", "seam": "P"},
+    "posture": {"ob": "-", "aim": "-", "turn": "-", "root": "P", "press": "-", "floor": "L"},
+    "detail": {"ob": "-", "offsets": "P"},
     # frames, placement
     "Frame": {"origin": "P", "normal": "-", "up": "-"},
     "Frame.offset": {"d": "L"},
@@ -185,6 +211,17 @@ def _convert(kind, value, k):
         if isinstance(value, (int, float)) or value is None:
             return value
         return type(value)((q[0] * k, *q[1:]) for q in value) if isinstance(value, (list, tuple)) else value
+    if kind == "lv":          # a length, or (position, length) points: the lengths alone
+        if isinstance(value, (int, float)) or value is None:
+            return None if value is None else value * k
+        return type(value)((q[0], q[1] * k) for q in value)
+    if kind.startswith("rows:"):      # rows of numbers: the columns marked L are lengths
+        return [tuple(x * k if c == "L" else x for x, c in zip(row, kind[5:])) for row in value]
+    if kind == "D":                   # points by name
+        return {name: scaled(p, k) for name, p in value.items()} if isinstance(value, dict) else value
+    if kind == "share":               # (bone, of, joint, amount, near, far): the joint and the two distances
+        return None if value is None else [(a, b, scaled(j, k), amount, near * k, far * k)
+                                           for a, b, j, amount, near, far in value]
     if kind == "csk":
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             return value * k

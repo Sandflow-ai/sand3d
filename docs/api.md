@@ -32,6 +32,15 @@ plate.top).
    part's joints (it hangs on the same parent); `transform` moves the part with its pivot (a mirror image
    moves as the image of the motion); `at` refuses it. Two joints on one child compose in order (a screw: a
    turn, and a slide that follows it with `ratio=pitch / 360`).
+7. An organic shape is clay: its masses first (`body`, `loft`, `sweep`, a tapered `wire`), then worked by
+   places, never by points. A solid's spine is its own axis — `body`'s from -Y to +Y, the path of `sweep`
+   and `wire`, the centres of `loft`'s sections, for any other solid the longest side of its own box — and
+   `spot(ob, u, side)` a frame at u along it, 0 at its start, 1 at its end: on the spine without side, on
+   the surface with one ("-Z" the belly, "+Z" the back, "+Y" the tip at u = 1). The sculpting verbs take
+   such frames as `on`, or lists of them, and fade to nothing at `r`; on a spot on the spine they work the
+   whole ring there. `describe(ob)` reads it back: how far the surface is from the spine along it.
+   `clay(ob, *others)` remakes a mass as one even closed surface, the others fused in: the verbs then find
+   surface to move everywhere, not only where its sections fell.
 
 ## Profiles and outlines
 
@@ -121,6 +130,31 @@ twist(ob, angle, axis="+Y", *, step=None)  # Turn sections about its own axis, r
 taper(ob, s, axis="+Y")  # Scale across its own axis, from 1 at the near end to ratio s > 0 at the far end
 smooth(ob, angle=55)  # Shade each descendant mesh by angle; 0 flat, 180 all smooth
 lay(ob, over, reach=None, *, step=None)  # Seat on a surface along own Z, retaining height above own Z=0
+# sculpting: by places on the spine, never by points
+spot(ob, u, side=None)  # Frame on its spine at u (0 start, 1 end); with side ("+Z", "-X+Z"), on its surface that way
+grab(ob, move, r, on)  # Pull the surface round on by move (x, y, z), fading to nothing at r
+inflate(ob, by, r=None, on=None)  # Swell the surface round on along its normals, by at the centre, nothing at r (by < 0 hollows); no on: all
+pinch(ob, by, r, on)  # Draw the surface round on toward the spine, by at the centre, nothing at r (by < 0 swells it)
+relax(ob, r=None, on=None, passes=3)  # Even out bumps and seams round on, nothing at r; no on: all of it
+crease(ob, path, depth, r)  # Press a fold depth deep along a path over the surface, r wide (depth < 0: a ridge)
+stamp(ob, profile, depth, on, soft=None)  # Raise a profile's shape depth high on the surface at each frame of on (depth < 0 sinks it)
+clay(ob, *others, detail=None)  # Remake as one even closed surface, others fused in, edges about detail long
+describe(ob)  # Its size, spine, and how far the surface is from the spine along it, as text: to compare with a target
+# anatomy: joints first, muscles between them
+skeleton(**joints)  # Joints by name, (x, y, z) or frames: where a body's muscles attach
+muscle(name, a, b, belly, flat=1.0, side=None, peak=0.5, bow=0.0)  # A spindle from a to b, belly thick at its widest; flat < 1 flattens it toward side
+# bodies: flesh as the surface of fused pieces (fields, no mesh), skinned to bones, posed
+stack(name, stations, cap=None)  # A mass as a stack of sections along Z: rows (z, width, depth, y, n, taper), rounded at both ends
+limb(name, joints, sections, up='+Y')  # A limb swept through its joints: rows (distance along it, half-width, half-depth), round at both ends
+lobe(name, centre, radii)  # A rounded mass: an ellipsoid at centre, its radii along X, Y, Z (one number: a ball)
+spindle(name, a, b, sections, up='+Z')  # A straight tapered piece from a to b: rows (share along, half-width, half-depth, n), round at both ends
+fuse(*pieces, r, wide=None)  # Pieces joined by a smooth union of radius r; wide=(point, r, near, far): wider round a joint
+flesh(name, *pieces, cell=None, soften=None, box=None, crisp=None)  # The surface of fused pieces: one closed smooth mesh, cell its grain, soften its smoothing
+band(bone, lo, hi, normal=None, carry=(0, 1), twist=None)  # In a chain: the skin passes to bone between lo and hi of its joint, measured along the limb
+chain(pieces, first, *bands, whole=None, share=None)  # The bones a group of pieces follows: the first, then a band for each next one
+rig(ob, joints, bones, *chains, linear=None, smooth=None, seam=None)  # Bind a body to bones: bones={name: (joint, joint, parent)}, then a chain for each group of pieces
+posture(ob, aim=None, turn=None, root=(0, 0, 0), press=True, floor=None)  # Pose a rigged body: aim={bone: direction}, turn={bone: [(axis, degrees), ...]}, root its move
+detail(ob, offsets)  # Add a fitted layer to a body's surface at rest: an offset (x, y, z) per vertex, or a .npy file of them
 ```
 
 ## Frames, placement and distributions
@@ -212,6 +246,21 @@ def gate(w=750, h=1200, post=100):
     gate = s3d.assembly("gate", l_post, r_post, leaf, twin)
     s3d.pose(leaf, 60)   # shows the swing; a program returns at rest
     return gate
+
+def piglet():
+    pig = s3d.body("pig", plan=s3d.spline([(-60, 0), (-45, 52), (10, 62), (48, 44), (60, 30)]),   # the masses first
+                   top=s3d.spline([(-60, 38), (-30, 64), (25, 66), (60, 46)]),
+                   bottom=s3d.spline([(-60, 38), (-30, 14), (25, 12), (60, 28)]))
+    s3d.inflate(pig, 6, r=30, on=s3d.spot(pig, 0.45, "-Z"))                       # the belly
+    s3d.pinch(pig, 5, r=12, on=s3d.spot(pig, 0.78))                                # the neck, all round
+    s3d.grab(pig, (0, 10, -4), r=15, on=s3d.spot(pig, 1, "+Y"))                    # the snout drawn out
+    feet = [s3d.spot(pig, u, "-Z").move(x=x).offset(-8) for u in (0.3, 0.7) for x in (-16, 16)]
+    legs = s3d.at(s3d.cone("leg", 20, 30, d2=14), on=feet)                         # hang along -Z, 8 in
+    tail = s3d.wire("tail", s3d.spline([(0, 0, 0), (0, -8, 6), (3, -10, 12)]), [(0, 5), (1, 1.5)])
+    s3d.join(pig, legs, s3d.at(tail, on=s3d.spot(pig, 0, "+Z").offset(-2)))
+    s3d.relax(pig, r=12, on=feet)                                                  # the seams, filleted
+    s3d.stamp(pig, s3d.circle(4), -1.5, on=[s3d.spot(pig, 1, "+Y").move(x=x) for x in (-4, 4)])   # nostrils
+    return pig
 ```
 
 ## Placement and scale

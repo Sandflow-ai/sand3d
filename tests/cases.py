@@ -774,3 +774,69 @@ def grouped_surfaces():
     child = s3d.at(s3d.group("child", s3d.box("pad", 12, 10, 3)), x=15)
     root = s3d.at(s3d.group("root", child), rz=35, x=8)
     return [s3d.scatter(12, root, seed=9), s3d.snap(root, [(20, 10, 30)], direction="-Z")]
+
+
+@case("spot", "grab", "inflate", "pinch", "bend", "relax", "crease", "stamp", "describe")
+def sculpted():
+    """A body worked as clay: masses swelled, pulled and pinched, a tail bent, details pressed."""
+    pig = s3d.body("pig", plan=s3d.spline([(-60, 0), (-40, 50), (10, 60), (50, 40), (60, 26)]),
+                   top=s3d.spline([(-60, 35), (-30, 62), (20, 66), (60, 48)]),
+                   bottom=s3d.spline([(-60, 35), (-30, 12), (20, 10), (60, 30)]))
+    s3d.inflate(pig, 5, r=35, on=s3d.spot(pig, 0.45, "-Z"))
+    s3d.grab(pig, (0, 8, -3), r=18, on=s3d.spot(pig, 1, "+Y"))
+    s3d.pinch(pig, 4, r=15, on=s3d.spot(pig, 0.8))
+    s3d.relax(pig, r=15, on=s3d.spot(pig, 0.8, "+Z"), passes=3)
+    s3d.crease(pig, [s3d.spot(pig, 0.9, "+Z-X"), s3d.spot(pig, 0.9, "+Z"), s3d.spot(pig, 0.9, "+Z+X")], 1, 4)
+    s3d.stamp(pig, s3d.circle(4), -1, on=[s3d.spot(pig, 1, "+Y").move(x=dx) for dx in (-4, 4)])
+    tail = s3d.at(s3d.wire("tail", [(0, 0, 0), (0, -20, 0)], [(0, 5), (1, 1)]), z=40)
+    s3d.bend(tail, 120, axis="-Y", toward="+Z")
+    s3d.inflate(tail, 0.5)
+    return [s3d.describe(pig), s3d.spot(pig, 0.3, "+X").matrix, s3d.spot(tail, 1).matrix]
+
+
+@case("stack", "limb", "lobe", "spindle", "fuse", "flesh", "band", "chain", "rig", "posture", "detail")
+def body_posed():
+    """A small body of flesh — a trunk, a head, an arm with its shoulder's cap, a leg — skinned to five bones, a
+    layer of detail on it, the arm raised into the head and the leg on the floor."""
+    joints = {"hip": (0, 0, 0), "chest": (0, 0, 40), "neck": (0, 0, 70), "top": (0, 0, 100),
+              "shoulder": (22, 0, 60), "elbow": (50, 0, 40), "wrist": (72, 0, 14)}
+    trunk = s3d.stack("trunk", [(0, 40, 30, 0, 2.5, 0), (40, 50, 34, 0, 2.5, 0.1), (70, 30, 26, 0, 2, 0)])
+    head = s3d.lobe("head", (0, -2, 88), (13, 15, 17))
+    arm = s3d.limb("arm", [joints["shoulder"], joints["elbow"], joints["wrist"]], [(0, 9, 9), (40, 8, 7), (70, 5, 5)])
+    arm = s3d.fuse(arm, s3d.lobe("cap", joints["shoulder"], 12), r=6)
+    leg = s3d.spindle("leg", (-12, 0, 4), (-12, 0, -40), [(0, 11, 12, 2), (0.6, 9, 9, 2), (1, 6, 7, 2.5)], up="+Y")
+    flesh = s3d.fuse(s3d.fuse(trunk, head, r=8), arm, leg, r=3, wide=(joints["shoulder"], 9, 12, 30))
+    ob = s3d.flesh("body", flesh, cell=3, soften=3)
+    s3d.rig(ob, joints, {"pelvis": ("hip", "chest", None), "chest": ("chest", "neck", "pelvis"),
+                         "head": ("neck", "top", "chest"), "upperarm": ("shoulder", "elbow", "chest"),
+                         "forearm": ("elbow", "wrist", "upperarm")},
+            s3d.chain("trunk", "pelvis", s3d.band("chest", -8, 8, normal="+Z")),
+            s3d.chain("leg", "pelvis"), s3d.chain("head", "head"),
+            s3d.chain(["arm", "cap"], "chest", s3d.band("upperarm", -14, -4), s3d.band("forearm", -6, 6),
+                      whole={"cap": "upperarm"}),
+            linear=[(("pelvis", "chest"), ("upperarm", "forearm"))])
+    s3d.detail(ob, [(0, 0, 0.5)] * len(ob.data.vertices))
+    return s3d.posture(ob, aim={"upperarm": (-0.2, 0, 1), "forearm": (-0.6, 0, 0.8)}, turn={"head": [("z", 20)]},
+                       floor=-40)
+
+
+@case("clay", "inflate", "spot", "describe")
+def clayed():
+    """Parts fused into one clay mass, then sculpted on it: a torso, an arm, a head."""
+    torso = s3d.loft("torso", s3d.station(z=0, w=80, d=60), s3d.station(z=60, w=120, d=80),
+                     s3d.station(z=120, w=60, d=50))
+    arm = s3d.at(s3d.wire("arm", [(0, 0, 0), (80, 0, -40)], [(0, 24), (1, 12)]), x=40, z=100)
+    head = s3d.at(s3d.sphere("head", 25), z=140)
+    s3d.clay(torso, arm, head, detail=3)
+    s3d.inflate(torso, 3, r=20, on=s3d.spot(torso, 0.5, "-X"))
+    return [s3d.describe(torso)]
+
+
+@case("skeleton", "muscle")
+def muscles():
+    """An upper arm's muscles between a skeleton's joints: one flattened and bowed, the other side's mirrored."""
+    bones = s3d.skeleton(shoulder=(88, 0, 35), elbow=(100, -17, -42))
+    biceps = s3d.muscle("biceps", bones.shoulder, bones.elbow, 40, flat=0.6, side="-Y", bow=4)
+    other = bones.mirrored("x")
+    triceps = s3d.muscle("triceps", other.shoulder, other.elbow, 36, peak=0.4)
+    return [biceps, triceps, s3d.spot(biceps, 0.5, "-Y").matrix]

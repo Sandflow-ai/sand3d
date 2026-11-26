@@ -1736,6 +1736,9 @@ def scale(ob, s):
     sx, sy, sz = (s, s, s) if isinstance(s, (int, float)) else s
     _core.own_mesh(ob)
     ob.data.transform(Matrix.Diagonal((sx, sy, sz, 1)))
+    if _core.SPINE in ob:
+        flat = list(ob[_core.SPINE])
+        ob[_core.SPINE] = [c * (sx, sy, sz)[i % 3] for i, c in enumerate(flat)]
     if sx * sy * sz < 0:
         ob.data.flip_normals()
     _core.shade_mesh(ob)
@@ -2627,6 +2630,22 @@ def _deform(ob, value, axis, verb, toward=None, step=None):
     if value == (1 if verb == "taper" else 0):
         return ob
     k = math.radians(value) / span if verb != "taper" else 0
+
+    def moved(co):
+        u = co.dot(a)
+        if verb == "bend":
+            z = co.dot(b)
+            theta = k * u
+            # 2 sin²(theta/2) avoids cancellation at small angles.
+            return co + a * ((1 / k - z) * math.sin(theta) - u) + b * (
+                2 * math.sin(theta / 2) ** 2 / k + z * (math.cos(theta) - 1))
+        p = co - a * u
+        t = (u - lo) / span
+        if verb == "twist":
+            theta = math.radians(value) * t
+            return a * u + p * math.cos(theta) + a.cross(p) * math.sin(theta)
+        return a * u + p * (1 + (value - 1) * t)
+
     for part, matrix in parts:
         inverse = matrix.inverted()
         bm = bmesh.new()
@@ -2645,21 +2664,10 @@ def _deform(ob, value, axis, verb, toward=None, step=None):
                                        dist=span * 1e-8, plane_co=a * (lo + span * i / pieces), plane_no=a)
             bmesh.ops.triangulate(bm, faces=list(bm.faces), quad_method="FIXED", ngon_method="EAR_CLIP")
         for v in bm.verts:
-            u = v.co.dot(a)
-            if verb == "bend":
-                z = v.co.dot(b)
-                theta = k * u
-                # 2 sin²(theta/2) avoids cancellation at small angles.
-                v.co += a * ((1 / k - z) * math.sin(theta) - u) + b * (
-                    2 * math.sin(theta / 2) ** 2 / k + z * (math.cos(theta) - 1))
-            else:
-                p = v.co - a * u
-                t = (u - lo) / span
-                if verb == "twist":
-                    theta = math.radians(value) * t
-                    v.co = a * u + p * math.cos(theta) + a.cross(p) * math.sin(theta)
-                else:
-                    v.co = a * u + p * (1 + (value - 1) * t)
+            v.co = moved(v.co)
+        if part.get(_core.SPINE):         # the spine `spot` reads moves with the surface
+            from .sculpt import _resampled, spine
+            _core.keep_spine(part, [inverse @ moved(matrix @ q) for q in _resampled(spine(part))])
         bm.transform(inverse)
         bm.normal_update()
         _core.own_mesh(part)
