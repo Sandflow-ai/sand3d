@@ -745,6 +745,39 @@ def surface_details():
     return support,patch,petal
 
 
+@case("pattern", "texture", "material", "unwrap")
+def textured():
+    folds, fibres = s3d.pattern("creases", 9, octaves=2), s3d.pattern("strands", (4, 0.3), density=2)
+    skin = s3d.texture(tile=24, px=64, color=(0.5 + 0.4 * folds - 0.2 * fibres, "#503820", "#c0a080"),
+                       roughness=(abs(folds), 0.4, 0.9))
+    ob = s3d.unwrap(s3d.material(s3d.box("textured", 30, 20, 10), "plastic", texture=skin))
+    from sand3d import textures
+    return ob, *(int(m.astype("int64").sum()) for m in textures.maps(skin.spec).values())
+
+
+@case("decal")
+def printed():
+    import struct
+    import tempfile
+    import zlib
+    from pathlib import Path
+    rows = b"".join(b"\0" + bytes(v for x in range(6) for v in (40 * x, 30, 20, 255 - 40 * x)) for _ in range(3))
+    chunk = lambda kind, data: struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "print.png"
+        path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 6, 3, 8, 6, 0, 0, 0))
+                         + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+        box = s3d.box("box", 30, 20, 10)
+        return s3d.at(s3d.decal("printed", path, 12), on=box.face("+X"), y=5, z=0.1)
+
+
+@case("unwrap")
+def unwrapped():
+    lid = s3d.fillet(s3d.extrude("lid", s3d.rect(60, 40, r=8), 10), 3, edges="top")
+    ball = s3d.at(s3d.sphere("ball", 16), x=60)
+    return s3d.unwrap(s3d.group("unwrapped", lid, ball, s3d.at(s3d.cone("cone", 20, 12, d2=8), x=-60)))
+
+
 @case("waves")
 def wave_surfaces():
     ob = s3d.box("waves", 12, 10, 1)

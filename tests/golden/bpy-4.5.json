@@ -1,5 +1,5 @@
 {
- "bpy": "4.5.15 LTS",
+ "bpy": "4.5.17 LTS",
  "digests": {
   "case:profile_shapes": "f7ec6b11db40c9d6",
   "case:stations": "5e4438297c70327f",
@@ -67,6 +67,9 @@
   "case:surface_scatter": "bf605f9018abd9c5",
   "case:implicit_solid": "4aae059073172d44",
   "case:surface_details": "295fbb8c7af6c31d",
+  "case:textured": "2365e8e9a5608f97",
+  "case:printed": "42e8931c09ea4fcd",
+  "case:unwrapped": "539a53260d4b6c3a",
   "case:wave_surfaces": "0818cd7d9c155dd7",
   "case:retained_fill": "bf6b65d48d4f04a8",
   "case:rooted_tufts": "96e5600b4f06ceae",
