@@ -12,7 +12,7 @@
 <h1>The whole API, for a prompt</h1>
 <div class="bande"></div>
 <p class="chapo">Everything a model needs to write sand3d: the rules of the vocabulary, every signature with
-one line on it, and worked examples. 11 683 tokens (o200k_base). Paste it in a system prompt as it is.</p>
+one line on it, and worked examples. 11 715 tokens (o200k_base). Paste it in a system prompt as it is.</p>
 <div class="actions"><button class="btn plein" data-copy="raw">Copy for your prompt</button>
 <a class="btn" href="api.md">api.md, raw</a><a class="btn" href="llms.txt">llms.txt</a></div>
 <p><code>import sand3d as s3d</code>; mm, or <code>units(&quot;m&quot;)</code> first. Makers take a name, return the solid; edits return
@@ -119,8 +119,8 @@ bend(ob, angle, axis=<span class="s">&quot;</span><span class="s">+Y</span><span
 twist(ob, angle, axis=<span class="s">&quot;</span><span class="s">+Y</span><span class="s">&quot;</span>, *, step=<span class="k">None</span>)  <span class="c"># Turn sections about its own axis, right handed; near end fixed, far end turned angle degrees</span>
 taper(ob, s, axis=<span class="s">&quot;</span><span class="s">+Y</span><span class="s">&quot;</span>)  <span class="c"># Scale across its own axis, from 1 at the near end to ratio s &gt; 0 at the far end</span>
 smooth(ob, angle=<span class="n">55</span>)  <span class="c"># Shade each descendant mesh by angle; 0 flat, 180 all smooth</span>
-unwrap(ob, seam=<span class="s">&quot;</span><span class="s">+Y</span><span class="s">&quot;</span>, margin=<span class="n">0.004</span>, hidden=<span class="n">1</span>)  <span class="c"># UVs by shape: planes, walls and cones unrolled, fillets on their wall; one upright atlas at one scale; walls open on the seam side; hidden scales what nothing outside sees; call last</span>
-lay(ob, over, reach=<span class="k">None</span>, *, step=<span class="k">None</span>)  <span class="c"># Seat on a surface along own Z, retaining height above own Z=0</span></pre><p class="counts">23 lines · 697 tokens (o200k_base)</p></div>
+unwrap(ob, seam=<span class="s">&quot;</span><span class="s">+Y</span><span class="s">&quot;</span>, margin=<span class="n">0.004</span>, hidden=<span class="n">1</span>, by=<span class="s">&quot;</span><span class="s">shape</span><span class="s">&quot;</span>)  <span class="c"># UVs by shape: planes, walls and cones unrolled, fillets on their wall; one upright atlas at one scale; walls open on the seam side; hidden scales what nothing outside sees; by=&quot;build&quot;: a wire, sweep, loft, revolve or cylinder as one strip along its path and flat caps, however bumpy; call last</span>
+lay(ob, over, reach=<span class="k">None</span>, *, step=<span class="k">None</span>)  <span class="c"># Seat on a surface along own Z, retaining height above own Z=0</span></pre><p class="counts">23 lines · 729 tokens (o200k_base)</p></div>
 <h2 id="frames-placement-and-distributions">Frames, placement and distributions</h2>
 <p><code>Frame.point(x,y,z)</code> returns a Vector (no <code>.origin</code>, no <code>.turn</code>); <code>Frame.move(x,y,z)</code> returns a Frame.</p>
 <div class="fiche"><pre class="code">Frame(origin=(<span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>), normal=(<span class="n">0</span>, <span class="n">0</span>, <span class="n">1</span>), up=<span class="k">None</span>)  <span class="c"># A place to build on</span>
@@ -667,7 +667,7 @@ bend(ob, angle, axis=&quot;+Y&quot;, toward=&quot;+Z&quot;, *, step=None)  # Cur
 twist(ob, angle, axis=&quot;+Y&quot;, *, step=None)  # Turn sections about its own axis, right handed; near end fixed, far end turned angle degrees
 taper(ob, s, axis=&quot;+Y&quot;)  # Scale across its own axis, from 1 at the near end to ratio s &gt; 0 at the far end
 smooth(ob, angle=55)  # Shade each descendant mesh by angle; 0 flat, 180 all smooth
-unwrap(ob, seam=&quot;+Y&quot;, margin=0.004, hidden=1)  # UVs by shape: planes, walls and cones unrolled, fillets on their wall; one upright atlas at one scale; walls open on the seam side; hidden scales what nothing outside sees; call last
+unwrap(ob, seam=&quot;+Y&quot;, margin=0.004, hidden=1, by=&quot;shape&quot;)  # UVs by shape: planes, walls and cones unrolled, fillets on their wall; one upright atlas at one scale; walls open on the seam side; hidden scales what nothing outside sees; by=&quot;build&quot;: a wire, sweep, loft, revolve or cylinder as one strip along its path and flat caps, however bumpy; call last
 lay(ob, over, reach=None, *, step=None)  # Seat on a surface along own Z, retaining height above own Z=0
 ```
 

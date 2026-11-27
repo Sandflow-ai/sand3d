@@ -150,7 +150,7 @@ LENGTHS = {
     "export": {"root": "-", "path": "-", "colors": "-", "trace": "-"},
     "facets": {"n": "-", "smooth": "-"},
     "smooth": {"ob": "-", "angle": "-"},
-    "unwrap": {"ob": "-", "seam": "-", "margin": "-", "hidden": "-"},
+    "unwrap": {"ob": "-", "seam": "-", "margin": "-", "hidden": "-", "by": "-"},
     "lay": {"ob": "-", "over": "-", "reach": "L", "step": "L"},
     "empty_scene": {},
     "fingerprint": {},

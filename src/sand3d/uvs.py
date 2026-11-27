@@ -48,7 +48,7 @@ OPEN = 0.01
 DIRECTIONS = {"+X": (1, 0, 0), "-X": (-1, 0, 0), "+Y": (0, 1, 0), "-Y": (0, -1, 0), "+Z": (0, 0, 1), "-Z": (0, 0, -1)}
 
 
-def unwrap(ob, seam="+Y", margin=0.004, hidden=1):
+def unwrap(ob, seam="+Y", margin=0.004, hidden=1, by="shape"):
     """UVs for every mesh of a part, a group, an assembly or a list: one shared atlas.
 
     Each surface is laid flat by its shape: planes as they are, walls, cylinders and cones
@@ -59,9 +59,17 @@ def unwrap(ob, seam="+Y", margin=0.004, hidden=1):
     the world on walls, along +Y on tops and bottoms. `hidden` is the scale of the islands
     nothing outside sees in the current pose (0.5: half as large; a see-through part hides
     nothing). `margin` is the gap between islands, a share of the atlas. Call it last, once
-    everything is placed: a later edit leaves the UVs of what it touches behind."""
+    everything is placed: a later edit leaves the UVs of what it touches behind.
+
+    `by="build"` lays out a part a wire, sweep, loft, revolve or cylinder made by the way it was
+    built: one strip around and along its path, opened once on the `seam` side, each narrow end a
+    flat cap, however bumpy a later displace, bend or twist made it; quick on a dense mesh. The strip
+    keeps angles, its meridians straight: its scale grows toward the ends, up to about three times. Faces
+    without that record (a flat end, what a merge brought in) and other parts go by shape."""
     if seam not in DIRECTIONS:
         raise ValueError(f"unwrap: seam={seam!r} is none of {sorted(DIRECTIONS)}")
+    if by not in ("shape", "build"):
+        raise ValueError(f"unwrap: by={by!r} is neither 'shape' nor 'build'")
     for name, value, low, high, what in (("margin", margin, 0, 0.1, "a share of the atlas from 0 to 0.1"),
                                          ("hidden", hidden, 0.05, 1, "a scale from 0.05 to 1")):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= value <= high:
@@ -70,7 +78,22 @@ def unwrap(ob, seam="+Y", margin=0.004, hidden=1):
     parts = [p for p in meshes(ob) if DECAL not in p]
     if not parts:
         raise TypeError("unwrap: a part, a group, an assembly or a list of them is expected")
-    surfaces = [_Surface(part, np.array(DIRECTIONS[seam], float)) for part in parts]
+    if by == "build":
+        from ._built import unwrap_built
+        unwrap_built(parts, np.array(DIRECTIONS[seam], float), margin, hidden)
+        return ob
+    surfaces, islands = _shape_islands(parts, np.array(DIRECTIONS[seam], float), hidden)
+    side, places = _pack([i.scale * i.mask_triangles() for i in islands], margin)
+    for island, place in zip(islands, places):
+        island.place = place
+    for s in surfaces:
+        s.write(side, [i for i in islands if i.surface is s])
+    return ob
+
+
+def _shape_islands(parts, seam, hidden):
+    """The islands of `parts` laid by their shape, hidden ones scaled, long ones cut: (surfaces, islands)."""
+    surfaces = [_Surface(part, seam) for part in parts]
     sliver = SLIVER * math.sqrt(sum(float(s.area.sum()) for s in surfaces))
     for s in surfaces:
         s.join_slivers(sliver)
@@ -79,12 +102,7 @@ def unwrap(ob, seam="+Y", margin=0.004, hidden=1):
         _scale_hidden(surfaces, islands, hidden)
     root = math.sqrt(sum(i.size() for i in islands))
     islands = [piece for i in islands for piece in i.cut(ROOM * root, LONG * root)]
-    side, places = _pack([i.scale * i.mask_triangles() for i in islands], margin)
-    for island, place in zip(islands, places):
-        island.place = place
-    for s in surfaces:
-        s.write(side, [i for i in islands if i.surface is s])
-    return ob
+    return surfaces, islands
 
 
 class _Island:

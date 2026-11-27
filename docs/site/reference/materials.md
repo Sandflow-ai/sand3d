@@ -143,14 +143,16 @@ is built from patterns, baked into maps over one tile, and repeated over the par
 maps; other formats keep the texture's mean colour.
 
 ::: fiche unwrap
-sig: unwrap(ob, seam="+Y", margin=0.004, hidden=1)
+sig: unwrap(ob, seam="+Y", margin=0.004, hidden=1, by="shape")
 what: Give every mesh of a part, group, assembly or list UVs in one shared atlas. Returns ob.
 param ob: A part, a group, an assembly or a list of them. Decals are left alone.
 param seam: The world direction a closed wall opens towards: "+X", "-X", "+Y", "-Y", "+Z" or "-Z". The back by default.
 param margin: The gap between islands, a share of the atlas from 0 to 0.1.
 param hidden: The scale, from 0.05 to 1, of islands nothing outside sees in the current pose; 0.5 makes them half as large.
+param by: "shape" lays every surface by its shape. "build" lays a part a wire, sweep, loft, revolve or cylinder made by the way it was built: one strip around and along its path, opened once on the seam side, its narrow ends as flat caps, however bumpy a later displace, bend or twist made it. Quick on dense meshes. The strip keeps angles and straight meridians; its scale grows toward the ends, up to about three times. Faces without that record, and other parts, go by shape.
 limits: Each surface is laid flat by its shape: planes as they are; walls, cylinders and cones unrolled; fillets kept on the wall they round; the rest with the least stretch. Hard edges are seams. Islands keep one scale over the atlas and stand upright: V goes up the world on walls and along +Y on tops and bottoms. Call it last: an edit after it leaves the UVs of what it touches behind.
 toy: mat_textures | Each ball is unwrapped, then wears its texture at the same scale.
+toy: mat_unwrap_build | A bumpy gourd unwrapped with `by="build"`: one strip and two caps, the dots in straight rows from end to end.
 see: `texture`, `material`
 :::
 

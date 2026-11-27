@@ -123,8 +123,39 @@ class Unwrap(unittest.TestCase):
         s3d.unwrap([outer, inner], hidden=0.5)
         self.assertEqual({i["scale"] for i in islands(inner)}, {1})
 
+    def test_by_build_a_cylinder_is_a_strip_and_two_discs_at_one_scale(self):
+        ob = s3d.unwrap(s3d.cylinder("can", 40, 60), by="build")
+        self.assertEqual(kinds(ob), ["flat", "flat", "strip"])
+        for island in islands(ob):
+            self.assertAlmostEqual(island["stretch"], 1.0, delta=0.01)
+        side = json.loads(ob[uvs.REPORT])["side_mm"]
+        self.assertTrue(np.allclose(scale(ob), side, rtol=0.01))
+
+    def test_by_build_a_bumpy_wire_is_one_strip_opened_at_the_back(self):
+        ob = s3d.wire("gourd", [(0, 0, 0), (0, 0, 160)], d=[(0, 0), (0.08, 60), (0.35, 110), (0.6, 70), (0.85, 85), (1, 0)])
+        s3d.displace(ob, 3, 12, seed=2, step=6)
+        s3d.unwrap(ob, by="build")
+        self.assertEqual(kinds(ob), ["cap", "cap", "strip"])
+        uv, me = corners(ob), ob.data
+        self.assertTrue((uv >= 0).all() and (uv <= 1).all())
+        strip = np.argmax([i["faces"] for i in islands(ob)])
+        which = np.empty(len(me.polygons), np.int32)
+        me.attributes[".s3d_island"].data.foreach_get("value", which)
+        loops = [l for p in me.polygons if which[p.index] == strip for l in p.loop_indices]
+        u = uv[loops, 0]
+        ends = [loops[i] for i in (int(np.argmin(u)), int(np.argmax(u)))]       # the two edges of the cut
+        for l in ends:
+            self.assertGreater(me.vertices[me.loops[l].vertex_index].co.y, 0)    # on the back, looking +Y
+
+    def test_by_build_leaves_parts_without_a_record_to_the_shape(self):
+        built = s3d.unwrap(s3d.box("b", 10, 20, 30), by="build")
+        shaped = s3d.unwrap(s3d.box("c", 10, 20, 30))
+        self.assertEqual(kinds(built), kinds(shaped))
+
     def test_arguments(self):
         ob = s3d.box("b", 10, 10, 10)
+        with self.assertRaisesRegex(ValueError, "by="):
+            s3d.unwrap(ob, by="path")
         with self.assertRaisesRegex(ValueError, "seam="):
             s3d.unwrap(ob, seam="back")
         with self.assertRaisesRegex(ValueError, "margin="):

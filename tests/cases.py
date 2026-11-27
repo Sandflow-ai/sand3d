@@ -778,6 +778,14 @@ def unwrapped():
     return s3d.unwrap(s3d.group("unwrapped", lid, ball, s3d.at(s3d.cone("cone", 20, 12, d2=8), x=-60)))
 
 
+@case("unwrapped_build")
+def unwrapped_by_build():
+    gourd = s3d.wire("gourd", [(0, 0, 0), (0, 0, 90)], d=[(0, 0), (0.1, 40), (0.4, 60), (0.7, 38), (1, 0)])
+    s3d.displace(gourd, 2, 9, seed=4, step=5)
+    can = s3d.at(s3d.cylinder("can", 30, 40), x=70)
+    return s3d.unwrap(s3d.group("unwrapped_build", gourd, can), by="build")
+
+
 @case("waves")
 def wave_surfaces():
     ob = s3d.box("waves", 12, 10, 1)

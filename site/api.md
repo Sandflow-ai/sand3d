@@ -120,7 +120,7 @@ bend(ob, angle, axis="+Y", toward="+Z", *, step=None)  # Curl along its own axis
 twist(ob, angle, axis="+Y", *, step=None)  # Turn sections about its own axis, right handed; near end fixed, far end turned angle degrees
 taper(ob, s, axis="+Y")  # Scale across its own axis, from 1 at the near end to ratio s > 0 at the far end
 smooth(ob, angle=55)  # Shade each descendant mesh by angle; 0 flat, 180 all smooth
-unwrap(ob, seam="+Y", margin=0.004, hidden=1)  # UVs by shape: planes, walls and cones unrolled, fillets on their wall; one upright atlas at one scale; walls open on the seam side; hidden scales what nothing outside sees; call last
+unwrap(ob, seam="+Y", margin=0.004, hidden=1, by="shape")  # UVs by shape: planes, walls and cones unrolled, fillets on their wall; one upright atlas at one scale; walls open on the seam side; hidden scales what nothing outside sees; by="build": a wire, sweep, loft, revolve or cylinder as one strip along its path and flat caps, however bumpy; call last
 lay(ob, over, reach=None, *, step=None)  # Seat on a surface along own Z, retaining height above own Z=0
 ```
 
