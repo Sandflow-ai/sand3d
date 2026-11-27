@@ -1,6 +1,6 @@
 """Procedural textures: patterns that tile, put together, baked into a material's maps.
 
-A `pattern` is a function of the surface, in program units: noise, fibres, creases, bubbles,
+A `pattern` is a function of the surface, in program units: noise, fibres, creases, plates, bubbles,
 waves. Patterns add, multiply and mix like numbers. A `texture` is what they do to a surface
 over one tile: a height, a colour, a roughness. `material(texture=)` wears it; at the scale
 `unwrap` gave the part, so a tile of 60 mm covers 60 mm of the part, in whatever part.
@@ -18,7 +18,7 @@ from . import _core
 from .implicit import _mix
 
 #: The patterns, and the range of their values.
-KINDS = ("perlin", "ridged", "turbulence", "cells", "creases", "strands", "bubbles", "waves")
+KINDS = ("perlin", "ridged", "turbulence", "cells", "creases", "strands", "bubbles", "waves", "plates")
 
 
 class Pattern:
@@ -110,7 +110,7 @@ def _pair(verb, name, value):
 
 
 def pattern(kind, size, octaves=1, seed=0, density=None, spread=180):
-    """A tileable pattern: perlin ridged turbulence cells creases strands bubbles waves.
+    """A tileable pattern: perlin ridged turbulence cells creases strands bubbles waves plates.
 
     `size` is how far its features are apart, in program units; a pair sets it along U and
     along V (a brushed metal is perlin of size (60, 0.2)). `octaves` adds as many finer copies,
@@ -122,7 +122,9 @@ def pattern(kind, size, octaves=1, seed=0, density=None, spread=180):
       how many in a square of their length (3), `spread` the angle they lie within, about U;
     - "bubbles": domes in staggered rows, 0 between them, 1 on top; `density` is the share of
       the pitch a bubble takes (0.85);
-    - "waves": a cosine along U, in -1..1."""
+    - "waves": a cosine along U, in -1..1;
+    - "plates": cells split by straight cracks, 0 on a crack, rising to 1 a quarter of a cell
+      inside: bark, dried mud, cracked paint."""
     if kind not in KINDS:
         raise ValueError(f"pattern: {kind!r} is none of {KINDS}")
     pair = _pair("pattern", "size", size)
@@ -221,6 +223,22 @@ def _cells(x, y, n, seed):
     return 1 - 2 * np.minimum(1, np.sqrt(best))
 
 
+def _plates(x, y, n, seed):
+    """The gap between the nearest and the second nearest cell point: 0 where two cells meet."""
+    i, j = np.floor(x).astype(np.int64), np.floor(y).astype(np.int64)
+    first = np.full(np.broadcast(x, y).shape, np.inf)
+    second = np.full(first.shape, np.inf)
+    for a in (-2, -1, 0, 1, 2):
+        for b in (-2, -1, 0, 1, 2):
+            ci, cj = _wrap(i + a, n[0]), _wrap(j + b, n[1])
+            dx = i + a + _unit(ci, cj, seed + 1) - x
+            dy = j + b + _unit(ci, cj, seed + 2) - y
+            d = np.sqrt(dx * dx + dy * dy)
+            second = np.where(d < first, first, np.minimum(second, d))
+            first = np.minimum(first, d)
+    return np.clip((second - first) / 0.5, 0, 1)
+
+
 def _creases(x, y, n, seed):
     """The upper envelope of tilted facets, one a cell."""
     i, j = np.floor(x).astype(np.int64), np.floor(y).astype(np.int64)
@@ -307,6 +325,8 @@ def evaluate(spec, u, v, period):
                 value = np.cos(2 * np.pi * x) + 0.0 * y
             elif kind == "cells":
                 value = _cells(x, y, n, s)
+            elif kind == "plates":
+                value = _plates(x, y, n, s)
             elif kind == "creases":
                 value = _creases(x, y, n, s)
             else:

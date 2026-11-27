@@ -157,7 +157,7 @@ see: `texture`, `material`
 ::: fiche pattern
 sig: pattern(kind, size, octaves=1, seed=0, density=None, spread=180)
 what: A tileable pattern over a surface, in program units, that adds, multiplies and mixes like a number.
-param kind: perlin, ridged, turbulence and cells (noises in -1..1); creases (a crumpled sheet, in -1..1); strands (fibres, 1 on them, 0 between); bubbles (domes in staggered rows, 0 to 1); waves (a cosine along U).
+param kind: perlin, ridged, turbulence and cells (noises in -1..1); creases (a crumpled sheet, in -1..1); strands (fibres, 1 on them, 0 between); bubbles (domes in staggered rows, 0 to 1); waves (a cosine along U); plates (cells split by straight cracks, 0 on a crack, 1 a quarter of a cell inside).
 param size: How far its features are apart, or a pair along U and V: brushed metal is perlin of size (40, 0.25).
 param octaves: 1 to 10; each one adds a copy half the size and half the strength.
 param seed: The same seed, the same pattern.
@@ -182,6 +182,18 @@ see: `pattern`, `material`, `unwrap`
 
 ::: example mat_textures
 note: Click the model to turn it: the relief is in the normal maps, the spheres stay smooth.
+:::
+
+Natural materials come from the same patterns. Wood is waves bent by a stretched noise, with
+fine fibres along the grain: wider and wilder rings for oak and walnut, fine and pale for birch.
+Bark follows the trunk, V up the wall: ridged furrows for oak, `plates` split by cracks for pine,
+short dark lenticels across a white skin for birch, a smooth mottled grey for beech. Stone is
+cells for its joints, ridged noise for its cracks and a broad noise for its stains; granite is
+fine speckles, sandstone stretched layers, and a mossy rock blends its moss in by a noise. Crystal
+is creases for its facets, over a tinted glass, with frost, veils or flaws in its roughness.
+
+::: example mat_nature
+note: Four woods, four barks, four stones and four crystals, each unwrapped and textured at its own scale.
 :::
 
 ::: fiche decal

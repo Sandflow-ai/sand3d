@@ -168,7 +168,7 @@
         s3d.<span class="vb">material</span>(label, <span class="s">&quot;plastic&quot;</span>, color=<span class="s">&quot;#ffffff&quot;</span>)
         parts.extend([s3d.<span class="vb">at</span>(tile, on=frame), s3d.<span class="vb">at</span>(ball, on=frame, z=<span class="n">2</span>),
                       s3d.<span class="vb">at</span>(label, on=frame, y=-diameter / <span class="n">2</span> - label_gap, z=<span class="n">2</span>)])
-    <span class="k">return</span> s3d.<span class="vb">assembly</span>(<span class="s">&quot;textures&quot;</span>, parts)</pre><p class=cap>Each ball is unwrapped, then wears its texture at the same scale.</p></div></div><div class="limits"><b>Limits.</b> Each surface is laid flat by its shape: planes as they are; walls, cylinders and cones unrolled; fillets kept on the wall they round; the rest with the least stretch. Hard edges are seams. Islands keep one scale over the atlas and stand upright: V goes up the world on walls and along +Y on tops and bottoms. Call it last: an edit after it leaves the UVs of what it touches behind.</div><p class="see">See also: <a class="vlink" href="../reference/materials.html#texture"><code>texture</code></a>, <a class="vlink" href="../reference/materials.html#material"><code>material</code></a></p></article><article class="verb" id="pattern"><h3>pattern</h3><div class="sigline"><code>pattern(kind, size, octaves=1, seed=0, density=None, spread=180)</code></div><div class="what"><p>A tileable pattern over a surface, in program units, that adds, multiplies and mixes like a number.</p></div><dl class="params"><dt><code>kind</code></dt><dd>perlin, ridged, turbulence and cells (noises in -1..1); creases (a crumpled sheet, in -1..1); strands (fibres, 1 on them, 0 between); bubbles (domes in staggered rows, 0 to 1); waves (a cosine along U).</dd><dt><code>size</code></dt><dd>How far its features are apart, or a pair along U and V: brushed metal is perlin of size (40, 0.25).</dd><dt><code>octaves</code></dt><dd>1 to 10; each one adds a copy half the size and half the strength.</dd><dt><code>seed</code></dt><dd>The same seed, the same pattern.</dd><dt><code>density</code></dt><dd>strands: how many in a square of their length (3); bubbles: the share of the pitch a bubble takes (0.85).</dd><dt><code>spread</code></dt><dd>strands: the angle in degrees they lie within, about U.</dd></dl><div class="limits"><b>Limits.</b> Patterns combine with <code>+ - * /</code>, numbers and other patterns, and <code>abs</code>, <code>.min</code>, <code>.max</code>, <code>.clip(low, high)</code>, <code>.levels(low, high)</code> (0 below low, 1 above high, smooth between) and <code>.warp(other, amount)</code>. A pattern is also a noise for <a class="vlink" href="../reference/edits.html#displace"><code>displace(noise=)</code></a>.</div><p class="see">See also: <a class="vlink" href="../reference/materials.html#texture"><code>texture</code></a>, <a class="vlink" href="../reference/edits.html#displace"><code>displace</code></a></p></article><article class="verb" id="texture"><h3>texture</h3><div class="sigline"><code>texture(tile, height=None, color=None, roughness=None, px=512)</code></div><div class="what"><p>What patterns do to a surface over one tile: relief, colour and roughness, baked into maps.</p></div><dl class="params"><dt><code>tile</code></dt><dd>The tile's side in program units, or a pair along U and V. Patterns repeat within it without a seam.</dd><dt><code>height</code></dt><dd>A pattern of heights in program units. It turns the light as relief does and moves no point.</dd><dt><code>color</code></dt><dd>(pattern, "#low", ..., "#high"): the colours of the pattern's values 0 to 1, evenly spaced.</dd><dt><code>roughness</code></dt><dd>(pattern, low, high): the roughness at the pattern's values 0 and 1.</dd><dt><code>px</code></dt><dd>The side of the maps in pixels, 16 to 4096.</dd></dl><h4>Example</h4><div class="pair"><div class="stage "><img src="../assets/examples/mat_textures.webp" alt="Six balls, six textures: moulded grain, pebbled leather, bubble wrap, brushed aluminium, marble veins and kraft fibres." loading="lazy"><button type="button" class="activate" data-glb="../assets/examples/mat_textures.glb" aria-label="Six balls, six textures: moulded grain, pebbled leather, bubble wrap, brushed aluminium, marble veins and kraft fibres.: turn in 3D"><span class="hint">Turn in 3D</span></button><span class="msg" role="status"></span></div><div class="codecol"><pre class="code"><span class="k">import</span> sand3d <span class="k">as</span> s3d
+    <span class="k">return</span> s3d.<span class="vb">assembly</span>(<span class="s">&quot;textures&quot;</span>, parts)</pre><p class=cap>Each ball is unwrapped, then wears its texture at the same scale.</p></div></div><div class="limits"><b>Limits.</b> Each surface is laid flat by its shape: planes as they are; walls, cylinders and cones unrolled; fillets kept on the wall they round; the rest with the least stretch. Hard edges are seams. Islands keep one scale over the atlas and stand upright: V goes up the world on walls and along +Y on tops and bottoms. Call it last: an edit after it leaves the UVs of what it touches behind.</div><p class="see">See also: <a class="vlink" href="../reference/materials.html#texture"><code>texture</code></a>, <a class="vlink" href="../reference/materials.html#material"><code>material</code></a></p></article><article class="verb" id="pattern"><h3>pattern</h3><div class="sigline"><code>pattern(kind, size, octaves=1, seed=0, density=None, spread=180)</code></div><div class="what"><p>A tileable pattern over a surface, in program units, that adds, multiplies and mixes like a number.</p></div><dl class="params"><dt><code>kind</code></dt><dd>perlin, ridged, turbulence and cells (noises in -1..1); creases (a crumpled sheet, in -1..1); strands (fibres, 1 on them, 0 between); bubbles (domes in staggered rows, 0 to 1); waves (a cosine along U); plates (cells split by straight cracks, 0 on a crack, 1 a quarter of a cell inside).</dd><dt><code>size</code></dt><dd>How far its features are apart, or a pair along U and V: brushed metal is perlin of size (40, 0.25).</dd><dt><code>octaves</code></dt><dd>1 to 10; each one adds a copy half the size and half the strength.</dd><dt><code>seed</code></dt><dd>The same seed, the same pattern.</dd><dt><code>density</code></dt><dd>strands: how many in a square of their length (3); bubbles: the share of the pitch a bubble takes (0.85).</dd><dt><code>spread</code></dt><dd>strands: the angle in degrees they lie within, about U.</dd></dl><div class="limits"><b>Limits.</b> Patterns combine with <code>+ - * /</code>, numbers and other patterns, and <code>abs</code>, <code>.min</code>, <code>.max</code>, <code>.clip(low, high)</code>, <code>.levels(low, high)</code> (0 below low, 1 above high, smooth between) and <code>.warp(other, amount)</code>. A pattern is also a noise for <a class="vlink" href="../reference/edits.html#displace"><code>displace(noise=)</code></a>.</div><p class="see">See also: <a class="vlink" href="../reference/materials.html#texture"><code>texture</code></a>, <a class="vlink" href="../reference/edits.html#displace"><code>displace</code></a></p></article><article class="verb" id="texture"><h3>texture</h3><div class="sigline"><code>texture(tile, height=None, color=None, roughness=None, px=512)</code></div><div class="what"><p>What patterns do to a surface over one tile: relief, colour and roughness, baked into maps.</p></div><dl class="params"><dt><code>tile</code></dt><dd>The tile's side in program units, or a pair along U and V. Patterns repeat within it without a seam.</dd><dt><code>height</code></dt><dd>A pattern of heights in program units. It turns the light as relief does and moves no point.</dd><dt><code>color</code></dt><dd>(pattern, "#low", ..., "#high"): the colours of the pattern's values 0 to 1, evenly spaced.</dd><dt><code>roughness</code></dt><dd>(pattern, low, high): the roughness at the pattern's values 0 and 1.</dd><dt><code>px</code></dt><dd>The side of the maps in pixels, 16 to 4096.</dd></dl><h4>Example</h4><div class="pair"><div class="stage "><img src="../assets/examples/mat_textures.webp" alt="Six balls, six textures: moulded grain, pebbled leather, bubble wrap, brushed aluminium, marble veins and kraft fibres." loading="lazy"><button type="button" class="activate" data-glb="../assets/examples/mat_textures.glb" aria-label="Six balls, six textures: moulded grain, pebbled leather, bubble wrap, brushed aluminium, marble veins and kraft fibres.: turn in 3D"><span class="hint">Turn in 3D</span></button><span class="msg" role="status"></span></div><div class="codecol"><pre class="code"><span class="k">import</span> sand3d <span class="k">as</span> s3d
 
 
 <span class="k">def</span> looks():
@@ -250,7 +250,190 @@
         s3d.<span class="vb">material</span>(label, <span class="s">&quot;plastic&quot;</span>, color=<span class="s">&quot;#ffffff&quot;</span>)
         parts.extend([s3d.<span class="vb">at</span>(tile, on=frame), s3d.<span class="vb">at</span>(ball, on=frame, z=<span class="n">2</span>),
                       s3d.<span class="vb">at</span>(label, on=frame, y=-diameter / <span class="n">2</span> - label_gap, z=<span class="n">2</span>)])
-    <span class="k">return</span> s3d.<span class="vb">assembly</span>(<span class="s">&quot;textures&quot;</span>, parts)</pre><p class=cap>Click the model to turn it: the relief is in the normal maps, the spheres stay smooth.</p></div></div><article class="verb" id="decal"><h3>decal</h3><div class="sigline"><code>decal(name, image, w, h=None, roughness=0.5)</code></div><div class="what"><p>An image file (PNG or JPEG) on a flat sheet w across, where its alpha lets it show: a sticker, a label, a print.</p></div><dl class="params"><dt><code>name</code></dt><dd>The decal's name.</dd><dt><code>image</code></dt><dd>The image file. Its alpha is kept, so round corners and bare ink show the surface under them.</dd><dt><code>w</code></dt><dd>Its width in program units.</dd><dt><code>h</code></dt><dd>Its height; by default the image's own proportions.</dd><dt><code>roughness</code></dt><dd>0 to 1.</dd></dl><h4>Example</h4><div class="pair"><div class="stage "><img src="../assets/examples/mat_decal.webp" alt="A label 80 mm across on the lid of a parcel." loading="lazy"><button type="button" class="activate" data-glb="../assets/examples/mat_decal.glb" aria-label="A label 80 mm across on the lid of a parcel.: turn in 3D"><span class="hint">Turn in 3D</span></button><span class="msg" role="status"></span></div><div class="codecol"><pre class="code"><span class="k">from</span> pathlib <span class="k">import</span> Path
+    <span class="k">return</span> s3d.<span class="vb">assembly</span>(<span class="s">&quot;textures&quot;</span>, parts)</pre><p class=cap>Click the model to turn it: the relief is in the normal maps, the spheres stay smooth.</p></div></div><p>Natural materials come from the same patterns. Wood is waves bent by a stretched noise, with fine fibres along the grain: wider and wilder rings for oak and walnut, fine and pale for birch. Bark follows the trunk, V up the wall: ridged furrows for oak, <code>plates</code> split by cracks for pine, short dark lenticels across a white skin for birch, a smooth mottled grey for beech. Stone is cells for its joints, ridged noise for its cracks and a broad noise for its stains; granite is fine speckles, sandstone stretched layers, and a mossy rock blends its moss in by a noise. Crystal is creases for its facets, over a tinted glass, with frost, veils or flaws in its roughness.</p><div class="pair example"><div class="stage "><img src="../assets/examples/mat_nature.webp" alt="Four woods, four barks, four stones and four crystals, each unwrapped and textured at its own scale." loading="lazy"><button type="button" class="activate" data-glb="../assets/examples/mat_nature.glb" aria-label="Four woods, four barks, four stones and four crystals, each unwrapped and textured at its own scale.: turn in 3D"><span class="hint">Turn in 3D</span></button><span class="msg" role="status"></span></div><div class="codecol"><pre class="code"><span class="k">import</span> math
+
+<span class="k">import</span> sand3d <span class="k">as</span> s3d
+
+
+<span class="k">def</span> p(kind, size, octaves=<span class="n">1</span>, seed=<span class="n">0</span>, **extra):
+    <span class="k">return</span> s3d.<span class="vb">pattern</span>(kind, size, octaves=octaves, seed=seed, **extra)
+
+
+<span class="k">def</span> grain(seed, rings_apart, wobble, bend):
+    <span class="s">&quot;&quot;&quot;Growth rings along V, bent by a noise stretched along the grain, and fibres.&quot;&quot;&quot;</span>
+    rings = p(<span class="s">&quot;waves&quot;</span>, rings_apart).warp(p(<span class="s">&quot;perlin&quot;</span>, (wobble, <span class="n">4</span> * wobble), <span class="n">3</span>, seed), bend)
+    fibres = p(<span class="s">&quot;perlin&quot;</span>, (<span class="n">0.4</span>, <span class="n">18</span>), <span class="n">3</span>, seed + <span class="n">1</span>)
+    <span class="k">return</span> rings, fibres
+
+
+<span class="k">def</span> woods():
+    oak_rings, oak_fibres = grain(<span class="n">4</span>, <span class="n">7</span>, <span class="n">25</span>, <span class="n">9</span>)
+    knots = p(<span class="s">&quot;cells&quot;</span>, <span class="n">70</span>, seed=<span class="n">6</span>).levels(<span class="n">0.6</span>, <span class="n">0.95</span>)
+    pine_rings, pine_fibres = grain(<span class="n">20</span>, <span class="n">9</span>, <span class="n">40</span>, <span class="n">6</span>)
+    resin = p(<span class="s">&quot;cells&quot;</span>, <span class="n">60</span>, seed=<span class="n">22</span>).levels(<span class="n">0.7</span>, <span class="n">0.95</span>)
+    walnut_rings, walnut_fibres = grain(<span class="n">30</span>, <span class="n">5</span>, <span class="n">15</span>, <span class="n">14</span>)
+    birch_rings, birch_fibres = grain(<span class="n">40</span>, <span class="n">3</span>, <span class="n">50</span>, <span class="n">3</span>)
+    <span class="k">return</span> {
+        <span class="s">&quot;oak&quot;</span>: (<span class="s">&quot;oak&quot;</span>, {}, s3d.<span class="vb">texture</span>(
+            (<span class="n">60</span>, <span class="n">140</span>), height=<span class="n">0.03</span> * oak_rings + <span class="n">0.03</span> * oak_fibres - <span class="n">0.1</span> * knots,
+            color=(<span class="n">0.55</span> + <span class="n">0.18</span> * oak_rings + <span class="n">0.22</span> * oak_fibres - <span class="n">0.5</span> * knots,
+                   <span class="s">&quot;#4a2e18&quot;</span>, <span class="s">&quot;#7d5030&quot;</span>, <span class="s">&quot;#a8774a&quot;</span>, <span class="s">&quot;#c99a68&quot;</span>),
+            roughness=(<span class="n">0.5</span> + <span class="n">0.5</span> * oak_fibres, <span class="n">0.5</span>, <span class="n">0.75</span>))),
+        <span class="s">&quot;pine&quot;</span>: (<span class="s">&quot;pine&quot;</span>, {}, s3d.<span class="vb">texture</span>(
+            (<span class="n">60</span>, <span class="n">140</span>), height=<span class="n">0.04</span> * pine_rings + <span class="n">0.02</span> * pine_fibres,
+            color=(<span class="n">0.6</span> + <span class="n">0.3</span> * pine_rings + <span class="n">0.1</span> * pine_fibres - <span class="n">0.6</span> * resin,
+                   <span class="s">&quot;#6b3a14&quot;</span>, <span class="s">&quot;#b9773a&quot;</span>, <span class="s">&quot;#e2b77c&quot;</span>, <span class="s">&quot;#f2d7a6&quot;</span>),
+            roughness=(<span class="n">0.5</span> + <span class="n">0.5</span> * pine_fibres - resin, <span class="n">0.35</span>, <span class="n">0.7</span>))),
+        <span class="s">&quot;walnut&quot;</span>: (<span class="s">&quot;walnut&quot;</span>, {}, s3d.<span class="vb">texture</span>(
+            (<span class="n">60</span>, <span class="n">140</span>), height=<span class="n">0.02</span> * walnut_rings + <span class="n">0.03</span> * walnut_fibres,
+            color=(<span class="n">0.5</span> + <span class="n">0.2</span> * walnut_rings + <span class="n">0.25</span> * walnut_fibres,
+                   <span class="s">&quot;#24140c&quot;</span>, <span class="s">&quot;#432819&quot;</span>, <span class="s">&quot;#634029&quot;</span>, <span class="s">&quot;#82593a&quot;</span>),
+            roughness=(<span class="n">0.5</span> + <span class="n">0.5</span> * walnut_fibres, <span class="n">0.35</span>, <span class="n">0.55</span>))),
+        <span class="s">&quot;birch&quot;</span>: (<span class="s">&quot;birch&quot;</span>, {}, s3d.<span class="vb">texture</span>(
+            (<span class="n">60</span>, <span class="n">140</span>), height=<span class="n">0.01</span> * birch_rings + <span class="n">0.02</span> * birch_fibres,
+            color=(<span class="n">0.55</span> + <span class="n">0.1</span> * birch_rings + <span class="n">0.25</span> * birch_fibres,
+                   <span class="s">&quot;#b89466&quot;</span>, <span class="s">&quot;#d4b48a&quot;</span>, <span class="s">&quot;#e6cfa8&quot;</span>, <span class="s">&quot;#f1e2c4&quot;</span>),
+            roughness=(<span class="n">0.5</span> + <span class="n">0.5</span> * birch_fibres, <span class="n">0.5</span>, <span class="n">0.7</span>))),
+    }
+
+
+<span class="k">def</span> barks():
+    furrows = p(<span class="s">&quot;ridged&quot;</span>, (<span class="n">9</span>, <span class="n">60</span>), <span class="n">3</span>, <span class="n">50</span>).warp(p(<span class="s">&quot;perlin&quot;</span>, (<span class="n">30</span>, <span class="n">80</span>), <span class="n">2</span>, <span class="n">51</span>), <span class="n">5</span>)
+    plates = p(<span class="s">&quot;plates&quot;</span>, (<span class="n">11</span>, <span class="n">26</span>), <span class="n">1</span>, <span class="n">60</span>).warp(p(<span class="s">&quot;perlin&quot;</span>, <span class="n">12</span>, <span class="n">3</span>, <span class="n">61</span>), <span class="n">1.5</span>)
+    flakes = p(<span class="s">&quot;turbulence&quot;</span>, (<span class="n">5</span>, <span class="n">3</span>), <span class="n">3</span>, <span class="n">62</span>)
+    shade = p(<span class="s">&quot;perlin&quot;</span>, (<span class="n">20</span>, <span class="n">30</span>), <span class="n">2</span>, <span class="n">63</span>)
+    lenticels = p(<span class="s">&quot;strands&quot;</span>, (<span class="n">14</span>, <span class="n">1.2</span>), seed=<span class="n">70</span>, density=<span class="n">2</span>, spread=<span class="n">8</span>)
+    scars = p(<span class="s">&quot;perlin&quot;</span>, (<span class="n">60</span>, <span class="n">25</span>), <span class="n">3</span>, <span class="n">71</span>).levels(<span class="n">0.35</span>, <span class="n">0.6</span>)
+    peel = p(<span class="s">&quot;perlin&quot;</span>, (<span class="n">40</span>, <span class="n">12</span>), <span class="n">3</span>, <span class="n">72</span>)
+    mottle = p(<span class="s">&quot;perlin&quot;</span>, <span class="n">30</span>, <span class="n">4</span>, <span class="n">80</span>)
+    lichen = p(<span class="s">&quot;cells&quot;</span>, <span class="n">12</span>, <span class="n">2</span>, <span class="n">81</span>).levels(<span class="n">0.3</span>, <span class="n">0.8</span>) * p(<span class="s">&quot;perlin&quot;</span>, <span class="n">50</span>, <span class="n">2</span>, <span class="n">82</span>).levels(<span class="n">0.2</span>, <span class="n">0.6</span>)
+    <span class="k">return</span> {
+        <span class="s">&quot;oak bark&quot;</span>: (<span class="s">&quot;bark&quot;</span>, {}, s3d.<span class="vb">texture</span>(
+            (<span class="n">60</span>, <span class="n">120</span>), height=<span class="n">3</span> * furrows,
+            color=(<span class="n">0.5</span> + <span class="n">0.4</span> * furrows + <span class="n">0.1</span> * mottle, <span class="s">&quot;#1f1914&quot;</span>, <span class="s">&quot;#3d3229&quot;</span>, <span class="s">&quot;#62574b&quot;</span>, <span class="s">&quot;#857b6c&quot;</span>),
+            roughness=(furrows.levels(-<span class="n">1</span>, <span class="n">1</span>), <span class="n">0.95</span>, <span class="n">0.8</span>))),
+        <span class="s">&quot;pine bark&quot;</span>: (<span class="s">&quot;bark&quot;</span>, {}, s3d.<span class="vb">texture</span>(
+            (<span class="n">60</span>, <span class="n">120</span>), height=<span class="n">2.5</span> * plates.levels(<span class="n">0</span>, <span class="n">0.6</span>) + <span class="n">0.5</span> * flakes,
+            color=(plates.levels(<span class="n">0.03</span>, <span class="n">0.4</span>) * (<span class="n">0.5</span> + <span class="n">0.3</span> * shade + <span class="n">0.25</span> * flakes),
+                   <span class="s">&quot;#140d09&quot;</span>, <span class="s">&quot;#5a2c18&quot;</span>, <span class="s">&quot;#8f4a28&quot;</span>, <span class="s">&quot;#b5703f&quot;</span>, <span class="s">&quot;#9a8676&quot;</span>),
+            roughness=(plates.levels(<span class="n">0</span>, <span class="n">0.3</span>), <span class="n">1.0</span>, <span class="n">0.8</span>))),
+        <span class="s">&quot;birch bark&quot;</span>: (<span class="s">&quot;birch&quot;</span>, dict(roughness=<span class="n">0.6</span>), s3d.<span class="vb">texture</span>(
+            (<span class="n">60</span>, <span class="n">120</span>), height=-<span class="n">0.3</span> * lenticels - <span class="n">0.6</span> * scars + <span class="n">0.1</span> * peel,
+            color=(<span class="n">0.85</span> + <span class="n">0.12</span> * peel - <span class="n">0.9</span> * lenticels - <span class="n">0.9</span> * scars,
+                   <span class="s">&quot;#1c1a18&quot;</span>, <span class="s">&quot;#5e5a54&quot;</span>, <span class="s">&quot;#d9d4c8&quot;</span>, <span class="s">&quot;#f3f0e8&quot;</span>),
+            roughness=(lenticels + scars, <span class="n">0.55</span>, <span class="n">0.9</span>))),
+        <span class="s">&quot;beech bark&quot;</span>: (<span class="s">&quot;bark&quot;</span>, {}, s3d.<span class="vb">texture</span>(
+            (<span class="n">60</span>, <span class="n">120</span>), height=<span class="n">0.15</span> * mottle + <span class="n">0.2</span> * lichen,
+            color=(<span class="n">0.45</span> + <span class="n">0.35</span> * mottle + <span class="n">0.4</span> * lichen, <span class="s">&quot;#3e403f&quot;</span>, <span class="s">&quot;#5f625f&quot;</span>, <span class="s">&quot;#81847f&quot;</span>, <span class="s">&quot;#8f9a68&quot;</span>),
+            roughness=(<span class="n">0.5</span> + <span class="n">0.5</span> * mottle, <span class="n">0.6</span>, <span class="n">0.8</span>))),
+    }
+
+
+<span class="k">def</span> stones():
+    joints = p(<span class="s">&quot;cells&quot;</span>, <span class="n">26</span>, <span class="n">2</span>, <span class="n">8</span>)
+    cracks = p(<span class="s">&quot;ridged&quot;</span>, <span class="n">45</span>, <span class="n">2</span>, <span class="n">9</span>).levels(<span class="n">0.7</span>, <span class="n">0.95</span>)
+    blotch = p(<span class="s">&quot;perlin&quot;</span>, <span class="n">35</span>, <span class="n">4</span>, <span class="n">7</span>)
+    grit = p(<span class="s">&quot;turbulence&quot;</span>, <span class="n">2.5</span>, <span class="n">3</span>, <span class="n">10</span>)
+    speckle = p(<span class="s">&quot;cells&quot;</span>, <span class="n">1.6</span>, <span class="n">2</span>, <span class="n">90</span>)
+    layers = p(<span class="s">&quot;perlin&quot;</span>, (<span class="n">300</span>, <span class="n">6</span>), <span class="n">3</span>, <span class="n">91</span>).warp(p(<span class="s">&quot;perlin&quot;</span>, <span class="n">60</span>, <span class="n">2</span>, <span class="n">92</span>), <span class="n">3</span>)
+    moss = p(<span class="s">&quot;perlin&quot;</span>, <span class="n">40</span>, <span class="n">4</span>, <span class="n">94</span>).levels(<span class="n">0.0</span>, <span class="n">0.35</span>)
+    fuzz = p(<span class="s">&quot;turbulence&quot;</span>, <span class="n">1.5</span>, <span class="n">3</span>, <span class="n">95</span>)
+    <span class="k">return</span> {
+        <span class="s">&quot;rock&quot;</span>: (<span class="s">&quot;rock&quot;</span>, {}, s3d.<span class="vb">texture</span>(
+            <span class="n">80</span>, height=<span class="n">0.8</span> * joints + <span class="n">0.15</span> * grit - <span class="n">0.8</span> * cracks,
+            color=(<span class="n">0.5</span> + <span class="n">0.5</span> * blotch + <span class="n">0.15</span> * joints + <span class="n">0.12</span> * grit - <span class="n">0.5</span> * cracks,
+                   <span class="s">&quot;#2f2c29&quot;</span>, <span class="s">&quot;#55514b&quot;</span>, <span class="s">&quot;#7d786e&quot;</span>, <span class="s">&quot;#a39d90&quot;</span>),
+            roughness=(<span class="n">0.5</span> + <span class="n">0.5</span> * grit, <span class="n">0.75</span>, <span class="n">0.95</span>))),
+        <span class="s">&quot;granite&quot;</span>: (<span class="s">&quot;rock&quot;</span>, dict(roughness=<span class="n">0.6</span>), s3d.<span class="vb">texture</span>(
+            <span class="n">40</span>, height=<span class="n">0.08</span> * speckle + <span class="n">0.05</span> * grit,
+            color=(<span class="n">0.5</span> + <span class="n">0.5</span> * speckle + <span class="n">0.15</span> * blotch,
+                   <span class="s">&quot;#1d1c1e&quot;</span>, <span class="s">&quot;#7a7372&quot;</span>, <span class="s">&quot;#c9a9a0&quot;</span>, <span class="s">&quot;#e9e1dc&quot;</span>),
+            roughness=(<span class="n">0.5</span> + <span class="n">0.5</span> * speckle, <span class="n">0.35</span>, <span class="n">0.7</span>))),
+        <span class="s">&quot;sandstone&quot;</span>: (<span class="s">&quot;rock&quot;</span>, {}, s3d.<span class="vb">texture</span>(
+            <span class="n">80</span>, height=<span class="n">0.6</span> * layers + <span class="n">0.1</span> * grit,
+            color=(<span class="n">0.5</span> + <span class="n">0.4</span> * layers + <span class="n">0.1</span> * grit, <span class="s">&quot;#7a5a3a&quot;</span>, <span class="s">&quot;#a88158&quot;</span>, <span class="s">&quot;#c9a77c&quot;</span>, <span class="s">&quot;#e0c9a0&quot;</span>),
+            roughness=(<span class="n">0.5</span> + <span class="n">0.5</span> * grit, <span class="n">0.85</span>, <span class="n">0.98</span>))),
+        <span class="s">&quot;mossy rock&quot;</span>: (<span class="s">&quot;rock&quot;</span>, {}, s3d.<span class="vb">texture</span>(
+            <span class="n">80</span>, height=<span class="n">0.6</span> * joints - <span class="n">0.6</span> * cracks + <span class="n">0.5</span> * moss * (<span class="n">0.6</span> + <span class="n">0.4</span> * fuzz),
+            color=(<span class="n">0.45</span> * (<span class="n">0.5</span> + <span class="n">0.5</span> * blotch) * (<span class="n">1</span> - moss) + moss * (<span class="n">0.75</span> + <span class="n">0.25</span> * fuzz),
+                   <span class="s">&quot;#3a3934&quot;</span>, <span class="s">&quot;#6f6c63&quot;</span>, <span class="s">&quot;#4f6a2a&quot;</span>, <span class="s">&quot;#7d9a3c&quot;</span>),
+            roughness=(moss, <span class="n">0.85</span>, <span class="n">1.0</span>))),
+    }
+
+
+<span class="k">def</span> crystals():
+    facets = p(<span class="s">&quot;creases&quot;</span>, <span class="n">14</span>, <span class="n">2</span>, <span class="n">11</span>)
+    glow = p(<span class="s">&quot;perlin&quot;</span>, <span class="n">25</span>, <span class="n">2</span>, <span class="n">12</span>)
+    frost = p(<span class="s">&quot;cells&quot;</span>, <span class="n">9</span>, seed=<span class="n">13</span>).levels(<span class="n">0.4</span>, <span class="n">0.9</span>)
+    veils = p(<span class="s">&quot;perlin&quot;</span>, (<span class="n">8</span>, <span class="n">40</span>), <span class="n">3</span>, <span class="n">14</span>).levels(<span class="n">0.2</span>, <span class="n">0.7</span>)
+    flaws = p(<span class="s">&quot;cells&quot;</span>, <span class="n">18</span>, <span class="n">2</span>, <span class="n">15</span>).levels(<span class="n">0.5</span>, <span class="n">0.95</span>)
+    <span class="k">return</span> {
+        <span class="s">&quot;amethyst&quot;</span>: (<span class="s">&quot;glass&quot;</span>, dict(transmission=<span class="n">0.85</span>, ior=<span class="n">1.54</span>), s3d.<span class="vb">texture</span>(
+            <span class="n">40</span>, height=<span class="n">0.25</span> * facets,
+            color=(<span class="n">0.5</span> + <span class="n">0.5</span> * glow, <span class="s">&quot;#4b2a8c&quot;</span>, <span class="s">&quot;#8a5cd6&quot;</span>, <span class="s">&quot;#d2b8ff&quot;</span>),
+            roughness=(frost, <span class="n">0.02</span>, <span class="n">0.35</span>))),
+        <span class="s">&quot;quartz&quot;</span>: (<span class="s">&quot;glass&quot;</span>, dict(transmission=<span class="n">0.95</span>, ior=<span class="n">1.54</span>), s3d.<span class="vb">texture</span>(
+            <span class="n">40</span>, height=<span class="n">0.2</span> * facets,
+            color=(veils, <span class="s">&quot;#e9eef2&quot;</span>, <span class="s">&quot;#ffffff&quot;</span>),
+            roughness=(veils, <span class="n">0.0</span>, <span class="n">0.45</span>))),
+        <span class="s">&quot;emerald&quot;</span>: (<span class="s">&quot;glass&quot;</span>, dict(transmission=<span class="n">0.8</span>, ior=<span class="n">1.58</span>), s3d.<span class="vb">texture</span>(
+            <span class="n">40</span>, height=<span class="n">0.2</span> * facets,
+            color=(<span class="n">0.6</span> + <span class="n">0.4</span> * glow - <span class="n">0.6</span> * flaws, <span class="s">&quot;#0b3d24&quot;</span>, <span class="s">&quot;#17824a&quot;</span>, <span class="s">&quot;#5fd08e&quot;</span>),
+            roughness=(flaws, <span class="n">0.02</span>, <span class="n">0.3</span>))),
+        <span class="s">&quot;citrine&quot;</span>: (<span class="s">&quot;glass&quot;</span>, dict(transmission=<span class="n">0.85</span>, ior=<span class="n">1.54</span>), s3d.<span class="vb">texture</span>(
+            <span class="n">40</span>, height=<span class="n">0.25</span> * facets,
+            color=(<span class="n">0.5</span> + <span class="n">0.5</span> * glow, <span class="s">&quot;#a4470c&quot;</span>, <span class="s">&quot;#e8901f&quot;</span>, <span class="s">&quot;#ffd36b&quot;</span>),
+            roughness=(frost, <span class="n">0.02</span>, <span class="n">0.3</span>))),
+    }
+
+
+<span class="k">def</span> plank(name, k):
+    <span class="k">return</span> s3d.<span class="vb">fillet</span>(s3d.<span class="vb">box</span>(name, <span class="n">50</span>, <span class="n">90</span>, <span class="n">22</span>), <span class="n">2</span>)
+
+
+<span class="k">def</span> trunk(name, k):
+    <span class="k">return</span> s3d.<span class="vb">cylinder</span>(name, <span class="n">56</span>, <span class="n">80</span>)
+
+
+<span class="k">def</span> boulder(name, k):
+    points = []
+    <span class="k">for</span> i <span class="k">in</span> range(<span class="n">40</span>):
+        z = <span class="n">1</span> - <span class="n">2</span> * (i + <span class="n">0.5</span>) / <span class="n">40</span>
+        turn = i * math.pi * (<span class="n">3</span> - math.sqrt(<span class="n">5</span>))
+        r = <span class="n">36</span> + <span class="n">6</span> * math.sin(<span class="n">3.1</span> * i + k) * math.cos(<span class="n">1.7</span> * i + <span class="n">2</span> * k)
+        flat = math.sqrt(<span class="n">1</span> - z * z)
+        points.append((r * flat * math.cos(turn), r * flat * math.sin(turn) * <span class="n">0.85</span>, <span class="n">20</span> * (<span class="n">1</span> + z)))
+    <span class="k">return</span> s3d.<span class="vb">hull</span>(name, points)
+
+
+<span class="k">def</span> crystal(name, k):
+    points = []
+    <span class="k">for</span> i <span class="k">in</span> range(<span class="n">6</span>):
+        a = math.pi / <span class="n">3</span> * i
+        points.append((<span class="n">16</span> * math.cos(a), <span class="n">16</span> * math.sin(a), <span class="n">0</span>))
+        points.append((<span class="n">18</span> * math.cos(a), <span class="n">18</span> * math.sin(a), <span class="n">62</span>))
+    points.append((<span class="n">2</span>, <span class="n">1</span>, <span class="n">92</span>))
+    <span class="k">return</span> s3d.<span class="vb">hull</span>(name, points)
+
+
+<span class="k">def</span> nature():
+    pitch, label_size = <span class="n">140</span>, <span class="n">11</span>
+    rows = [(woods(), plank), (barks(), trunk), (stones(), boulder), (crystals(), crystal)]
+    frames = iter(s3d.<span class="vb">grid</span>(<span class="n">4</span>, <span class="n">4</span>, pitch, -pitch))
+    parts = []
+    <span class="k">for</span> looks, shape <span class="k">in</span> rows:
+        <span class="k">for</span> k, (name, (kind, extra, tex)) <span class="k">in</span> enumerate(looks.items()):
+            frame = next(frames)
+            tile = s3d.<span class="vb">box</span>(<span class="s">&quot;tile&quot;</span>, pitch - <span class="n">8</span>, pitch - <span class="n">8</span>, <span class="n">2</span>)
+            s3d.<span class="vb">material</span>(tile, <span class="s">&quot;plastic&quot;</span>, color=<span class="s">&quot;#667481&quot;</span>)
+            piece = shape(name.replace(<span class="s">&quot; &quot;</span>, <span class="s">&quot;_&quot;</span>), k)
+            s3d.<span class="vb">material</span>(piece, kind, texture=tex, **extra)
+            s3d.<span class="vb">unwrap</span>(piece)
+            label = s3d.<span class="vb">extrude</span>(<span class="s">&quot;label&quot;</span>, s3d.<span class="vb">text</span>(name, label_size), <span class="n">1</span>)
+            s3d.<span class="vb">material</span>(label, <span class="s">&quot;plastic&quot;</span>, color=<span class="s">&quot;#ffffff&quot;</span>)
+            parts.extend([s3d.<span class="vb">at</span>(tile, on=frame), s3d.<span class="vb">at</span>(piece, on=frame, z=<span class="n">2</span>),
+                          s3d.<span class="vb">at</span>(label, on=frame, y=-pitch / <span class="n">2</span> + <span class="n">16</span>, z=<span class="n">2</span>)])
+    <span class="k">return</span> s3d.<span class="vb">assembly</span>(<span class="s">&quot;nature&quot;</span>, parts)</pre><p class=cap>Four woods, four barks, four stones and four crystals, each unwrapped and textured at its own scale.</p></div></div><article class="verb" id="decal"><h3>decal</h3><div class="sigline"><code>decal(name, image, w, h=None, roughness=0.5)</code></div><div class="what"><p>An image file (PNG or JPEG) on a flat sheet w across, where its alpha lets it show: a sticker, a label, a print.</p></div><dl class="params"><dt><code>name</code></dt><dd>The decal's name.</dd><dt><code>image</code></dt><dd>The image file. Its alpha is kept, so round corners and bare ink show the surface under them.</dd><dt><code>w</code></dt><dd>Its width in program units.</dd><dt><code>h</code></dt><dd>Its height; by default the image's own proportions.</dd><dt><code>roughness</code></dt><dd>0 to 1.</dd></dl><h4>Example</h4><div class="pair"><div class="stage "><img src="../assets/examples/mat_decal.webp" alt="A label 80 mm across on the lid of a parcel." loading="lazy"><button type="button" class="activate" data-glb="../assets/examples/mat_decal.glb" aria-label="A label 80 mm across on the lid of a parcel.: turn in 3D"><span class="hint">Turn in 3D</span></button><span class="msg" role="status"></span></div><div class="codecol"><pre class="code"><span class="k">from</span> pathlib <span class="k">import</span> Path
 
 <span class="k">import</span> sand3d <span class="k">as</span> s3d
 

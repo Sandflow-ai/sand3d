@@ -20,7 +20,7 @@ def gltf(root):
 
 
 ALL = [("perlin", 4), ("ridged", 6), ("turbulence", (5, 2)), ("cells", 5), ("creases", 12), ("strands", (6, 0.5)),
-       ("bubbles", 10), ("waves", 7.5)]
+       ("bubbles", 10), ("waves", 7.5), ("plates", (8, 12))]
 
 
 class Patterns(unittest.TestCase):
@@ -33,6 +33,14 @@ class Patterns(unittest.TestCase):
             self.assertLess(np.abs(here - there).max(), 1e-9, kind)
             self.assertGreater(np.ptp(here), 0.2, kind)
             self.assertLessEqual(np.abs(here).max(), 1 + 1e-9, kind)
+
+    def test_plates_crack_where_cells_meet(self):
+        u, v = np.meshgrid(np.linspace(0, 40, 200, endpoint=False), np.linspace(0, 40, 200, endpoint=False))
+        values = textures.evaluate(s3d.pattern("plates", 10).spec, u, v, [40, 40])
+        self.assertLess(values.min(), 0.01)
+        self.assertEqual(values.max(), 1.0)
+        cracks = (values < 0.1).mean()
+        self.assertTrue(0.03 < cracks < 0.3, cracks)
 
     def test_the_seed_sets_the_pattern(self):
         u, v = np.meshgrid(np.arange(20.0), np.arange(20.0))
