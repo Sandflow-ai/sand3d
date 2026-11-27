@@ -5,7 +5,7 @@ lead: Set a surface look, colour faces from their position, or fill a closed sol
 ---
 
 ::: fiche material
-sig: material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, emission=None, absorb=None, absorb_distance=None, thickness="auto", ior=None, transmission=None, scatter=None, scatter_distance=None, scatter_anisotropy=None)
+sig: material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, emission=None, absorb=None, absorb_distance=None, thickness="auto", ior=None, transmission=None, scatter=None, scatter_distance=None, scatter_anisotropy=None, coat=None, texture=None)
 what: Apply a named preset with optional overrides to a part, group, assembly or list. Returns ob and leaves the mesh unchanged.
 param ob: A solid or parent of solids, not a profile or path.
 param kind: One of the 34 presets below; an unknown name raises with suggestions.
@@ -22,8 +22,10 @@ param transmission: Fraction transmitted in [0, 1], independent of opacity.
 param scatter: sRGB colour the medium scatters, hex or RGB.
 param scatter_distance: Finite nonnegative scattering length in program units; zero disables scattering.
 param scatter_anisotropy: Finite value in [-1, 1]; negative backward, zero isotropic, positive forward scattering.
-limits: None inherits the preset. Each call chooses a preset and overrides, rather than modifying the previous call's overrides. No textures or UVs are created.
-see: [Colour functions](reference/materials#colour-functions), [Export](reference/export#formats), [Material comparison examples](reference/materials#presets)
+param coat: 0 to 1, a layer of clear varnish over the surface, smooth whatever the roughness.
+param texture: A `texture`: relief, colour and roughness maps over a tile, on parts `unwrap` has been called on.
+limits: None inherits the preset. Each call chooses a preset and overrides, rather than modifying the previous call's overrides. A texture needs UVs from `unwrap`; without them, or in formats other than GLB, the part keeps the texture's mean colour.
+see: [Colour functions](reference/materials#colour-functions), [Textures and decals](reference/materials#textures), [Export](reference/export#formats), [Material comparison examples](reference/materials#presets)
 :::
 
 ## Inheritance on an assembly {#inheritance}
@@ -127,11 +129,78 @@ A probe on up to eight faces chooses the array path, then a call covers every fa
 
 Use broad height and moisture bands, directional grime, visible seeded noise and dust on upward faces. Do not paint lighting, highlights or shadows through the normal: the renderer supplies those. Grass and soil can have different group tints; leaves and snow can use height or normal masks. For fine fur, a matte plastic surface around roughness .85 avoids fabric's sheen.
 
-One RGB value is stored per face, without UVs or textures. Fine freckles vanish on coarse meshes. Choose patterns that read at the existing resolution; do not refine or displace solely for finer colour. Relief is justified when it changes silhouette or material structure. Colour is preferable to sub-millimetre displaced grain and veins.
+One RGB value is stored per face, without UVs. Fine freckles vanish on coarse meshes; a [texture](reference/materials#textures) carries detail finer than the faces. Choose patterns that read at the existing resolution; do not refine or displace solely for finer colour. Relief is justified when it changes silhouette or material structure. Colour is preferable to sub-millimetre displaced grain and veins.
 
 Copy keeps the callable; join and merge keep the first object's. Functions live only in the current session, not in saved Blender files. Placement, copy, merge, displace, bend, twist, taper, scale, lay and interpolating mesh edits keep construction labels. Joins between parameterized parts transfer labels, taking the first operand's at shared intersections. Booleans with an unparameterized operand, blend, field and new topology drop them; merge fills missing labels with NaN. Check that progression exists before using u.
 
 GLB always writes callable colour on face corners as COLOR_0. OBJ, URDF and USD use the area-weighted mean in linear colour space. See [colors=](reference/export#export) for plain colours on corners too.
+
+## Textures, UVs and decals {#textures}
+
+A texture gives a surface detail finer than its faces: grain, pores, fibres, bubbles, veins. It
+is built from patterns, baked into maps over one tile, and repeated over the part at the scale
+`unwrap` laid it out, so a 40 mm tile covers 40 mm of the part, on every part. GLB carries the
+maps; other formats keep the texture's mean colour.
+
+::: fiche unwrap
+sig: unwrap(ob, seam="+Y", margin=0.004, hidden=1, by="shape")
+what: Give every mesh of a part, group, assembly or list UVs in one shared atlas. Returns ob.
+param ob: A part, a group, an assembly or a list of them. Decals are left alone.
+param seam: The world direction a closed wall opens towards: "+X", "-X", "+Y", "-Y", "+Z" or "-Z". The back by default.
+param margin: The gap between islands, a share of the atlas from 0 to 0.1.
+param hidden: The scale, from 0.05 to 1, of islands nothing outside sees in the current pose; 0.5 makes them half as large.
+param by: "shape" lays every surface by its shape. "build" lays a part a wire, sweep, loft, revolve or cylinder made by the way it was built: one strip around and along its path, opened once on the seam side, its narrow ends as flat caps, however bumpy a later displace, bend or twist made it. Quick on dense meshes. The strip keeps angles and straight meridians; its scale grows toward the ends, up to about three times. Faces without that record, and other parts, go by shape.
+limits: Each surface is laid flat by its shape: planes as they are; walls, cylinders and cones unrolled; fillets kept on the wall they round; the rest with the least stretch. Hard edges are seams. Islands keep one scale over the atlas and stand upright: V goes up the world on walls and along +Y on tops and bottoms. Call it last: an edit after it leaves the UVs of what it touches behind.
+toy: mat_textures | Each ball is unwrapped, then wears its texture at the same scale.
+toy: mat_unwrap_build | A bumpy gourd unwrapped with `by="build"`: one strip and two caps, the dots in straight rows from end to end.
+see: `texture`, `material`
+:::
+
+::: fiche pattern
+sig: pattern(kind, size, octaves=1, seed=0, density=None, spread=180)
+what: A tileable pattern over a surface, in program units, that adds, multiplies and mixes like a number.
+param kind: perlin, ridged, turbulence and cells (noises in -1..1); creases (a crumpled sheet, in -1..1); strands (fibres, 1 on them, 0 between); bubbles (domes in staggered rows, 0 to 1); waves (a cosine along U).
+param size: How far its features are apart, or a pair along U and V: brushed metal is perlin of size (40, 0.25).
+param octaves: 1 to 10; each one adds a copy half the size and half the strength.
+param seed: The same seed, the same pattern.
+param density: strands: how many in a square of their length (3); bubbles: the share of the pitch a bubble takes (0.85).
+param spread: strands: the angle in degrees they lie within, about U.
+limits: Patterns combine with `+ - * /`, numbers and other patterns, and `abs`, `.min`, `.max`, `.clip(low, high)`, `.levels(low, high)` (0 below low, 1 above high, smooth between) and `.warp(other, amount)`. A pattern is also a noise for `displace(noise=)`.
+see: `texture`, `displace`
+:::
+
+::: fiche texture
+sig: texture(tile, height=None, color=None, roughness=None, px=512)
+what: What patterns do to a surface over one tile: relief, colour and roughness, baked into maps.
+param tile: The tile's side in program units, or a pair along U and V. Patterns repeat within it without a seam.
+param height: A pattern of heights in program units. It turns the light as relief does and moves no point.
+param color: (pattern, "#low", ..., "#high"): the colours of the pattern's values 0 to 1, evenly spaced.
+param roughness: (pattern, low, high): the roughness at the pattern's values 0 and 1.
+param px: The side of the maps in pixels, 16 to 4096.
+limits: Worn with `material(ob, kind, texture=...)` on parts `unwrap` has been called on. The material's colour is replaced by the texture's colour when it has one.
+toy: mat_textures | Six balls, six textures: moulded grain, pebbled leather, bubble wrap, brushed aluminium, marble veins and kraft fibres.
+see: `pattern`, `material`, `unwrap`
+:::
+
+::: example mat_textures
+note: Click the model to turn it: the relief is in the normal maps, the spheres stay smooth.
+:::
+
+::: fiche decal
+sig: decal(name, image, w, h=None, roughness=0.5)
+what: An image file (PNG or JPEG) on a flat sheet w across, where its alpha lets it show: a sticker, a label, a print.
+param name: The decal's name.
+param image: The image file. Its alpha is kept, so round corners and bare ink show the surface under them.
+param w: Its width in program units.
+param h: Its height; by default the image's own proportions.
+param roughness: 0 to 1.
+limits: The sheet has no thickness and its own UVs, which `unwrap` leaves alone. It lies on Z = 0, facing +Z: place it a hair above a face with `at(label, on=part.face("+Z"), z=0.1)`, or `lay` it. The image goes into the GLB.
+toy: mat_decal | A label 80 mm across on the lid of a parcel.
+see: `at`, `lay`
+:::
+
+::: example mat_decal
+:::
 
 ## Absorption, scattering and light {#media}
 

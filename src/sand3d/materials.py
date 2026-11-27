@@ -83,7 +83,7 @@ PRESETS = {
 
 def material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, emission=None,
              absorb=None, absorb_distance=None, thickness="auto", ior=None, transmission=None,
-             scatter=None, scatter_distance=None, scatter_anisotropy=None):
+             scatter=None, scatter_distance=None, scatter_anisotropy=None, coat=None, texture=None):
     """Kind: oak walnut pine birch steel brushed_steel chrome aluminium brass copper
     painted_metal plastic glossy_plastic rubber glass ceramic fabric velvet leather marble
     concrete bark leaf moss grass rock soil sand water snow foam smoke fog light; color "#rrggbb".
@@ -111,6 +111,10 @@ def material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, 
     fog are media behind an unseen boundary (transmission 1, IOR 1, roughness 0). glTF
     has no scattering: GLB carries the total attenuation (absorption plus scattering)
     in KHR_materials_volume, so a scattering medium shows there as a dark one.
+
+    coat, 0..1, is a layer of clear varnish over the surface, smooth whatever the roughness
+    under it. texture is an `s3d.texture`: its relief, its colours and its roughness, over the
+    values above, on the parts `unwrap` is called on (after or before).
 
     color may be a deterministic callable declaring exactly three, four or five
     positional parameters, no variadics or keyword-only parameters:
@@ -140,7 +144,7 @@ def material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, 
         FUNCTIONS[function] = color
     given = {"color": None if color is None or function is not None else _hex(color, "color")}
     for name, value, top in (("roughness", roughness, 1), ("metallic", metallic, 1), ("opacity", opacity, 1),
-                             ("emission", emission, None)):
+                             ("emission", emission, None), ("coat", coat, 1)):
         if value is not None:
             if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0 or (top and value > top):
                 raise ValueError(f"material: {name}={value!r} is not a number "
@@ -165,6 +169,13 @@ def material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, 
                 raise ValueError(f"material: {name} must be finite and "
                                  + (f"between {low} and {high}" if high is not None else "0 or more"))
             given[name] = float(value)
+    if texture is not None:
+        from .textures import Texture
+        if not isinstance(texture, Texture):
+            raise TypeError("material: texture is what s3d.texture returns")
+        if function is not None and "color" in texture.spec:
+            raise ValueError("material: the colour is a function or the texture's, not both")
+        given["texture"] = texture.spec
     tag = json.dumps({"kind": kind, **({FUNCTION: function} if function is not None else {}), **{k: v for k, v in given.items() if v is not None}}, sort_keys=True)
     targets = [t.root if isinstance(t, Handle) else t for t in _flat([ob])]
     for target in targets:                  # all checked before any is tagged
@@ -211,6 +222,10 @@ def look(tag):
         if name in PRESETS[kind]:
             values[name] = _core.mm(values[name])
     values.update(spec)
+    texture = values.get("texture")
+    if texture and "color" in texture:
+        from .textures import mean_color
+        values["color"] = mean_color(texture)
     return values
 
 
@@ -221,13 +236,38 @@ def _name(tag):
     if FUNCTION in spec:
         spec.pop(FUNCTION, None)
         kind += " face colours"
+    picture = spec.pop("picture", None)
+    if picture is not None:
+        return f"decal {picture[:6]}"
+    texture = spec.pop("texture", None)
+    if texture is not None:
+        import hashlib
+        kind += " texture " + hashlib.sha1(json.dumps(texture, sort_keys=True).encode()).hexdigest()[:6]
     return " ".join([kind, *(str(v) if k == "color" else f"absorb={v}" if k == "absorb" else f"{k}={v}" if isinstance(v, str) else f"{k}={v:g}" for k, v in sorted(spec.items()))])
 
 
-def _material(tag, made):
-    """The Blender material of a tag: one per distinct tag, made once."""
-    if tag in made:
-        return made[tag]
+def _key(tag, side):
+    return tag if side is None else f"{tag}@{side!r}"
+
+
+def _side(mat):
+    """The side of the atlas a material's texture is scaled to, as `_key` spells it."""
+    node = mat.node_tree.nodes.get("Tile") if mat.use_nodes else None
+    return None if node is None else float(node.label)
+
+
+def _atlas(ob, tag):
+    """What a mesh scales its texture by, None where its tag has none or it has no UVs."""
+    if '"texture"' not in tag:
+        return None
+    from .textures import atlas_side
+    return atlas_side(ob)
+
+
+def _material(tag, made, side=None):
+    """The Blender material of a tag: one per distinct tag (and, textured, atlas side), made once."""
+    if _key(tag, side) in made:
+        return made[_key(tag, side)]
     v = look(tag)
     mat = bpy.data.materials.new(_name(tag))
     mat[TAG] = tag
@@ -302,7 +342,13 @@ def _material(tag, made):
         mat.surface_render_method = "BLENDED"
     mat.diffuse_color = (*rgba[:3], v["opacity"])       # what Workbench and the viewport show
     mat.metallic, mat.roughness = v["metallic"], v["roughness"]
-    made[tag] = mat
+    if "picture" in v:
+        from .textures import print_on
+        print_on(mat, v["picture"])
+    if side is not None:
+        from .textures import dress
+        dress(mat, v["texture"], side)
+    made[_key(tag, side)] = mat
     return mat
 
 
@@ -334,7 +380,7 @@ def resolve(objects=None):
         return
     if objects is None:              # tags and hierarchy change only on the whole-scene path
         _separate_materials()
-    made = {m[TAG]: m for m in bpy.data.materials if TAG in m}
+    made = {_key(m[TAG], _side(m)): m for m in bpy.data.materials if TAG in m}
     for ob in sorted(bpy.data.objects if objects is None else objects, key=lambda o: o.name):
         if ob.type != "MESH":
             continue
@@ -344,7 +390,7 @@ def resolve(objects=None):
             if any(m is not None and TAG in m for m in have):
                 ob.data.materials.clear()
             continue
-        want = _material(tag, made)
+        want = _material(tag, made, _atlas(ob, tag))
         if have != [want]:
             ob.data.materials.clear()
             ob.data.materials.append(want)

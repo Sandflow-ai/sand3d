@@ -120,6 +120,7 @@ bend(ob, angle, axis="+Y", toward="+Z", *, step=None)  # Curl along its own axis
 twist(ob, angle, axis="+Y", *, step=None)  # Turn sections about its own axis, right handed; near end fixed, far end turned angle degrees
 taper(ob, s, axis="+Y")  # Scale across its own axis, from 1 at the near end to ratio s > 0 at the far end
 smooth(ob, angle=55)  # Shade each descendant mesh by angle; 0 flat, 180 all smooth
+unwrap(ob, seam="+Y", margin=0.004, hidden=1, by="shape")  # UVs by shape: planes, walls and cones unrolled, fillets on their wall; one upright atlas at one scale; walls open on the seam side; hidden scales what nothing outside sees; by="build": a wire, sweep, loft, revolve or cylinder as one strip along its path and flat caps, however bumpy; call last
 lay(ob, over, reach=None, *, step=None)  # Seat on a surface along own Z, retaining height above own Z=0
 ```
 
@@ -155,7 +156,10 @@ tufts(name, sites, height, width, blades=5, lean=20, direction=None, shape='blad
 gear(name, teeth, module, width, bore=0, angle=20)  # Involute spur gear
 knurl(name, d, h, pitch=None, straight=False)  # Knurled grip; pitch 1 mm by default
 thread(name, d, length, pitch, left=False)  # Threaded rod
-material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, emission=None, absorb=None, absorb_distance=None, thickness="auto", ior=None, transmission=None, scatter=None, scatter_distance=None, scatter_anisotropy=None)  # Kind: oak walnut pine birch steel brushed_steel chrome aluminium brass copper painted_metal plastic glossy_plastic rubber glass ceramic fabric velvet leather marble concrete bark leaf moss grass rock soil sand water snow foam smoke fog light; color "#rrggbb" or color(x,y,z[,n[,u]])
+material(ob, kind, color=None, roughness=None, metallic=None, opacity=None, emission=None, absorb=None, absorb_distance=None, thickness="auto", ior=None, transmission=None, scatter=None, scatter_distance=None, scatter_anisotropy=None, coat=None, texture=None)  # Kind: oak walnut pine birch steel brushed_steel chrome aluminium brass copper painted_metal plastic glossy_plastic rubber glass ceramic fabric velvet leather marble concrete bark leaf moss grass rock soil sand water snow foam smoke fog light; color "#rrggbb" or color(x,y,z[,n[,u]])
+pattern(kind, size, octaves=1, seed=0, density=None, spread=180)  # Tileable: perlin ridged turbulence cells creases strands bubbles waves; size a length or a pair along U, V; + - * / abs .min .max .clip .levels(low, high) .warp(other, amount); also displace(noise=)
+texture(tile, height=None, color=None, roughness=None, px=512)  # Over one tile: height a pattern of lengths (normal map), color=(pattern, "#low", ..., "#high"), roughness=(pattern, low, high); worn by material(texture=) on parts unwrapped; GLB only
+decal(name, image, w, h=None, roughness=0.5)  # An image file on a flat sheet w across, its alpha kept; place it a hair above a face: at(label, on=part.face("+X"), z=0.1), or lay it; unwrap leaves it alone
 light(name, kind='point', lm=None, lux=None, color='#ffffff', angle=None, blend=None, shadow=True, size=None)  # Kind: point spot sun ambient; lm lumens (point, spot; 800), lux (sun 100 000, ambient 10 000); spot angle: full opening in degrees, at least 1 and under 180 (default 45); shines along its own -Z
 joint(name, child, on, kind='revolute', axis='normal', range=None, follows=None, ratio=1)  # How child moves on the part on was read on: revolute (range in degrees), continuous (no range), prismatic (range in the unit), free (no axis, no range); follows: a child or a joint name, and this joint's value is ratio × its (degrees per unit, or units per degree), no range; returns child
 pose(ob, value, joint=None)  # Move the mechanism: that joint to value (degrees or the unit), an error outside its range; what it carries follows; joint= when child has two

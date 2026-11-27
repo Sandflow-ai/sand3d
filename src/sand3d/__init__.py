@@ -18,6 +18,8 @@ from .assembly import Handle, assembly, attach, empty_scene, export, group, unit
 from .edit import (bend, blend, chamfer, copy, cut, delete, dent, displace, fillet, hole, intersect, join, merge,
                    pocket, scale, seat, lay, shell, soften, split, taper, twist)
 from .shade import smooth
+from .uvs import unwrap
+from .textures import Pattern, Texture, decal, pattern, texture
 from .implicit import field, noise, waves
 from .filling import fill
 from .tufts import tufts
@@ -48,7 +50,7 @@ __all__ = [
     # parts
     "gear", "knurl", "thread", "tufts",
     # materials, lights
-    "material", "smooth", "light",
+    "material", "pattern", "texture", "decal", "smooth", "unwrap", "light",
     # articulation
     "joint", "pose", "seat",
     # assembly
