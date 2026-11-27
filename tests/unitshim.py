@@ -142,7 +142,7 @@ LENGTHS = {
                  "scatter_anisotropy": "-", "coat": "-", "texture": "-"},
     "pattern": {"kind": "-", "size": "P", "octaves": "-", "seed": "-", "density": "-", "spread": "-"},
     "decal": {"name": "-", "image": "-", "w": "L", "h": "L", "roughness": "-"},
-    "texture": {"tile": "P", "height": "-", "color": "-", "roughness": "-", "px": "-"},
+    "texture": {"tile": "P", "height": "-", "color": "-", "roughness": "-", "px": "-", "flow": "P"},
     "group": {"name": "-", "children": "-"},
     "assembly": {"name": "-", "children": "-", "anchors": "-"},
     "attach": {"handle": "-", "name": "-", "children": "-"},

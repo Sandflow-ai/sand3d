@@ -154,7 +154,7 @@ def _export(root, path, colors):
 
 
 def _write_glb(mech, path):
-    from . import lights, urdf
+    from . import lights, textures, urdf
 
     root = mech.root
     lent = _lend_meshes()
@@ -165,17 +165,21 @@ def _write_glb(mech, path):
         state = urdf.glb_tree(mech, coll)
         lit = [ob for ob in coll.objects if ob.type == "LIGHT"]
         dressed = materials.dressed()           # asked before the tags come off: it reads them
+        moving = [(m, materials.look(m[materials.TAG]).get("texture") or {})
+                  for m in sorted({s.material for ob in coll.all_objects if ob.type == "MESH" for s in ob.material_slots}
+                                  - {None}, key=lambda m: m.name)
+                  if materials.TAG in m] if dressed else []
         tags = {m: m.pop(materials.TAG) for m in bpy.data.materials if materials.TAG in m}   # extras: joints only
         clash = bpy.data.collections.get(name)  # a collection of the program's, lent its name meanwhile
         try:
             if clash is not None:
                 clash.name = "s3d~export~lent"
             coll.name = name
-            with lights.gltf_spot_cones(lit):
+            with lights.gltf_spot_cones(lit), textures.flowing(moving) as animated:
                 bpy.ops.export_scene.gltf(filepath=str(path), export_format="GLB", collection=coll.name,
                                           export_extras=True, export_lights=bool(lit),
                                           export_vertex_color="MATERIAL",
-                                          export_materials="EXPORT" if dressed else "NONE")
+                                          export_materials="EXPORT" if dressed else "NONE", **animated)
         finally:
             coll.name = "s3d~export"
             if clash is not None:

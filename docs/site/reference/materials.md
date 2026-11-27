@@ -168,14 +168,15 @@ see: `texture`, `displace`
 :::
 
 ::: fiche texture
-sig: texture(tile, height=None, color=None, roughness=None, px=512)
+sig: texture(tile, height=None, color=None, roughness=None, px=512, flow=None)
 what: What patterns do to a surface over one tile: relief, colour and roughness, baked into maps.
 param tile: The tile's side in program units, or a pair along U and V. Patterns repeat within it without a seam.
 param height: A pattern of heights in program units. It turns the light as relief does and moves no point.
 param color: (pattern, "#low", ..., "#high"): the colours of the pattern's values 0 to 1, evenly spaced.
 param roughness: (pattern, low, high): the roughness at the pattern's values 0 and 1.
 param px: The side of the maps in pixels, 16 to 4096.
-limits: Worn with `material(ob, kind, texture=...)` on parts `unwrap` has been called on. The material's colour is replaced by the texture's colour when it has one.
+param flow: Sets the texture moving: (along U, along V) in program units a second, or one number along V.
+limits: Worn with `material(ob, kind, texture=...)` on parts `unwrap` has been called on. The material's colour is replaced by the texture's colour when it has one. A flowing texture slides a whole number of tiles a loop, so it loops without a seam; every flow in a GLB shares the longest loop, one animation named "flow", and each speed is rounded to close it. The GLB animates the textures' offsets with KHR_animation_pointer, which Blender and Godot play; viewers without it show the texture still.
 toy: mat_textures | Six balls, six textures: moulded grain, pebbled leather, bubble wrap, brushed aluminium, marble veins and kraft fibres.
 see: `pattern`, `material`, `unwrap`
 :::
@@ -194,6 +195,14 @@ is creases for its facets, over a tinted glass, with frost, veils or flaws in it
 
 ::: example mat_nature
 note: Four woods, four barks, four stones and four crystals, each unwrapped and textured at its own scale.
+:::
+
+Water is a texture that flows. A pond drifts slowly with soft ripples, a river runs along its
+length with patches of foam, a sea rolls its swell across, and a swamp barely moves under its
+algae. Each one loops on whole tiles, so the water never jumps.
+
+::: example mat_water
+note: Pond, river, sea and swamp. The model here stands still: open the GLB in Blender or Godot to see the water flow.
 :::
 
 ::: fiche decal

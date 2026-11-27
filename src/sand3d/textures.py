@@ -7,6 +7,7 @@ over one tile: a height, a colour, a roughness. `material(texture=)` wears it; a
 
 Everything is numpy, seeded and periodic: the same maps in every run, and no seam between tiles.
 """
+from contextlib import contextmanager
 from functools import lru_cache
 import json
 import math
@@ -141,14 +142,18 @@ def pattern(kind, size, octaves=1, seed=0, density=None, spread=180):
     return Pattern([kind, *pair, octaves, seed, float(density or 0), float(spread)])
 
 
-def texture(tile, height=None, color=None, roughness=None, px=512):
+def texture(tile, height=None, color=None, roughness=None, px=512, flow=None):
     """What patterns do to a surface, over one `tile` (a length, or a pair along U and V).
 
     `height` is a pattern of heights, in program units: it turns the light as relief does,
     and moves no point. `color` is (pattern, "#low", …, "#high"): the colours of the values
     0 to 1 of the pattern, evenly spaced. `roughness` is (pattern, low, high), its values at
     0 and 1. `px` is the side of the maps. Worn with `material(texture=)`, on parts `unwrap`
-    has been called on; the maps go in the GLB, other formats keep the material's colour."""
+    has been called on; the maps go in the GLB, other formats keep the material's colour.
+
+    `flow` sets the texture moving: (along U, along V) in program units a second, or one
+    number along V. The GLB loops it, a whole number of tiles a loop, so it runs without a
+    seam: each speed is rounded to close the loop. Running water, drifting clouds, lava."""
     from .materials import _hex
     pair = _pair("texture", "tile", tile)
     spec = {"tile": pair, "px": px}
@@ -169,7 +174,38 @@ def texture(tile, height=None, color=None, roughness=None, px=512):
         spec["roughness"] = [roughness[0].spec, float(roughness[1]), float(roughness[2])]
     if len(spec) == 2:
         raise ValueError("texture: give a height, a color or a roughness")
+    if flow is not None:
+        spec["flow"] = _flow(flow)
     return Texture(json.loads(json.dumps(spec)))
+
+
+def _flow(flow):
+    pair = (0, flow) if isinstance(flow, (int, float)) and not isinstance(flow, bool) else flow
+    if (not isinstance(pair, (tuple, list)) or len(pair) != 2
+            or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in pair)):
+        raise ValueError(f"texture: flow={flow!r} is neither a speed nor a pair of speeds")
+    if not any(pair):
+        raise ValueError("texture: flow must move along U or V")
+    return [float(v) for v in pair]
+
+
+#: The frame rate a flowing texture's loop is counted in.
+FPS = 24
+
+
+def loop(spec, frames=None):
+    """How a flowing texture loops: (frames, tiles along U, tiles along V), whole numbers.
+
+    By default the loop lasts as long as the slowest axis takes to cross one tile, rounded to
+    a frame; given `frames`, it lasts that long. In that time each axis crosses a whole
+    number of tiles, at least one where it moves."""
+    tile, flow = spec["tile"], spec["flow"]
+    if frames is None:
+        crossing = max(t / abs(f) for t, f in zip(tile, flow) if f)
+        frames = max(1, round(crossing * FPS))
+    tiles = [0 if not f else int(math.copysign(max(1, round(abs(f) * frames / FPS / t)), f))
+             for t, f in zip(tile, flow)]
+    return frames, *tiles
 
 
 # ---------------------------------------------------------------- values
@@ -426,6 +462,49 @@ def dress(mat, spec, side):
         bend = tree.nodes.new("ShaderNodeNormalMap")
         tree.links.new(node("normal").outputs["Color"], bend.inputs["Color"])
         tree.links.new(bend.outputs["Normal"], bsdf.inputs["Normal"])
+
+
+@contextmanager
+def flowing(moving):
+    """Slide the textures of `moving`, [(material, texture spec)], while a GLB is written, and
+    give the exporter's settings for it. All share one loop, the longest of theirs, so the GLB
+    holds one animation that runs without a seam; afterwards the materials are as they were."""
+    moving = [(m, spec) for m, spec in moving if "flow" in spec and m.node_tree.nodes.get("Tile")]
+    if not moving:
+        yield {}
+        return
+    frames = max(loop(spec)[0] for _, spec in moving)
+    edit = bpy.context.preferences.edit
+    was = edit.keyframe_new_interpolation_type
+    edit.keyframe_new_interpolation_type = "LINEAR"
+    try:
+        for mat, spec in moving:
+            _, along_u, along_v = loop(spec, frames)
+            where = mat.node_tree.nodes["Tile"].inputs["Location"]
+            for frame, share in ((0, 0.0), (frames, 1.0)):
+                where.default_value = (-along_u * share, -along_v * share, 0)  # the picture moves with the flow
+                where.keyframe_insert("default_value", frame=frame)
+            where.default_value = (0, 0, 0)
+            held = mat.node_tree.animation_data
+            action = held.action
+            action.name = f"flow {mat.name}"
+            track = held.nla_tracks.new()
+            track.name = "flow"                          # one name: the GLB merges them in one animation
+            track.strips.new("flow", 0, action)
+            held.action = None
+    finally:
+        edit.keyframe_new_interpolation_type = was
+    try:
+        yield dict(export_animation_mode="NLA_TRACKS", export_pointer_animation=True)
+    finally:
+        for mat, _ in moving:
+            held = mat.node_tree.animation_data
+            for track in list(held.nla_tracks):
+                action = track.strips[0].action if track.strips else None
+                held.nla_tracks.remove(track)
+                if action is not None and action.users == 0:
+                    bpy.data.actions.remove(action)
+            mat.node_tree.animation_data_clear()
 
 
 # ---------------------------------------------------------------- decals

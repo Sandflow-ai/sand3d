@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import bpy
 import numpy as np
 import sand3d as s3d
 from sand3d import _core, textures, uvs
@@ -119,6 +120,79 @@ class Textures(unittest.TestCase):
         ob = s3d.material(s3d.box("a", 50, 50, 50), "plastic",
                           texture=s3d.texture(tile=25, px=32, color=(s3d.pattern("waves", 5), "#000000", "#ffffff")))
         self.assertNotIn("images", gltf(ob))
+
+
+def glb_with_data(root):
+    """The JSON of a GLB, and a reader of its float accessors."""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "thing.glb"
+        s3d.export(root, path)
+        raw = path.read_bytes()
+    n = struct.unpack("<I", raw[12:16])[0]
+    j = json.loads(raw[20:20 + n])
+    blob = raw[20 + n + 8:]
+
+    def floats(index):
+        acc = j["accessors"][index]
+        view = j["bufferViews"][acc["bufferView"]]
+        width = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}[acc["type"]]
+        start = view.get("byteOffset", 0) + acc.get("byteOffset", 0)
+        return np.frombuffer(blob, np.float32, acc["count"] * width, start).reshape(acc["count"], width)
+    return j, floats
+
+
+class Flow(unittest.TestCase):
+    def setUp(self):
+        s3d.empty_scene()
+
+    def water(self, flow, tile=40):
+        tex = s3d.texture(tile, px=16, height=0.2 * s3d.pattern("perlin", 10), flow=flow)
+        return s3d.unwrap(s3d.material(s3d.box("water", 100, 100, 2), "water", texture=tex))
+
+    def test_the_loop_closes_on_whole_tiles(self):
+        self.assertEqual(textures.loop({"tile": [40, 40], "flow": [0, 10]}), (96, 0, 1))
+        self.assertEqual(textures.loop({"tile": [40, 20], "flow": [-10, 10]}), (96, -1, 2))
+        self.assertEqual(textures.loop({"tile": [30, 30], "flow": [7, 0.5]}), (1440, 14, 1))
+
+    def test_a_glb_slides_the_texture_over_its_loop(self):
+        j, floats = glb_with_data(self.water(10))
+        self.assertIn("KHR_animation_pointer", j["extensionsUsed"])
+        anim, = j["animations"]
+        self.assertTrue(anim["channels"])
+        for channel in anim["channels"]:
+            pointer = channel["target"]["extensions"]["KHR_animation_pointer"]["pointer"]
+            self.assertTrue(pointer.endswith("/extensions/KHR_texture_transform/offset"), pointer)
+            sampler = anim["samplers"][channel["sampler"]]
+            times, offsets = floats(sampler["input"]), floats(sampler["output"])
+            self.assertAlmostEqual(float(times[-1, 0] - times[0, 0]), 4.0, places=3)
+            moved = offsets[-1] - offsets[0]
+            self.assertAlmostEqual(abs(float(moved[1])), 1.0, places=4)     # one tile along V
+            self.assertAlmostEqual(float(moved[0]), 0.0, places=4)
+
+    def test_every_flow_in_a_file_shares_one_loop(self):
+        fast = self.water(10)
+        slow = s3d.at(s3d.unwrap(s3d.material(s3d.box("slow", 100, 100, 2), "water", texture=s3d.texture(
+            60, px=16, height=0.2 * s3d.pattern("perlin", 10), flow=(1, 0)))), x=200)
+        j, floats = glb_with_data(s3d.group("both", fast, slow))
+        anim, = j["animations"]
+        ends = {round(float(floats(s["input"])[-1, 0]), 3) for s in anim["samplers"]}
+        self.assertEqual(ends, {60.0})
+        self.assertFalse(any(m.node_tree.animation_data for m in bpy.data.materials if m.node_tree))  # put back
+
+    def test_still_textures_export_no_animation(self):
+        j, _ = glb_with_data(s3d.unwrap(s3d.material(s3d.box("still", 10, 10, 2), "water", texture=s3d.texture(
+            40, px=16, height=0.2 * s3d.pattern("perlin", 10)))))
+        self.assertNotIn("animations", j)
+
+    def test_the_same_flow_twice_gives_the_same_file(self):
+        a, _ = glb_with_data(self.water((3, 5)))
+        s3d.empty_scene()
+        b, _ = glb_with_data(self.water((3, 5)))
+        self.assertEqual(a["animations"], b["animations"])
+
+    def test_arguments(self):
+        for bad in ((0, 0), 0, (1, 2, 3), "fast", (1, float("nan")), True):
+            self.assertRaises(ValueError, lambda: s3d.texture(10, height=s3d.pattern("perlin", 1), flow=bad))
 
 
 def png(path, size=(8, 4), alpha=True):
