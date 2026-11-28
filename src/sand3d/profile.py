@@ -1095,8 +1095,19 @@ def text(s, size, font=None):
 
     The outline of the text `s`, letters `size` high (the font's em), centred on its
     ink. `font` is the path of a .ttf/.otf file; Blender's own font otherwise."""
+    body = s
+    if isinstance(s, str) and any(
+        "\u0600" <= ch <= "\u06FF" or "\u0750" <= ch <= "\u077F" or "\u08A0" <= ch <= "\u08FF"
+        for ch in s
+    ):
+        try:
+            import arabic_reshaper  # type: ignore[import-untyped,import-not-found]
+            from bidi.algorithm import get_display  # type: ignore[import-untyped,import-not-found]
+            body = get_display(arabic_reshaper.reshape(s))
+        except ImportError:
+            pass
     curve = bpy.data.curves.new("_text", "FONT")
-    curve.body = s
+    curve.body = body
     curve.size = size
     curve.resolution_u = 6
     if font:
